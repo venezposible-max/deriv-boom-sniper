@@ -1,0 +1,389 @@
+const WebSocket = require('ws');
+const express = require('express');
+const cors = require('cors');
+const path = require('path');
+const fs = require('fs');
+
+// ==========================================
+// CONFIGURACIÓN: BOOM 1000 SNIPER 2026
+// ==========================================
+const APP_ID = 1089;
+const SYMBOL = 'BOOM1000'; // El Rey de las Explosiones
+const STATE_FILE = path.join(__dirname, 'persistent-state-boom.json');
+const WEB_PASSWORD = process.env.WEB_PASSWORD || 'admin123';
+
+// --- ESTRATEGIA: SNIPER DE SPIKES (Seguro para $85) ---
+let BOOM_CONFIG = {
+    stake: 20,          // Mantener stake para el multiplicador
+    takeProfit: 50.00,  // Buscamos la ballena
+    stopLoss: 0.20,     // BALA CONTROLADA: Perderemos máximo esto si no hay spike
+    multiplier: 100,    // Multiplicador estándar para Boom
+    rsiPeriod: 14,
+    cciPeriod: 14,
+    timeStopTicks: 15,  // El secreto: Solo esperamos 15 ticks por la explosión
+    cooldownSeconds: 45 // Descanso entre intentos
+};
+
+let botState = {
+    isRunning: false, // PARADA DE EMERGENCIA POR DEFECTO
+    balance: 0,
+    pnlSession: 0,
+    winsSession: 0,
+    lossesSession: 0,
+    totalTradesSession: 0,
+    tradeHistory: [],
+    balanceHistory: [],
+    activeContracts: [],
+    currentContractId: null,
+    activeSymbol: 'BOOM1000',
+    activeStrategy: 'SNIPER',
+    cooldownRemaining: 0,
+    lastScanLogTime: 0,
+    sessionDuration: 0
+};
+
+let tickHistory = [];
+let ws;
+let isBuying = false;
+
+// --- INICIALIZACIÓN DE SERVIDOR WEB PARA RAILWAY ---
+const app = express();
+app.use(cors());
+app.use(express.json());
+
+// --- DINAMIC BRANDING: BOOM 1000 ---
+app.get('/', (req, res) => {
+    let html = fs.readFileSync(path.join(__dirname, 'public', 'index.html'), 'utf8');
+    // Inyectamos un script al final del body para cambiar el branding
+    const brandingScript = `
+    <script>
+        window.onload = () => {
+            const cleanUI = () => {
+                document.title = "BOOM 1000 SNIPER 💥"; 
+                
+                // 1. Reemplazo de Texto
+                const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+                let node;
+                while (node = walker.nextNode()) {
+                    if (node.nodeValue.includes('Step Index')) {
+                        node.nodeValue = node.nodeValue.replace(/Step Index/g, 'BOOM 1000');
+                    }
+                }
+
+                // 2. Ocultar Secciones innecesarias (Trailing, Híbrido, Alpha)
+                const keywords = ['TRAILING', 'HÍBRIDO', 'ALPHA'];
+                document.querySelectorAll('div, section, h2, h3, p, span').forEach(el => {
+                    keywords.forEach(key => {
+                        if (el.textContent && el.textContent.toUpperCase().includes(key)) {
+                            // Si es un contenedor o tiene el texto principal, lo ocultamos
+                            if (el.children.length === 0 || el.tagName.startsWith('H')) {
+                                // Subimos al padre que suele ser la tarjeta/sección
+                                let container = el.parentElement;
+                                if (container) container.style.display = 'none';
+                            }
+                        }
+                    });
+                });
+            };
+            cleanUI();
+            setInterval(cleanUI, 1000); 
+        };
+    </script>
+    `;
+    res.send(html.replace('</body>', brandingScript + '</body>'));
+});
+
+app.use(express.static(path.join(__dirname, 'public')));
+
+app.get('/api/status', (req, res) => {
+    res.json({
+        success: true,
+        data: {
+            ...botState,
+            activeSymbol: SYMBOL,
+            activeStrategy: 'SNIPER'
+        },
+        config: BOOM_CONFIG,
+        isSniper: true
+    });
+});
+
+// --- ENDPOINT: CONTROL REMOTO (START/STOP/CONFIG) ---
+app.post('/api/control', (req, res) => {
+    const { action, password, stake, takeProfit, multiplier, stopLoss, timeStopTicks } = req.body;
+
+    if (password !== WEB_PASSWORD) {
+        return res.status(401).json({ success: false, error: 'Contraseña incorrecta' });
+    }
+
+    if (action === 'START') {
+        botState.isRunning = true;
+        if (stake) BOOM_CONFIG.stake = Number(stake);
+        if (takeProfit) BOOM_CONFIG.takeProfit = Number(takeProfit);
+        if (multiplier) BOOM_CONFIG.multiplier = Number(multiplier);
+        if (stopLoss) BOOM_CONFIG.stopLoss = Number(stopLoss);
+        if (timeStopTicks) BOOM_CONFIG.timeStopTicks = Number(timeStopTicks);
+
+        saveState();
+        console.log(`▶️ BOT BOOM 1000 ENCENDIDO | Sniper Mode`);
+        return res.json({ success: true, message: 'Bot Boom Sniper Activado', isRunning: true });
+    }
+
+    if (action === 'STOP') {
+        botState.isRunning = false;
+        saveState();
+        console.log(`⏸️ BOT BOOM 1000 DETENIDO.`);
+        return res.json({ success: true, message: 'Bot Pausado', isRunning: false });
+    }
+
+    if (action === 'FORCE_CLEAR') {
+        botState.currentContractId = null;
+        botState.activeContracts = [];
+        isBuying = false;
+        saveState();
+        return res.json({ success: true, message: 'Trades de Boom limpiados' });
+    }
+
+    res.status(400).json({ success: false, error: 'Acción inválida' });
+});
+
+// --- ENDPOINT: TRADES MANUALES ---
+app.post('/api/trade', (req, res) => {
+    const { action, password } = req.body;
+    if (password !== WEB_PASSWORD) return res.status(401).json({ success: false, error: 'Contraseña incorrecta' });
+    if (botState.currentContractId || isBuying) return res.status(400).json({ success: false, error: 'Ya hay una operación activa.' });
+
+    if (action === 'MULTUP' || action === 'MULTDOWN' || action === 'CALL' || action === 'PUT') {
+        executeTrade(); // En Boom solo usamos MULTUP para spikes
+        return res.json({ success: true, message: `Disparo manual enviado a BOOM 1000` });
+    }
+});
+
+// --- ENDPOINT: CIERRE MANUAL ---
+app.post('/api/close', (req, res) => {
+    const { password, contractId } = req.body;
+    if (password !== WEB_PASSWORD) return res.status(401).json({ success: false, error: 'Contraseña incorrecta' });
+    const idToClose = contractId || botState.currentContractId;
+    if (!idToClose) return res.status(400).json({ success: false, error: 'No hay nada que cerrar.' });
+
+    ws.send(JSON.stringify({ sell: idToClose, price: 0 }));
+    return res.json({ success: true, message: 'Orden de venta enviada' });
+});
+
+const PORT = process.env.PORT || 8080;
+app.listen(PORT, () => {
+    console.log(`\n🚀 Iniciando Motor BOOM 1000 SNIPER...`);
+    console.log(`🌍 Módulo Web en puerto ${PORT}`);
+
+    // --- CRONÓMETRO DE SESIÓN ---
+    setInterval(() => { if (botState.isRunning) botState.sessionDuration++; }, 1000);
+
+    connectWebSocket();
+});
+
+// --- INDICADORES TÉCNICOS ---
+function calculateSMA(prices, period) {
+    if (prices.length < period) return null;
+    return prices.slice(-period).reduce((a, b) => a + b, 0) / period;
+}
+
+function calculateRSI(prices, period) {
+    if (prices.length < period + 1) return 50;
+    let gains = 0, losses = 0;
+    for (let i = prices.length - period; i < prices.length; i++) {
+        let diff = prices[i] - prices[i - 1];
+        if (diff >= 0) gains += diff; else losses -= diff;
+    }
+    let rs = (gains / period) / (losses / period || 1);
+    return 100 - (100 / (1 + rs));
+}
+
+function calculateCCI(prices, period) {
+    if (prices.length < period) return 0;
+    const sma = calculateSMA(prices, period);
+    let meanDev = 0;
+    const slice = prices.slice(-period);
+    for (let p of slice) meanDev += Math.abs(p - sma);
+    meanDev = meanDev / period;
+    if (meanDev === 0) return 0;
+    return (prices[prices.length - 1] - sma) / (0.015 * meanDev);
+}
+
+// --- LÓGICA DE CONEXIÓN Y MERCADO ---
+function connectWebSocket() {
+    ws = new WebSocket(`wss://ws.derivws.com/websockets/v3?app_id=${APP_ID}`);
+
+    ws.on('open', () => {
+        console.log(`✅ Socket Abierto. Autorizando con Token...`);
+        ws.send(JSON.stringify({ authorize: process.env.DERIV_TOKEN || 'GzEO8iO7Y3N9Ym0' }));
+    });
+
+    ws.on('message', (data) => {
+        const msg = JSON.parse(data);
+
+        if (msg.error) {
+            const errMsg = (msg.error.message || '').toLowerCase();
+            console.error(`⚠️ Error en BOOM: ${msg.error.message}`);
+            isBuying = false;
+
+            if (errMsg.includes('100 contracts') || errMsg.includes('more than 100')) {
+                console.log('🛑 LÍMITE ALCANZADO: Tienes 100+ contratos abiertos. Pausando disparos 2 min.');
+                botState.cooldownRemaining = 120;
+                const timer = setInterval(() => {
+                    if (botState.cooldownRemaining > 0) botState.cooldownRemaining--;
+                    else clearInterval(timer);
+                }, 1000);
+            }
+            return;
+        }
+
+        if (msg.msg_type === 'authorize') {
+            console.log(`✅ DERIV CONECTADO - Usuario: ${msg.authorize.fullname}`);
+
+            // --- CALENTAMIENTO INSTANTÁNEO (WARM START) ---
+            console.log(`🚀 Solicitando historial de ticks para arranque inmediato...`);
+            ws.send(JSON.stringify({
+                ticks_history: SYMBOL,
+                count: 500,
+                end: 'latest',
+                style: 'ticks'
+            }));
+
+            ws.send(JSON.stringify({ subscribe: 1, ticks: SYMBOL }));
+            ws.send(JSON.stringify({ balance: 1, subscribe: 1 }));
+        }
+
+        // --- MANEJO DE HISTORIAL PARA WARM START ---
+        if (msg.msg_type === 'history') {
+            tickHistory = msg.history.prices;
+            console.log(`📡 Memoria cargada instantáneamente: ${tickHistory.length} ticks. 🔥 SISTEMA LISTO.`);
+        }
+
+        if (msg.msg_type === 'balance') {
+            botState.balance = msg.balance.balance;
+            console.log(`💰 SALDO: $${botState.balance.toFixed(2)}`);
+        }
+
+        if (msg.msg_type === 'tick') {
+            const quote = parseFloat(msg.tick.quote);
+            tickHistory.push(quote);
+            if (tickHistory.length > 500) tickHistory.shift();
+
+            processTick(quote);
+        }
+
+        if (msg.msg_type === 'proposal_open_contract') {
+            const contract = msg.proposal_open_contract;
+
+            // Actualizar contrato activo para la UI
+            if (contract && !contract.is_sold) {
+                botState.currentContractId = contract.contract_id;
+                botState.activeContracts = [contract];
+            }
+
+            if (contract && contract.is_sold) {
+                finalizeTrade(contract);
+            } else if (contract && !contract.is_sold) {
+                // Monitoreo de Time-Stop
+                const ticksElapsed = tickHistory.length - (botState.entryTickIdx || 0);
+                const profit = parseFloat(contract.profit);
+
+                // Si no hay spike en 15 ticks, cerramos con la "bala" de $0.20 - $1.00
+                if (ticksElapsed >= BOOM_CONFIG.timeStopTicks && profit < 2.00) {
+                    console.log(`🛡️ TIME-STOP: No hubo spike en ${BOOM_CONFIG.timeStopTicks} ticks. Abortando misión.`);
+                    ws.send(JSON.stringify({ sell: contract.contract_id, price: 0 }));
+                }
+            }
+        }
+    });
+}
+
+function processTick(quote) {
+    if (!botState.isRunning || botState.currentContractId || botState.cooldownRemaining > 0 || isBuying) {
+        // Log de escaneo cada 30 segundos
+        const now = Date.now();
+        if (now - botState.lastScanLogTime > 30000) {
+            console.log(`🔍 BOOM SCAN: RSI: ${calculateRSI(tickHistory, 14).toFixed(1)} | Cooldown: ${botState.cooldownRemaining}s | Memoria: ${tickHistory.length}/500`);
+            botState.lastScanLogTime = now;
+        }
+        return;
+    }
+
+    const rsi = calculateRSI(tickHistory, 14);
+    const cci = calculateCCI(tickHistory, 14);
+    const sma50 = calculateSMA(tickHistory, 50);
+
+    if (!sma50) return;
+
+    // --- REGLAS SNIPER BOOM ---
+    const distSMA = Math.abs(quote - sma50) / sma50 * 100;
+
+    if (rsi < 25 && cci > -150 && distSMA < 0.12) {
+        console.log(`💥 SEÑAL DETECTADA: RSI: ${rsi.toFixed(1)} | CCI: ${cci.toFixed(0)} | ¡FUEGO!`);
+        executeTrade();
+    }
+}
+
+function executeTrade() {
+    isBuying = true;
+    const req = {
+        buy: 1,
+        subscribe: 1,
+        price: BOOM_CONFIG.stake,
+        parameters: {
+            amount: BOOM_CONFIG.stake,
+            basis: 'stake',
+            contract_type: 'MULTUP',
+            currency: 'USD',
+            symbol: SYMBOL,
+            multiplier: BOOM_CONFIG.multiplier
+        }
+    };
+    ws.send(JSON.stringify(req));
+
+    // Registrar el índice del tick de entrada para el Time-Stop
+    botState.entryTickIdx = tickHistory.length;
+
+    // BLOQUEO EXTENDIDO: No permitir disparos en ráfaga (10 segundos de protección)
+    setTimeout(() => { isBuying = false; }, 10000);
+}
+
+function finalizeTrade(contract) {
+    const profit = parseFloat(contract.profit);
+    botState.pnlSession += profit;
+    botState.totalTradesSession++;
+
+    if (profit > 0) {
+        botState.winsSession++;
+        console.log(`🎯 ¡SPIKE CAZADO! Ganancia: +$${profit.toFixed(2)} 💰💰💰`);
+    } else {
+        botState.lossesSession++;
+        console.log(`🛡️ BALA PERDIDA: -$${Math.abs(profit).toFixed(2)} (Bajo control)`);
+    }
+
+    // --- REGISTRO DE TRADING HISTORIAL (Máximo 10) ---
+    const now = new Date();
+    botState.tradeHistory.unshift({
+        id: contract.contract_id,
+        type: (contract.contract_type === 'MULTUP') ? 'BUY 🚀' : 'SELL ↘️',
+        profit: profit,
+        timestamp: now.toLocaleTimeString(),
+        duration: Math.floor((now.getTime() / 1000) - contract.date_start) + 's'
+    });
+    if (botState.tradeHistory.length > 10) botState.tradeHistory.pop();
+
+    botState.currentContractId = null;
+    botState.activeContracts = [];
+    botState.cooldownRemaining = BOOM_CONFIG.cooldownSeconds;
+
+    const timer = setInterval(() => {
+        if (botState.cooldownRemaining > 0) botState.cooldownRemaining--;
+        else clearInterval(timer);
+    }, 1000);
+
+    saveState();
+}
+
+function saveState() {
+    try { fs.writeFileSync(STATE_FILE, JSON.stringify(botState)); } catch (e) { }
+}
