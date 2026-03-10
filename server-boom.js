@@ -336,11 +336,11 @@ function processTick(quote) {
     if (!sma50 || isNaN(rsi) || isNaN(cci)) return;
 
     // --- REGLAS SNIPER BOOM (Refinadas) ---
-    const distSMA = Math.abs(quote - sma50) / sma50 * 100;
-
-    // Evitamos disparos solo si el RSI es exactamente 0.0 (error matemático)
-    if (rsi > 0.1 && rsi < 25 && cci > -150 && distSMA < 0.12) {
-        console.log(`💥 SEÑAL DETECTADA: RSI: ${rsi.toFixed(1)} | CCI: ${cci.toFixed(0)} | ¡FUEGO!`);
+    // En Boom 1000 ignoraremos el CCI estricto y la cercanía al SMA,
+    // ya que una caída tan profunda (RSI < 25) naturalmente aleja al 
+    // precio de sus promedios. Disparamos directo por agotamiento de caída.
+    if (rsi > 0.1 && rsi <= 25) {
+        console.log(`💥 SEÑAL ACTIVA: RSI cayó a ${rsi.toFixed(1)} -> ¡Disparo inminente! (CCI: ${cci.toFixed(0)})`);
         executeTrade();
     }
 }
