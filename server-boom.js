@@ -339,7 +339,7 @@ function processTick(quote) {
     // En Boom 1000 ignoraremos el CCI estricto y la cercanía al SMA,
     // ya que una caída tan profunda (RSI < 25) naturalmente aleja al 
     // precio de sus promedios. Disparamos directo por agotamiento de caída.
-    if (rsi > 0.1 && rsi <= 25) {
+    if (rsi >= 0 && rsi <= 25) {
         console.log(`💥 SEÑAL ACTIVA: RSI cayó a ${rsi.toFixed(1)} -> ¡Disparo inminente! (CCI: ${cci.toFixed(0)})`);
         executeTrade();
     }
