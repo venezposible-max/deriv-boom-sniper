@@ -210,6 +210,27 @@
 
         <div id="notif" class="notif">Bot Iniciado Correctamente</div>
 
+        <div class="card"
+            style="background: linear-gradient(135deg, #1f2937 0%, #111827 100%); border-left: 4px solid #10b981; margin-bottom: 20px;">
+            <div class="row" style="align-items: center;">
+                <div style="flex: 1;">
+                    <div class="label" style="display: flex; align-items: center; gap: 5px;">
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2">
+                            <path
+                                d="M21 12V7a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-1M16 12h6">
+                            </path>
+                            <circle cx="18" cy="12" r="2"></circle>
+                        </svg>
+                        SALDO TOTAL (USD)
+                    </div>
+                    <div class="value" id="balanceView"
+                        style="font-size: 2rem; font-weight: 900; color: #fff; text-shadow: 0 0 20px rgba(16, 185, 129, 0.3);">
+                        $0.00</div>
+                </div>
+            </div>
+        </div>
+
         <div class="card">
             <div class="row">
                 <div style="flex: 1;">
@@ -305,6 +326,7 @@
 
                     isRunning = d.isRunning === true;
 
+                    document.getElementById('balanceView').innerText = "$" + (parseFloat(d.balance || 0)).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
                     document.getElementById('statusView').innerText = isRunning ? "ACTIVO 🔴" : "PAUSADO";
                     document.getElementById('statusView').style.color = isRunning ? "#ef4444" : "#6b7280";
 
