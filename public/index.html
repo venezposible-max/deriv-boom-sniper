@@ -1,50 +1,206 @@
 <!DOCTYPE html>
 <html lang="es">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>BOOM 1000 SNIPER PRO 💥</title>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;900&display=swap');
-        body { margin: 0; padding: 0; font-family: 'Inter', sans-serif; background-color: #0b0b0f; color: #fff; }
-        .container { max-width: 600px; margin: 0 auto; padding: 20px; }
-        .header { text-align: center; margin-bottom: 20px; }
-        .header h1 { font-size: 24px; font-weight: 900; color: #f59e0b; margin: 0; text-transform: uppercase; letter-spacing: 1px; }
-        .header p { color: #9ca3af; font-size: 12px; font-weight: 600; margin: 5px 0 0; }
-        .card { background: #1c1c21; border: 1px solid #2d2d35; border-radius: 16px; padding: 20px; margin-bottom: 15px; }
-        .row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
-        .label { font-size: 10px; color: #9ca3af; font-weight: 600; text-transform: uppercase; }
-        .value { font-size: 16px; font-weight: 900; }
-        .value.green { color: #10b981; }
-        .value.red { color: #ef4444; }
-        .value.blue { color: #3b82f6; }
-        
-        .input-group { margin-bottom: 15px; }
-        .input-group label { display: block; font-size: 10px; color: #9ca3af; font-weight: 600; text-transform: uppercase; margin-bottom: 5px; }
-        .input-group input { width: 100%; box-sizing: border-box; background: #0b0b0f; border: 1px solid #2d2d35; padding: 12px; border-radius: 8px; color: #fff; font-size: 16px; font-weight: 600; font-family: 'Inter', sans-serif; transition: all 0.3s; }
-        .input-group input:focus { outline: none; border-color: #f59e0b; }
-        
-        .btn-start { width: 100%; padding: 16px; border-radius: 12px; background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%); color: white; border: none; font-size: 14px; font-weight: 900; cursor: pointer; text-transform: uppercase; box-shadow: 0 10px 15px -3px rgba(245,158,11,0.5); transition: all 0.3s; }
-        .btn-start:hover { transform: translateY(-2px); }
-        .btn-stop { width: 100%; padding: 16px; border-radius: 12px; background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%); color: white; border: none; font-size: 14px; font-weight: 900; cursor: pointer; text-transform: uppercase; box-shadow: 0 10px 15px -3px rgba(239,68,68,0.5); transition: all 0.3s; }
-        .btn-stop:hover { transform: translateY(-2px); }
-        
-        .history-item { display: flex; justify-content: space-between; align-items: center; padding: 10px 0; border-bottom: 1px solid #2d2d35; }
-        .history-item:last-child { border-bottom: none; }
-        .history-type { font-size: 12px; font-weight: bold; }
-        .history-time { font-size: 10px; color: #9ca3af; }
-        .history-profit { font-weight: bold; font-size: 14px; }
-        
-        .notif { display: none; padding: 10px; border-radius: 8px; margin-bottom: 15px; border: 1px solid #10b981; background: rgba(16, 185, 129, 0.1); color: #10b981; font-weight: 600; font-size: 12px; text-align: center; }
+
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: 'Inter', sans-serif;
+            background-color: #0b0b0f;
+            color: #fff;
+        }
+
+        .container {
+            max-width: 600px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 20px;
+        }
+
+        .header h1 {
+            font-size: 24px;
+            font-weight: 900;
+            color: #f59e0b;
+            margin: 0;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .header p {
+            color: #9ca3af;
+            font-size: 12px;
+            font-weight: 600;
+            margin: 5px 0 0;
+        }
+
+        .card {
+            background: #1c1c21;
+            border: 1px solid #2d2d35;
+            border-radius: 16px;
+            padding: 20px;
+            margin-bottom: 15px;
+        }
+
+        .row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+
+        .label {
+            font-size: 10px;
+            color: #9ca3af;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+
+        .value {
+            font-size: 16px;
+            font-weight: 900;
+        }
+
+        .value.green {
+            color: #10b981;
+        }
+
+        .value.red {
+            color: #ef4444;
+        }
+
+        .value.blue {
+            color: #3b82f6;
+        }
+
+        .input-group {
+            margin-bottom: 15px;
+        }
+
+        .input-group label {
+            display: block;
+            font-size: 10px;
+            color: #9ca3af;
+            font-weight: 600;
+            text-transform: uppercase;
+            margin-bottom: 5px;
+        }
+
+        .input-group input {
+            width: 100%;
+            box-sizing: border-box;
+            background: #0b0b0f;
+            border: 1px solid #2d2d35;
+            padding: 12px;
+            border-radius: 8px;
+            color: #fff;
+            font-size: 16px;
+            font-weight: 600;
+            font-family: 'Inter', sans-serif;
+            transition: all 0.3s;
+        }
+
+        .input-group input:focus {
+            outline: none;
+            border-color: #f59e0b;
+        }
+
+        .btn-start {
+            width: 100%;
+            padding: 16px;
+            border-radius: 12px;
+            background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+            color: white;
+            border: none;
+            font-size: 14px;
+            font-weight: 900;
+            cursor: pointer;
+            text-transform: uppercase;
+            box-shadow: 0 10px 15px -3px rgba(245, 158, 11, 0.5);
+            transition: all 0.3s;
+        }
+
+        .btn-start:hover {
+            transform: translateY(-2px);
+        }
+
+        .btn-stop {
+            width: 100%;
+            padding: 16px;
+            border-radius: 12px;
+            background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+            color: white;
+            border: none;
+            font-size: 14px;
+            font-weight: 900;
+            cursor: pointer;
+            text-transform: uppercase;
+            box-shadow: 0 10px 15px -3px rgba(239, 68, 68, 0.5);
+            transition: all 0.3s;
+        }
+
+        .btn-stop:hover {
+            transform: translateY(-2px);
+        }
+
+        .history-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 10px 0;
+            border-bottom: 1px solid #2d2d35;
+        }
+
+        .history-item:last-child {
+            border-bottom: none;
+        }
+
+        .history-type {
+            font-size: 12px;
+            font-weight: bold;
+        }
+
+        .history-time {
+            font-size: 10px;
+            color: #9ca3af;
+        }
+
+        .history-profit {
+            font-weight: bold;
+            font-size: 14px;
+        }
+
+        .notif {
+            display: none;
+            padding: 10px;
+            border-radius: 8px;
+            margin-bottom: 15px;
+            border: 1px solid #10b981;
+            background: rgba(16, 185, 129, 0.1);
+            color: #10b981;
+            font-weight: 600;
+            font-size: 12px;
+            text-align: center;
+        }
     </style>
 </head>
+
 <body>
     <div class="container">
         <div class="header">
             <h1>BOOM 1000 SNIPER PRO 💥</h1>
             <p>PANEL DE CONTROL INDEPENDIENTE</p>
         </div>
-        
+
         <div id="notif" class="notif">Bot Iniciado Correctamente</div>
 
         <div class="card">
@@ -73,23 +229,23 @@
         <div class="card" id="tradingForm">
             <div class="input-group">
                 <label>STAKE SNIPER ($)</label>
-                <input type="number" id="inStake" step="0.5">
+                <input type="number" id="inStake" step="0.5" value="20">
             </div>
             <div class="input-group">
                 <label>SPIKE TARGET ($) [Take Profit]</label>
-                <input type="number" id="inTp" step="0.5">
+                <input type="number" id="inTp" step="0.5" value="50">
             </div>
             <div class="input-group">
                 <label>MULTIPLIER (X) [100 A 500]</label>
-                <input type="number" id="inMult" step="100">
+                <input type="number" id="inMult" step="100" value="200">
             </div>
             <div class="input-group">
                 <label>TIME-STOP (TICKS ESPERA MÁX)</label>
-                <input type="number" id="inStopTicks" step="1">
+                <input type="number" id="inStopTicks" step="1" value="15">
             </div>
             <div class="input-group">
                 <label>STOP LOSS DE BALA (MAX -$)</label>
-                <input type="number" id="inSl" step="0.10">
+                <input type="number" id="inSl" step="0.10" value="1">
             </div>
 
             <button id="btnStart" class="btn-start" onclick="toggleBot()">INICIAR SNIPER PRO 🚀</button>
@@ -103,33 +259,36 @@
 
     <script>
         let isRunning = false;
+        let isInitialized = false;
 
         async function fetchStatus() {
             try {
                 const res = await fetch('/api/status');
                 const json = await res.json();
-                if (json.success) {
+                if (json && json.success) {
                     const d = json.data;
                     const c = json.config;
-                    
-                    isRunning = d.isRunning;
-                    
+
+                    isRunning = d.isRunning === true;
+
                     document.getElementById('statusView').innerText = isRunning ? "ACTIVO 🔴" : "PAUSADO";
                     document.getElementById('statusView').style.color = isRunning ? "#ef4444" : "#6b7280";
-                    
-                    const pnl = parseFloat(d.pnlSession);
+
+                    const pnl = parseFloat(d.pnlSession || 0);
                     document.getElementById('pnlView').innerText = (pnl >= 0 ? "+" : "") + "$" + pnl.toFixed(2);
                     document.getElementById('pnlView').className = "value " + (pnl >= 0 ? "green" : "red");
-                    
-                    document.getElementById('winsView').innerText = d.winsSession;
-                    document.getElementById('lossesView').innerText = d.lossesSession;
 
-                    if (!isRunning && !document.activeElement.tagName.match(/INPUT/)) {
-                        document.getElementById('inStake').value = c.stake;
-                        document.getElementById('inTp').value = c.takeProfit;
-                        document.getElementById('inMult').value = c.multiplier;
-                        document.getElementById('inStopTicks').value = c.timeStopTicks;
-                        document.getElementById('inSl').value = c.stopLoss;
+                    document.getElementById('winsView').innerText = d.winsSession || 0;
+                    document.getElementById('lossesView').innerText = d.lossesSession || 0;
+
+                    // Solo sobrescribimos los valores de los inputs si es la primera carga y el bot está en pause
+                    if (!isInitialized && !isRunning && c) {
+                        if (c.stake) document.getElementById('inStake').value = c.stake;
+                        if (c.takeProfit) document.getElementById('inTp').value = c.takeProfit;
+                        if (c.multiplier) document.getElementById('inMult').value = c.multiplier;
+                        if (c.timeStopTicks) document.getElementById('inStopTicks').value = c.timeStopTicks;
+                        if (c.stopLoss) document.getElementById('inSl').value = c.stopLoss;
+                        isInitialized = true;
                     }
 
                     const btn = document.getElementById('btnStart');
@@ -143,28 +302,33 @@
 
                     const hv = document.getElementById('historyView');
                     hv.innerHTML = "";
-                    if (d.tradeHistory.length === 0) {
+                    if (!d.tradeHistory || d.tradeHistory.length === 0) {
                         hv.innerHTML = "<div style='font-size:12px;color:#6b7280;text-align:center;'>Ningún trade aún.</div>";
                     } else {
                         d.tradeHistory.slice(0, 10).forEach(t => {
                             const p = parseFloat(t.profit);
-                            hv.innerHTML += \`
+                            hv.innerHTML += `
                             <div class="history-item">
                                 <div>
-                                    <div class="history-type">\${t.type}</div>
-                                    <div class="history-time">\${t.timestamp}</div>
+                                    <div class="history-type">${t.type}</div>
+                                    <div class="history-time">${t.timestamp}</div>
                                 </div>
-                                <div class="history-profit" style="color:\${p >= 0 ? '#10b981' : '#ef4444'};">
-                                    \${p >= 0 ? "+" : ""}$\${p.toFixed(2)}
+                                <div class="history-profit" style="color:${p >= 0 ? '#10b981' : '#ef4444'};">
+                                    ${p >= 0 ? "+" : ""}$${p.toFixed(2)}
                                 </div>
-                            </div>\`;
+                            </div>`;
                         });
                     }
                 }
-            } catch(e) {}
+            } catch (e) {
+                console.error("Error obteniendo status:", e);
+            }
         }
 
         async function toggleBot() {
+            const btn = document.getElementById('btnStart');
+            btn.innerText = "ENVIANDO ORDEN... ⏳";
+
             const action = isRunning ? 'STOP' : 'START';
             const payload = { action };
 
@@ -183,24 +347,27 @@
                     body: JSON.stringify(payload)
                 });
                 const r = await res.json();
-                
+
                 const notif = document.getElementById('notif');
                 notif.style.display = 'block';
                 notif.style.borderColor = r.success ? '#10b981' : '#ef4444';
                 notif.style.color = r.success ? '#10b981' : '#ef4444';
                 notif.style.background = r.success ? 'rgba(16, 185, 129, 0.1)' : 'rgba(239, 68, 68, 0.1)';
                 notif.innerText = r.message || r.error;
-                
+
                 setTimeout(() => { notif.style.display = 'none'; }, 3000);
-                
-                fetchStatus();
-            } catch(e) {
-                alert("Error de conexión");
+
+                await fetchStatus();
+            } catch (e) {
+                console.error("Error enviando control:", e);
+                alert("Error de conexión al enviar la orden.");
+                btn.innerText = isRunning ? "DETENER ALGORITMO ⏸️" : "INICIAR SNIPER PRO 🚀";
             }
         }
 
         setInterval(fetchStatus, 1000);
-        fetchStatus();
+        setTimeout(fetchStatus, 100); // Llama inmediatamente al cargar
     </script>
 </body>
+
 </html>
