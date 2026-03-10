@@ -165,6 +165,14 @@ app.listen(PORT, () => {
     // --- CRONÓMETRO DE SESIÓN ---
     setInterval(() => { if (botState.isRunning) botState.sessionDuration++; }, 1000);
 
+    // --- WATCHDOG DE PORTAFOLIO (Sincronización Real) ---
+    // Cada 15 segundos verificamos si Deriv realmente tiene contratos abiertos
+    setInterval(() => {
+        if (ws && ws.readyState === WebSocket.OPEN && botState.isRunning) {
+            ws.send(JSON.stringify({ portfolio: 1 }));
+        }
+    }, 15000);
+
     // --- DETECTOR DE CONGELAMIENTO SÍSMICO (TICK HESITATION) ---
     // Chequea el pulso en un loop paralelo ultrarrápido (cada 150ms)
     setInterval(() => {
@@ -376,10 +384,32 @@ function connectWebSocket() {
                 console.log(`🛡️ SL [${cId}]: -$${Math.abs(profit).toFixed(2)}. Enviando orden de venta...`);
                 tracker.isClosing = true;
                 ws.send(JSON.stringify({ sell: cId, price: 0 }));
-            } else if (secondsElapsed >= BOOM_CONFIG.timeStopTicks && profit < 2.00) {
-                console.log(`⏱️ TS [${cId}]: ${secondsElapsed}s >= ${BOOM_CONFIG.timeStopTicks}s. Enviando orden de venta...`);
-                tracker.isClosing = true;
-                ws.send(JSON.stringify({ sell: cId, price: 0 }));
+            }
+        }
+
+        // --- WATCHDOG: SINCRONIZACIÓN DE PORTAFOLIO ---
+        if (msg.msg_type === 'portfolio') {
+            const portfolio = msg.portfolio;
+            if (portfolio && portfolio.contracts) {
+                const derivIds = new Set(portfolio.contracts.map(c => c.contract_id.toString()));
+
+                // Limpiar IDs huérfanos en nuestra memoria
+                for (let [cId, _] of botState.trackingContracts) {
+                    if (!derivIds.has(cId.toString())) {
+                        console.log(`🧹 Watchdog: Trade [${cId}] ya no existe en Deriv. Limpiando.`);
+                        botState.trackingContracts.delete(cId);
+                        if (botState.currentContractId === cId) botState.currentContractId = null;
+                        isBuying = false;
+                    }
+                }
+
+                // Si Deriv dice que no hay nada, reset total
+                if (portfolio.contracts.length === 0 && (botState.trackingContracts.size > 0 || botState.currentContractId)) {
+                    console.log("✨ Watchdog: Portafolio vacío. Sniper reseteado.");
+                    botState.trackingContracts.clear();
+                    botState.currentContractId = null;
+                    isBuying = false;
+                }
             }
         }
     });
