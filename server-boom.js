@@ -12,11 +12,10 @@ const SYMBOL = 'BOOM1000'; // El Rey de las Explosiones
 const STATE_FILE = path.join(__dirname, 'persistent-state-boom.json');
 const WEB_PASSWORD = process.env.WEB_PASSWORD || 'admin123';
 
-// --- ESTRATEGIA: SNIPER DE SPIKES (Seguro para $85) ---
 let BOOM_CONFIG = {
     stake: 20,
     takeProfit: 50.00,
-    stopLoss: 0.20,
+    stopLoss: 1.00,
     multiplier: 200,    // Multiplicador válido (100, 200, 300, 400, 500)
     rsiPeriod: 14,
     cciPeriod: 14,
@@ -153,9 +152,8 @@ function calculateSMA(prices, period) {
 
 function calculateRSI(prices, period) {
     if (prices.length < period + 1) return 50;
-
-    // RSI Avanzado de Welles Wilder usando los últimos 250 ticks para suavizado real
-    let startIndex = prices.length - 250;
+    // RSI Avanzado de Welles Wilder usando los últimos 2000 ticks para suavizado real
+    let startIndex = prices.length - 2000;
     if (startIndex < 1) startIndex = 1;
 
     let avgGain = 0;
@@ -227,12 +225,11 @@ function connectWebSocket() {
 
         if (msg.msg_type === 'authorize') {
             console.log(`✅ DERIV CONECTADO - Usuario: ${msg.authorize.fullname}`);
-
             // --- CALENTAMIENTO INSTANTÁNEO (WARM START) ---
             console.log(`🚀 Solicitando historial de ticks para arranque inmediato...`);
             ws.send(JSON.stringify({
                 ticks_history: SYMBOL,
-                count: 500,
+                count: 4000,
                 end: 'latest',
                 style: 'ticks'
             }));
@@ -251,11 +248,10 @@ function connectWebSocket() {
             botState.balance = msg.balance.balance;
             console.log(`💰 SALDO: $${botState.balance.toFixed(2)}`);
         }
-
         if (msg.msg_type === 'tick') {
             const quote = parseFloat(msg.tick.quote);
             tickHistory.push(quote);
-            if (tickHistory.length > 500) tickHistory.shift();
+            if (tickHistory.length > 4050) tickHistory.shift();
 
             if (botState.currentContractId) {
                 botState.ticksInTrade = (botState.ticksInTrade || 0) + 1;
@@ -292,14 +288,21 @@ function connectWebSocket() {
             if (contract && contract.is_sold) {
                 finalizeTrade(contract);
             } else if (contract && !contract.is_sold) {
-                // Monitoreo de Time-Stop usando el contador real `ticksInTrade`
+                // Monitoreo Activo (Time-Stop + TP/SL Dinámico Manual)
                 const ticksElapsed = botState.ticksInTrade || 0;
                 const profit = parseFloat(contract.profit);
 
-                // Si no hay spike en 15 ticks, cerramos con la "bala" de Stop Loss
-                if (ticksElapsed >= BOOM_CONFIG.timeStopTicks && profit < 2.00) {
-                    console.log(`🛡️ TIME-STOP: No hubo spike en ${BOOM_CONFIG.timeStopTicks} ticks (${profit.toFixed(2)}$). Cerrando misión...`);
-                    botState.ticksInTrade = -9999; // Prevenir múltiples ventas simultáneas
+                if (profit >= BOOM_CONFIG.takeProfit) {
+                    console.log(`🎯 TAKE PROFIT ALCANZADO: +$${profit.toFixed(2)}`);
+                    botState.ticksInTrade = -9999;
+                    ws.send(JSON.stringify({ sell: contract.contract_id, price: 0 }));
+                } else if (profit <= -Math.abs(BOOM_CONFIG.stopLoss)) {
+                    console.log(`🛡️ STOP LOSS CUBIERTO: -$${Math.abs(profit).toFixed(2)}`);
+                    botState.ticksInTrade = -9999;
+                    ws.send(JSON.stringify({ sell: contract.contract_id, price: 0 }));
+                } else if (ticksElapsed >= BOOM_CONFIG.timeStopTicks && profit < 2.00) {
+                    console.log(`⏱️ TIME-STOP: Límite de ${BOOM_CONFIG.timeStopTicks} ticks alcanzado. Abortando mision con ${profit.toFixed(2)}$`);
+                    botState.ticksInTrade = -9999;
                     ws.send(JSON.stringify({ sell: contract.contract_id, price: 0 }));
                 }
             }
@@ -349,18 +352,13 @@ function executeTrade() {
     isBuying = true;
     const req = {
         buy: 1,
-        price: BOOM_CONFIG.stake,
         parameters: {
             amount: BOOM_CONFIG.stake,
             basis: 'stake',
             contract_type: 'MULTUP',
             currency: 'USD',
             symbol: SYMBOL,
-            multiplier: BOOM_CONFIG.multiplier,
-            limit_order: {
-                stop_loss: BOOM_CONFIG.stopLoss,
-                take_profit: BOOM_CONFIG.takeProfit
-            }
+            multiplier: BOOM_CONFIG.multiplier
         }
     };
     ws.send(JSON.stringify(req));
