@@ -44,6 +44,7 @@ let botState = {
 let tickHistory = [];
 let ws;
 let isBuying = false;
+let cooldownIntervalId = null;
 
 // --- INICIALIZACIÓN DE SERVIDOR WEB PARA RAILWAY ---
 const app = express();
@@ -297,7 +298,7 @@ function connectWebSocket() {
                     console.log(`🎯 TAKE PROFIT ALCANZADO: +$${profit.toFixed(2)}`);
                     botState.currentContractId = null; // Prevenir cierres dobles
                     ws.send(JSON.stringify({ sell: contract.contract_id, price: 0 }));
-                } else if (profit <= -1000) { // ⚠️ MODO DE PRUEBA: Stop Loss desactivado temporalmente
+                } else if (profit <= -Math.abs(BOOM_CONFIG.stopLoss)) {
                     console.log(`🛡️ STOP LOSS CUBIERTO: -$${Math.abs(profit).toFixed(2)}`);
                     botState.currentContractId = null;
                     ws.send(JSON.stringify({ sell: contract.contract_id, price: 0 }));
@@ -344,9 +345,8 @@ function processTick(quote) {
     // En Boom 1000 ignoraremos el CCI estricto y la cercanía al SMA,
     // ya que una caída tan profunda (RSI < 25) naturalmente aleja al 
     // precio de sus promedios. Disparamos directo por agotamiento de caída.
-    // ⚠️ MODO DE PRUEBA ACTIVO: Dispara en RSI <= 100 Y Stop Loss Desactivado ⚠️
-    if (rsi >= 0 && rsi <= 100) {
-        console.log(`💥 MODO DE PRUEBA OBLIGATORIO: RSI de Disparo ignorado. Disparo inminente! (CCI: ${cci.toFixed(0)})`);
+    if (rsi >= 0 && rsi <= 25) {
+        console.log(`💥 SEÑAL ACTIVA: RSI cayó a ${rsi.toFixed(1)} -> ¡Disparo inminente! (CCI: ${cci.toFixed(0)})`);
         executeTrade();
     }
 }
@@ -401,9 +401,10 @@ function finalizeTrade(contract) {
     botState.activeContracts = [];
     botState.cooldownRemaining = BOOM_CONFIG.cooldownSeconds;
 
-    const timer = setInterval(() => {
+    if (cooldownIntervalId) clearInterval(cooldownIntervalId);
+    cooldownIntervalId = setInterval(() => {
         if (botState.cooldownRemaining > 0) botState.cooldownRemaining--;
-        else clearInterval(timer);
+        else clearInterval(cooldownIntervalId);
     }, 1000);
 
     saveState();
