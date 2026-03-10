@@ -58,14 +58,15 @@ app.get('/', (req, res) => {
     const brandingScript = `
     <script>
         window.onload = () => {
-            const cleanUI = () => {
+            const extremeSurge = () => {
                 document.title = "BOOM 1000 SNIPER PRO 💥"; 
                 
-                // 1. Cirugía Estética de Textos (Agresiva)
+                // 1. Cirugía Estética Quirúrgica (Textos de etiquetas y títulos)
                 const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
                 let node;
                 while (node = walker.nextNode()) {
                     let val = node.nodeValue;
+                    // Limpieza de branding viejo
                     if (val.includes('Step Index') || val.includes('STEP INDEX') || val.includes('GOLD') || val.includes('ORO') || val.includes('XAUUSD')) {
                         node.nodeValue = val
                             .replace(/Step Index/gi, 'BOOM 1000')
@@ -74,34 +75,41 @@ app.get('/', (req, res) => {
                             .replace(/ORO/gi, 'BOOM 1000')
                             .replace(/XAUUSD/gi, 'B1000');
                     }
+                    // Re-etiquetado de parámetros (Lo que el usuario pidió)
+                    if (val.includes('MOMENTUM (TICKS)')) { node.nodeValue = 'TIME-STOP (TICKS)'; }
+                    if (val.includes('PRECISIÓN (DIST)')) { node.nodeValue = 'CCI FILTER (S)'; }
+                    if (val.includes('TAKE PROFIT (🚀 $)')) { node.nodeValue = 'SPIKE TARGET ($)'; }
+                    if (val.includes('INVERSIÓN BY DEFAULT')) { node.nodeValue = 'STAKE SNIPER ($)'; }
+                    if (val.includes('ESTADO ALPHA')) { node.nodeValue = 'MODO SNIPER'; }
+                    if (val.includes('ALPHA')) { node.nodeValue = 'SNIPER'; }
+                    if (val.includes('ESTÁNDAR')) { node.nodeValue = 'BOOM MODE'; }
                 }
 
-                // 2. Ocultar Secciones Innecesarias
-                const keywords = ['TRAILING', 'HÍBRIDO', 'ALPHA', 'STEP INDEX', 'MERCADO', 'ORO'];
+                // 2. Ocultar secciones dinámicas de React (Polling agresivo)
                 document.querySelectorAll('div, section, h2, h3, p, span, h1').forEach(el => {
-                    if (el.children.length === 0 || el.tagName.startsWith('H')) {
-                        const txt = el.textContent.toUpperCase();
-                        // Ocultamos si dice Step Index u Oro en el título/etiqueta
-                        if (txt.includes('STEP INDEX') || (txt.includes('ORO') && !txt.includes('BOOM')) || txt.includes('XAUUSD')) {
-                             let container = el.closest('div') || el.parentElement;
-                             if (container) container.style.display = 'none';
-                        }
-                        // Ocultar trailing/híbrido
-                        if (txt.includes('TRAILING') || txt.includes('HÍBRIDO') || txt.includes('ALPHA')) {
-                             let container = el.closest('.card') || el.parentElement;
-                             if (container) container.style.display = 'none';
-                        }
+                    const txt = el.textContent.toUpperCase();
+                    // Ocultar trailing/híbrido/alpha/oro
+                    if (txt.includes('TRAILING') || txt.includes('HÍBRIDO') || txt.includes('ALPHA') || (txt.includes('ORO') && !txt.includes('BOOM')) || txt.includes('XAUUSD')) {
+                         // Buscamos el contenedor más cercano que parezca una tarjeta o sección
+                         let container = el.closest('.card') || el.closest('div') || el.parentElement;
+                         if (container && container.children.length < 5) { // Para no ocultar el body accidentalmente
+                             container.style.display = 'none';
+                             container.style.visibility = 'hidden';
+                         }
                     }
                 });
 
-                // 3. Forzar multiplicador visual a algo realista para Boom
-                const multInput = document.querySelector('input[type="number"]');
-                if (multInput && multInput.value == "750") {
-                    multInput.value = "200";
-                }
+                // 3. Forzar valores visuales para evitar confusión
+                document.querySelectorAll('input').forEach(input => {
+                    if (input.value == "750") input.value = "200";
+                    if (input.value == "5" && !input.getAttribute('data-fixed')) {
+                        input.value = "15"; // Reflejar Time-stop
+                        input.setAttribute('data-fixed', 'true');
+                    }
+                });
             };
-            cleanUI();
-            setInterval(cleanUI, 2000); 
+            extremeSurge();
+            setInterval(extremeSurge, 500); // Polling ultra-rápido para ganarle a React
         };
     </script>
     `;
@@ -111,26 +119,38 @@ app.get('/', (req, res) => {
 app.use(express.static(path.join(__dirname, 'public')));
 
 app.get('/api/status', (req, res) => {
+    // Mapeamos BOOM_CONFIG a los nombres que la interfaz ya conoce para que los rellene
+    const mappedConfig = {
+        stake: BOOM_CONFIG.stake,
+        takeProfit: BOOM_CONFIG.takeProfit,
+        multiplier: BOOM_CONFIG.multiplier,
+        momentum: BOOM_CONFIG.timeStopTicks, // Mapeo de Time-Stop
+        stopLoss: BOOM_CONFIG.stopLoss,
+        distLimit: 0.12 // Usamos esto para el filtro CCI/SMA
+    };
+
     res.json({
         success: true,
         data: {
             ...botState,
-            activeSymbol: SYMBOL,
+            activeSymbol: 'BOOM 1000',
             activeStrategy: 'SNIPER'
         },
-        config: BOOM_CONFIG,
-        isSniper: true
+        config: mappedConfig,
+        isSniper: true,
+        isBoom: true
     });
 });
 
 // --- ENDPOINT: CONTROL REMOTO (START/STOP/CONFIG) ---
 app.post('/api/control', (req, res) => {
-    const { action, stake, takeProfit, multiplier, stopLoss, timeStopTicks } = req.body;
+    const { action, stake, takeProfit, multiplier, stopLoss, momentum } = req.body;
 
     if (action === 'START') {
         botState.isRunning = true;
         if (stake) BOOM_CONFIG.stake = Number(stake);
         if (takeProfit) BOOM_CONFIG.takeProfit = Number(takeProfit);
+        if (momentum) BOOM_CONFIG.timeStopTicks = Number(momentum);
 
         if (multiplier) {
             // Ajustar a valores permitidos por Deriv para Boom (100, 200, 300, 400, 500)
