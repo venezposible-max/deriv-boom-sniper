@@ -219,7 +219,7 @@ function connectWebSocket() {
 
         // --- MANEJO DE HISTORIAL PARA WARM START ---
         if (msg.msg_type === 'history') {
-            tickHistory = msg.history.prices;
+            tickHistory = [...msg.history.prices];
             console.log(`📡 Memoria cargada instantáneamente: ${tickHistory.length} ticks. 🔥 SISTEMA LISTO.`);
         }
 
