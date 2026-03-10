@@ -114,9 +114,10 @@ app.post('/api/control', (req, res) => {
     if (action === 'FORCE_CLEAR') {
         botState.currentContractId = null;
         botState.activeContracts = [];
+        if (botState.trackingContracts) botState.trackingContracts.clear();
         isBuying = false;
         saveState();
-        return res.json({ success: true, message: 'Trades de Boom limpiados' });
+        return res.json({ success: true, message: 'Trades de Boom limpiados y rastreador reseteado' });
     }
 
     res.status(400).json({ success: false, error: 'Acción inválida' });
@@ -338,10 +339,13 @@ function connectWebSocket() {
             const cId = contract.contract_id;
 
             if (contract.is_sold) {
+                // Limpiar siempre el ID actual si este contrato es el que terminó
+                if (botState.currentContractId === cId) botState.currentContractId = null;
+
                 if (botState.trackingContracts.has(cId)) {
                     finalizeTrade(contract);
                     botState.trackingContracts.delete(cId);
-                    if (botState.currentContractId === cId) botState.currentContractId = null;
+                    console.log(`✅ Contrato [${cId}] cerrado y limpiado de memoria.`);
                 }
                 return;
             }
@@ -358,21 +362,23 @@ function connectWebSocket() {
             botState.activeContracts = [contract]; // Para la UI simple
 
             const tracker = botState.trackingContracts.get(cId);
+            if (tracker.isClosing) return; // Evitar disparar múltiples órdenes de venta para el mismo ID
+
             const secondsElapsed = Math.floor((Date.now() - tracker.startTime) / 1000);
             const profit = parseFloat(contract.profit);
 
             // LOGICA DE CIERRE INDIVIDUAL
             if (profit >= BOOM_CONFIG.takeProfit) {
-                console.log(`🎯 TP [${cId}]: +$${profit.toFixed(2)}`);
-                botState.trackingContracts.delete(cId);
+                console.log(`🎯 TP [${cId}]: +$${profit.toFixed(2)}. Enviando orden de venta...`);
+                tracker.isClosing = true;
                 ws.send(JSON.stringify({ sell: cId, price: 0 }));
             } else if (profit <= -Math.abs(BOOM_CONFIG.stopLoss)) {
-                console.log(`🛡️ SL [${cId}]: -$${Math.abs(profit).toFixed(2)}`);
-                botState.trackingContracts.delete(cId);
+                console.log(`🛡️ SL [${cId}]: -$${Math.abs(profit).toFixed(2)}. Enviando orden de venta...`);
+                tracker.isClosing = true;
                 ws.send(JSON.stringify({ sell: cId, price: 0 }));
             } else if (secondsElapsed >= BOOM_CONFIG.timeStopTicks && profit < 2.00) {
-                console.log(`⏱️ TS [${cId}]: ${secondsElapsed}s >= ${BOOM_CONFIG.timeStopTicks}s. Cerrando con ${profit.toFixed(2)}$`);
-                botState.trackingContracts.delete(cId);
+                console.log(`⏱️ TS [${cId}]: ${secondsElapsed}s >= ${BOOM_CONFIG.timeStopTicks}s. Enviando orden de venta...`);
+                tracker.isClosing = true;
                 ws.send(JSON.stringify({ sell: cId, price: 0 }));
             }
         }
@@ -413,10 +419,12 @@ function processTick(quote) {
         isBuying = false;
     }
 
-    if (botState.currentContractId || botState.cooldownRemaining > 0 || isBuying) {
+    const anyActive = botState.trackingContracts.size > 0;
+
+    if (anyActive || botState.currentContractId || botState.cooldownRemaining > 0 || isBuying) {
         // Log de depuración solo si estamos en zona rsi
         if (rsi <= BOOM_CONFIG.rsiThreshold && now - (botState.lastSkipLogTime || 0) > 5000) {
-            let razon = botState.currentContractId ? "Contrato Abierto" : (isBuying ? "Esperando Confirmación Buy" : "En Enfriamiento");
+            let razon = (anyActive || botState.currentContractId) ? "Contrato Abierto" : (isBuying ? "Esperando Confirmación Buy" : "En Enfriamiento");
             console.log(`ℹ️ SNIPER: RSI en ${rsi.toFixed(1)} pero ignorando disparo por: ${razon}`);
             botState.lastSkipLogTime = now;
         }
