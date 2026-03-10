@@ -327,10 +327,17 @@ function connectWebSocket() {
 
         if (msg.msg_type === 'buy') {
             const contractId = msg.buy.contract_id;
+
+            // Si ya teníamos uno, ignorar este (para evitar dobles involuntarios)
+            if (botState.currentContractId) {
+                console.log(`⚠️ Ignorando duplicado de compra [${contractId}] para no dejar huérfanos.`);
+                return;
+            }
+
             botState.currentContractId = contractId;
             botState.ticksInTrade = 0;
-            botState.tradeStartTime = Date.now(); // ⏱️ TIEMPO ABSOLUTO CERO
-            isBuying = false; // Desbloquear sistema de compra
+            botState.tradeStartTime = Date.now();
+            isBuying = false; // Solo aquí se libera el Sniper para seguimiento
 
             // Suscribirnos al contrato manual y explícitamente (vital para Multiplicadores)
             ws.send(JSON.stringify({
@@ -442,14 +449,13 @@ function processTick(quote) {
         isBuying = false;
     }
 
-    // PROTECCIÓN CRÍTICA: Solo un contrato a la vez.
-    const isRecentlyTraded = (now - botState.lastTradeTime < 5000); // Bloqueo de 5s para evitar ráfagas
+    // BLOQUEO MAESTRO: Un disparo a la vez + Protección de Ráfaga 5s
+    const isRecentlyTraded = (now - botState.lastTradeTime < 5000);
 
-    if (botState.currentContractId || botState.cooldownRemaining > 0 || isBuying || isRecentlyTraded) {
-        // Log de depuración solo si estamos en zona rsi
-        if (rsi <= BOOM_CONFIG.rsiThreshold && now - (botState.lastSkipLogTime || 0) > 5000) {
-            let razon = botState.currentContractId ? "Contrato Abierto" : (isBuying ? "En proceso de compra" : (isRecentlyTraded ? "Protección Ráfaga (5s)" : "En Enfriamiento"));
-            console.log(`ℹ️ SNIPER TRABADO: RSI en ${rsi.toFixed(1)} pero ignorando por: ${razon}`);
+    if (botState.currentContractId || isBuying || botState.cooldownRemaining > 0 || isRecentlyTraded) {
+        if (rsi <= BOOM_CONFIG.rsiThreshold && now - (botState.lastSkipLogTime || 0) > 6000) {
+            let razon = botState.currentContractId ? "DISPARO EN VIVO" : (isBuying ? "ABRIENDO CONTRATO..." : "ENFRIAMIENTO / PROTECCIÓN");
+            console.log(`ℹ️ SNIPER BLOQUEADO: RSI en ${rsi.toFixed(1)} | Estado: ${razon}`);
             botState.lastSkipLogTime = now;
         }
         return;
