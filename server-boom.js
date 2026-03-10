@@ -254,17 +254,18 @@ function connectWebSocket() {
             if (tickHistory.length > 4050) tickHistory.shift();
 
             if (botState.currentContractId) {
+                // Ya no contamos ticks aquí para el stop temporal, pero lo dejamos como métrica de data.
                 botState.ticksInTrade = (botState.ticksInTrade || 0) + 1;
             }
 
             processTick(quote);
         }
 
-        // --- MANEJAR COMPRA DE CONTRATO EXITOSA ---
         if (msg.msg_type === 'buy') {
             const contractId = msg.buy.contract_id;
             botState.currentContractId = contractId;
             botState.ticksInTrade = 0;
+            botState.tradeStartTime = Date.now(); // ⏱️ TIEMPO ABSOLUTO CERO
             isBuying = false; // Desbloquear sistema de compra
 
             // Suscribirnos al contrato manual y explícitamente (vital para Multiplicadores)
@@ -273,7 +274,7 @@ function connectWebSocket() {
                 contract_id: contractId,
                 subscribe: 1
             }));
-            console.log(`📡 CONTRATO ABIERTO [${contractId}]. Esperando ${BOOM_CONFIG.timeStopTicks} ticks de Time-Stop...`);
+            console.log(`📡 CONTRATO ABIERTO [${contractId}]. Cronómetro activo: Esperando ${BOOM_CONFIG.timeStopTicks} SEGUNDOS...`);
         }
 
         if (msg.msg_type === 'proposal_open_contract') {
@@ -288,21 +289,21 @@ function connectWebSocket() {
             if (contract && contract.is_sold) {
                 finalizeTrade(contract);
             } else if (contract && !contract.is_sold) {
-                // Monitoreo Activo (Time-Stop + TP/SL Dinámico Manual)
-                const ticksElapsed = botState.ticksInTrade || 0;
+                // Monitoreo Activo (Time-Stop Reloj Real + TP/SL Dinámico Manual)
+                const secondsElapsed = Math.floor((Date.now() - botState.tradeStartTime) / 1000);
                 const profit = parseFloat(contract.profit);
 
                 if (profit >= BOOM_CONFIG.takeProfit) {
                     console.log(`🎯 TAKE PROFIT ALCANZADO: +$${profit.toFixed(2)}`);
-                    botState.ticksInTrade = -9999;
+                    botState.currentContractId = null; // Prevenir cierres dobles
                     ws.send(JSON.stringify({ sell: contract.contract_id, price: 0 }));
                 } else if (profit <= -1000) { // ⚠️ MODO DE PRUEBA: Stop Loss desactivado temporalmente
                     console.log(`🛡️ STOP LOSS CUBIERTO: -$${Math.abs(profit).toFixed(2)}`);
-                    botState.ticksInTrade = -9999;
+                    botState.currentContractId = null;
                     ws.send(JSON.stringify({ sell: contract.contract_id, price: 0 }));
-                } else if (ticksElapsed >= BOOM_CONFIG.timeStopTicks && profit < 2.00) {
-                    console.log(`⏱️ TIME-STOP: Límite de ${BOOM_CONFIG.timeStopTicks} ticks alcanzado. Abortando mision con ${profit.toFixed(2)}$`);
-                    botState.ticksInTrade = -9999;
+                } else if (secondsElapsed >= BOOM_CONFIG.timeStopTicks && profit < 2.00) {
+                    console.log(`⏱️ TIME-STOP RELOJ: Límite de ${BOOM_CONFIG.timeStopTicks} segundos reales alcanzado. Cerrando Venta con ${profit.toFixed(2)}$`);
+                    botState.currentContractId = null;
                     ws.send(JSON.stringify({ sell: contract.contract_id, price: 0 }));
                 }
             }
