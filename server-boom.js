@@ -51,96 +51,13 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-// --- DINAMIC BRANDING: BOOM 1000 ---
 app.get('/', (req, res) => {
-    let html = fs.readFileSync(path.join(__dirname, 'public', 'index.html'), 'utf8');
-    // Inyectamos un script al final del body para cambiar el branding
-    const brandingScript = `
-    <script>
-        window.onload = () => {
-            const extremeSurge = () => {
-                document.title = "BOOM 1000 SNIPER PRO 💥"; 
-                const root = document.getElementById('root');
-                
-                // 1. Cirugía Estética Quirúrgica (Textos)
-                const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
-                let node;
-                while (node = walker.nextNode()) {
-                    let val = node.nodeValue;
-                    if (!val) continue;
-                    if (val.includes('Step Index') || val.includes('STEP INDEX') || val.includes('GOLD') || val.includes('ORO') || val.includes('XAUUSD')) {
-                        node.nodeValue = val
-                            .replace(/Step Index/gi, 'BOOM 1000')
-                            .replace(/STEP INDEX/gi, 'BOOM 1000')
-                            .replace(/GOLD/gi, 'BOOM 1000')
-                            .replace(/ORO/gi, 'BOOM 1000')
-                            .replace(/XAUUSD/gi, 'B1000');
-                    }
-                    if (val.includes('MOMENTUM (TICKS)')) { node.nodeValue = 'TIME-STOP (TICKS)'; }
-                    if (val.includes('PRECISIÓN (DIST)')) { node.nodeValue = 'CCI FILTER (S)'; }
-                    if (val.includes('TAKE PROFIT (🚀 $)')) { node.nodeValue = 'SPIKE TARGET ($)'; }
-                    if (val.includes('INVERSIÓN BY DEFAULT')) { node.nodeValue = 'STAKE SNIPER ($)'; }
-                }
-
-                // 2. Ocultar secciones dinámicas (Con cautela)
-                document.querySelectorAll('div, section, h2, h3, p, span, h1').forEach(el => {
-                    const txt = (el.textContent || '').toUpperCase();
-                    if (!txt) return;
-
-                    // Ocultar si dice Trailing/Híbrido/Alpha/Oro (Fuera de Boom)
-                    const isInvalid = txt.includes('TRAILING') || 
-                                     txt.includes('HÍBRIDO') || 
-                                     txt.includes('ALPHA') || 
-                                     (txt.includes('ORO') && !txt.includes('BOOM')) || 
-                                     txt.includes('XAUUSD') ||
-                                     (txt.includes('STEP INDEX') && !txt.includes('B1000'));
-
-                    if (isInvalid) {
-                         let container = el.closest('.card') || el.closest('section') || el.parentElement;
-                         // NUNCA ocultar el root o elementos grandes que sirven de base
-                         if (container && container !== root && container !== document.body && container.children.length < 5) {
-                             container.style.display = 'none';
-                             container.style.visibility = 'hidden';
-                         }
-                    }
-                });
-
-                // 3. Forzar valores visuales
-                document.querySelectorAll('input').forEach(input => {
-                    if (input.value == "750") input.value = "200";
-                    if (input.value == "5" && !input.getAttribute('data-fixed')) {
-                        input.value = "15"; 
-                        input.setAttribute('data-fixed', 'true');
-                    }
-                });
-            };
-            try { extremeSurge(); setInterval(extremeSurge, 1000); } catch(e) { console.error(e); }
-        };
-    </script>
-    `;
-    res.send(html.replace('</body>', brandingScript + '</body>'));
+    res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
 app.use(express.static(path.join(__dirname, 'public')));
 
 app.get('/api/status', (req, res) => {
-    // Mapeamos BOOM_CONFIG a los nombres completos que la interfaz React requiere
-    const mappedConfig = {
-        stake: BOOM_CONFIG.stake,
-        takeProfit: BOOM_CONFIG.takeProfit,
-        multiplier: BOOM_CONFIG.multiplier,
-        momentum: BOOM_CONFIG.timeStopTicks,
-        stopLoss: BOOM_CONFIG.stopLoss,
-        distLimit: 0.12,
-        smaPeriod: 50,
-        smaLongPeriod: 200,
-        rsiPeriod: 14,
-        rsiLow: 25,
-        rsiHigh: 75,
-        useHybrid: false,
-        useTrailing: false
-    };
-
     res.json({
         success: true,
         data: {
@@ -148,21 +65,18 @@ app.get('/api/status', (req, res) => {
             activeSymbol: 'BOOM 1000',
             activeStrategy: 'SNIPER'
         },
-        config: mappedConfig,
-        isSniper: true,
-        isBoom: true
+        config: BOOM_CONFIG,
     });
 });
 
-// --- ENDPOINT: CONTROL REMOTO (START/STOP/CONFIG) ---
 app.post('/api/control', (req, res) => {
-    const { action, stake, takeProfit, multiplier, stopLoss, momentum } = req.body;
+    const { action, stake, takeProfit, multiplier, stopLoss, timeStopTicks } = req.body;
 
     if (action === 'START') {
         botState.isRunning = true;
         if (stake) BOOM_CONFIG.stake = Number(stake);
         if (takeProfit) BOOM_CONFIG.takeProfit = Number(takeProfit);
-        if (momentum) BOOM_CONFIG.timeStopTicks = Number(momentum);
+        if (timeStopTicks) BOOM_CONFIG.timeStopTicks = Number(timeStopTicks);
 
         if (multiplier) {
             // Ajustar a valores permitidos por Deriv para Boom (100, 200, 300, 400, 500)
