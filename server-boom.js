@@ -14,8 +14,8 @@ const WEB_PASSWORD = process.env.WEB_PASSWORD || 'admin123';
 
 let BOOM_CONFIG = {
     stake: 20,
-    takeProfit: 50.00,
-    stopLoss: 1.00,
+    takeProfit: 2.00,
+    stopLoss: 1.50,
     multiplier: 200,    // Multiplicador válido (100, 200, 300, 400, 500)
     rsiPeriod: 14,
     cciPeriod: 14,
