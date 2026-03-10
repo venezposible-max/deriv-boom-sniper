@@ -153,12 +153,36 @@ function calculateSMA(prices, period) {
 
 function calculateRSI(prices, period) {
     if (prices.length < period + 1) return 50;
-    let gains = 0, losses = 0;
-    for (let i = prices.length - period; i < prices.length; i++) {
+
+    // RSI Avanzado de Welles Wilder usando los últimos 250 ticks para suavizado real
+    let startIndex = prices.length - 250;
+    if (startIndex < 1) startIndex = 1;
+
+    let avgGain = 0;
+    let avgLoss = 0;
+
+    // 1. SMA inicial (primeras 14 velas desde atrás)
+    for (let i = startIndex; i < startIndex + period; i++) {
         let diff = prices[i] - prices[i - 1];
-        if (diff >= 0) gains += diff; else losses -= diff;
+        if (diff > 0) avgGain += diff;
+        else if (diff < 0) avgLoss += Math.abs(diff);
     }
-    let rs = (gains / period) / (losses / period || 1);
+    avgGain /= period;
+    avgLoss /= period;
+
+    // 2. Wilder Smoothing hasta el presente
+    for (let i = startIndex + period; i < prices.length; i++) {
+        let diff = prices[i] - prices[i - 1];
+        let currentGain = diff > 0 ? diff : 0;
+        let currentLoss = diff < 0 ? Math.abs(diff) : 0;
+
+        avgGain = ((avgGain * (period - 1)) + currentGain) / period;
+        avgLoss = ((avgLoss * (period - 1)) + currentLoss) / period;
+    }
+
+    if (avgLoss === 0) return 100;
+
+    let rs = avgGain / avgLoss;
     return 100 - (100 / (1 + rs));
 }
 
