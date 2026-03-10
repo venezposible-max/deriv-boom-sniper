@@ -2,12 +2,7 @@ const WebSocket = require('ws');
 const ws = new WebSocket('wss://ws.derivws.com/websockets/v3?app_id=1089');
 
 ws.on('open', () => {
-    ws.send(JSON.stringify({
-        ticks_history: 'BOOM1000',
-        count: 500, // Aprox últimes 5-8 minutos
-        end: 'latest',
-        style: 'ticks'
-    }));
+    ws.send(JSON.stringify({ ticks_history: 'BOOM1000', count: 1000, end: 'latest', style: 'ticks' }));
 });
 
 ws.on('message', (data) => {
@@ -16,32 +11,41 @@ ws.on('message', (data) => {
         const prices = msg.history.prices;
         const times = msg.history.times;
 
-        let spikes = [];
+        console.log("\n--- ANALIZANDO ÚLTIMOS 1000 TICKS (MOMENTO DEL SPIKE) ---");
+
+        let maxJump = 0;
+        let jumpTime = 0;
+        let jumpStartIndex = 0;
+
         for (let i = 1; i < prices.length; i++) {
             let diff = prices[i] - prices[i - 1];
-            // En Boom 1000, un spike es una subida abrupta (normalmente más de 5 o 10 puntos, a veces 30+)
-            if (diff > 5) {
-                spikes.push({
-                    time: new Date(times[i] * 1000).toLocaleString('es-VE', { timeZone: 'America/Caracas' }), // Mismo huso horario del usuario
-                    diff: `+${diff.toFixed(2)} pts`,
-                    priceFrom: prices[i - 1],
-                    priceTo: prices[i]
-                });
+            if (diff > 5) { // Un salto de más de 5 puntos es un Spike
+                if (diff > maxJump) {
+                    maxJump = diff;
+                    jumpTime = times[i];
+                    jumpStartIndex = i - 1;
+                }
             }
         }
 
-        console.log("============ RADAR DE SPIKES ============");
-        console.log("Revisando los últimos 500 Ticks (Aprox 5-8 min):");
-        if (spikes.length > 0) {
-            console.log("¡SPIKES DETECTADOS! 🔥🔥🔥");
-            spikes.forEach(s => {
-                console.log(`- Fecha/Hora: ${s.time} | Subida: ${s.diff} | Salto: de ${s.priceFrom} a ${s.priceTo}`);
-            });
+        if (maxJump > 0) {
+            console.log(`🚀 ¡SPIKE DETECTADO!`);
+            console.log(`Hora exacta: ${new Date(jumpTime * 1000).toLocaleTimeString('es-VE', { timeZone: 'America/Caracas' })}`);
+            console.log(`Tamaño del salto: +${maxJump.toFixed(2)} puntos`);
+            console.log(`Precio antes: ${prices[jumpStartIndex].toFixed(2)} -> Precio después: ${prices[jumpStartIndex + 1].toFixed(2)}`);
+
+            // Ver qué pasaba 1 minuto antes del Spike
+            console.log("\n--- CONDICIONES PRE-SPIKE (1 minuto antes) ---");
+            const preIndex = jumpStartIndex - 60 > 0 ? jumpStartIndex - 60 : 0;
+            const subPrices = prices.slice(preIndex - 2000 > 0 ? preIndex - 2000 : 0, preIndex);
+            // Simular RSI (Necesitamos velas)
+            // Para simplificar, veamos solo el tiempo transcurrido
+            const preSpikeTime = times[jumpStartIndex];
+            console.log(`Tiempo pre-spike: ${new Date(preSpikeTime * 1000).toLocaleTimeString('es-VE', { timeZone: 'America/Caracas' })}`);
         } else {
-            console.log("Tristeza... 🛑 NO HUBIERON SPIKES en los últimos minutos.");
-            console.log("El mercado lleva bajando o en rango sin explotar desde " + new Date(times[0] * 1000).toLocaleString('es-VE', { timeZone: 'America/Caracas' }));
+            console.log("No detecté ningún salto mayor a 5 puntos en los últimos 1000 ticks.");
+            console.log(`Último precio registrado: ${prices[prices.length - 1]} a las ${new Date(times[times.length - 1] * 1000).toLocaleTimeString()}`);
         }
-        console.log("=========================================");
         process.exit(0);
     }
 });

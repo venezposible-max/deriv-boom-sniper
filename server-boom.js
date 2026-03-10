@@ -21,6 +21,8 @@ let BOOM_CONFIG = {
     cciPeriod: 14,
     timeStopTicks: 15,
     cooldownSeconds: 45,
+    rsiThreshold: 25,     // Nuevo: Gatillo configurable
+    quickReloadSeconds: 3, // Nuevo: Recarga configurable
     useTickFrequency: false // Modo avanzado apagado por default
 };
 
@@ -73,13 +75,15 @@ app.get('/api/status', (req, res) => {
 });
 
 app.post('/api/control', (req, res) => {
-    const { action, stake, takeProfit, multiplier, stopLoss, timeStopTicks, useTickFrequency } = req.body;
+    const { action, stake, takeProfit, multiplier, stopLoss, timeStopTicks, useTickFrequency, rsiThreshold, quickReloadSeconds } = req.body;
 
     if (action === 'START') {
         botState.isRunning = true;
         if (stake) BOOM_CONFIG.stake = Number(stake);
         if (takeProfit) BOOM_CONFIG.takeProfit = Number(takeProfit);
         if (timeStopTicks) BOOM_CONFIG.timeStopTicks = Number(timeStopTicks);
+        if (rsiThreshold) BOOM_CONFIG.rsiThreshold = Number(rsiThreshold);
+        if (quickReloadSeconds) BOOM_CONFIG.quickReloadSeconds = Number(quickReloadSeconds);
 
         if (multiplier) {
             // Ajustar a valores permitidos por Deriv para Boom (100, 200, 300, 400, 500)
@@ -398,9 +402,9 @@ function processTick(quote) {
 
     // --- REGLAS SNIPER BOOM (Refinadas) ---
     // En Boom 1000 ignoraremos el CCI estricto y la cercanía al SMA,
-    // ya que una caída tan profunda (RSI < 25) naturalmente aleja al 
+    // ya que una caída tan profunda (RSI < Threshold) naturalmente aleja al 
     // precio de sus promedios. Disparamos directo por agotamiento de caída.
-    if (rsi >= 0 && rsi <= 25) {
+    if (rsi >= 0 && rsi <= BOOM_CONFIG.rsiThreshold) {
         if (BOOM_CONFIG.useTickFrequency) {
             // No disparamos normal. Esperaremos a que el motor paralelo detecte el congelamiento.
             if (Date.now() - (botState.lastFreezeLogTime || 0) > 3000) {
@@ -408,7 +412,7 @@ function processTick(quote) {
                 botState.lastFreezeLogTime = Date.now();
             }
         } else {
-            console.log(`💥 SEÑAL ACTIVA: RSI cayó a ${rsi.toFixed(1)} -> ¡Disparo inminente! (CCI: ${cci.toFixed(0)})`);
+            console.log(`💥 SEÑAL ACTIVA: RSI cayó a ${rsi.toFixed(1)} (Meta: ${BOOM_CONFIG.rsiThreshold}) -> ¡Disparo inminente! (CCI: ${cci.toFixed(0)})`);
             executeTrade();
         }
     }
@@ -444,9 +448,11 @@ function finalizeTrade(contract) {
     if (profit > 0) {
         botState.winsSession++;
         console.log(`🎯 ¡SPIKE CAZADO! Ganancia: +$${profit.toFixed(2)} 💰💰💰`);
+        botState.cooldownRemaining = BOOM_CONFIG.cooldownSeconds; // 45s
     } else {
         botState.lossesSession++;
         console.log(`🛡️ BALA PERDIDA: -$${Math.abs(profit).toFixed(2)} (Bajo control)`);
+        botState.cooldownRemaining = BOOM_CONFIG.quickReloadSeconds; // Ej: 3s
     }
 
     // --- REGISTRO DE TRADING HISTORIAL (Máximo 10) ---

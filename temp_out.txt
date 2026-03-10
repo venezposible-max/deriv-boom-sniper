@@ -1,0 +1,125 @@
+
+============ SIMULADOR FRECUENCIA SÍSMICA BOOM 1000 ============
+⏱️ Base del estudio: 5000 Ticks.
+⚙️ Arquitectura: RSI <= 25 + Detector de SILENCIO (>2.5s)
+===============================================================
+
+[ALERTA] Silencio Detectado a las 11:59:09 p. m. | Retraso: 1s | RSI: 65.5
+[ALERTA] Silencio Detectado a las 11:59:27 p. m. | Retraso: 1s | RSI: 65.1
+[ALERTA] Silencio Detectado a las 11:59:45 p. m. | Retraso: 1s | RSI: 64.5
+[ALERTA] Silencio Detectado a las 12:00:03 a. m. | Retraso: 1s | RSI: 63.9
+[ALERTA] Silencio Detectado a las 12:00:21 a. m. | Retraso: 1s | RSI: 63.4
+[ALERTA] Silencio Detectado a las 12:00:39 a. m. | Retraso: 1s | RSI: 62.9
+[ALERTA] Silencio Detectado a las 12:00:57 a. m. | Retraso: 1s | RSI: 62.1
+[ALERTA] Silencio Detectado a las 12:01:15 a. m. | Retraso: 1s | RSI: 61.6
+[ALERTA] Silencio Detectado a las 12:01:33 a. m. | Retraso: 1s | RSI: 61.0
+[ALERTA] Silencio Detectado a las 12:01:51 a. m. | Retraso: 1s | RSI: 60.4
+[ALERTA] Silencio Detectado a las 12:02:09 a. m. | Retraso: 1s | RSI: 59.8
+[ALERTA] Silencio Detectado a las 12:02:27 a. m. | Retraso: 1s | RSI: 59.3
+[ALERTA] Silencio Detectado a las 12:02:45 a. m. | Retraso: 1s | RSI: 58.8
+[ALERTA] Silencio Detectado a las 12:03:03 a. m. | Retraso: 1s | RSI: 58.2
+[ALERTA] Silencio Detectado a las 12:03:21 a. m. | Retraso: 1s | RSI: 57.6
+[ALERTA] Silencio Detectado a las 12:03:39 a. m. | Retraso: 1s | RSI: 57.1
+[ALERTA] Silencio Detectado a las 12:03:57 a. m. | Retraso: 1s | RSI: 56.5
+[ALERTA] Silencio Detectado a las 12:04:15 a. m. | Retraso: 1s | RSI: 56.0
+[ALERTA] Silencio Detectado a las 12:04:33 a. m. | Retraso: 1s | RSI: 55.7
+[ALERTA] Silencio Detectado a las 12:04:51 a. m. | Retraso: 1s | RSI: 55.0
+[ALERTA] Silencio Detectado a las 12:05:09 a. m. | Retraso: 1s | RSI: 54.3
+[ALERTA] Silencio Detectado a las 12:05:27 a. m. | Retraso: 1s | RSI: 53.7
+[ALERTA] Silencio Detectado a las 12:05:45 a. m. | Retraso: 1s | RSI: 53.1
+[ALERTA] Silencio Detectado a las 12:06:03 a. m. | Retraso: 1s | RSI: 52.6
+[ALERTA] Silencio Detectado a las 12:06:21 a. m. | Retraso: 1s | RSI: 52.0
+[ALERTA] Silencio Detectado a las 12:06:39 a. m. | Retraso: 1s | RSI: 51.5
+[ALERTA] Silencio Detectado a las 12:06:57 a. m. | Retraso: 1s | RSI: 51.1
+[ALERTA] Silencio Detectado a las 12:07:15 a. m. | Retraso: 1s | RSI: 50.5
+[ALERTA] Silencio Detectado a las 12:07:33 a. m. | Retraso: 1s | RSI: 49.8
+[ALERTA] Silencio Detectado a las 12:07:51 a. m. | Retraso: 1s | RSI: 49.4
+[ALERTA] Silencio Detectado a las 12:08:09 a. m. | Retraso: 1s | RSI: 48.8
+[ALERTA] Silencio Detectado a las 12:08:27 a. m. | Retraso: 1s | RSI: 48.1
+[ALERTA] Silencio Detectado a las 12:08:45 a. m. | Retraso: 1s | RSI: 47.6
+[ALERTA] Silencio Detectado a las 12:09:03 a. m. | Retraso: 1s | RSI: 47.0
+[ALERTA] Silencio Detectado a las 12:09:21 a. m. | Retraso: 1s | RSI: 46.4
+[ALERTA] Silencio Detectado a las 12:09:39 a. m. | Retraso: 1s | RSI: 45.8
+[ALERTA] Silencio Detectado a las 12:09:57 a. m. | Retraso: 1s | RSI: 45.1
+[ALERTA] Silencio Detectado a las 12:10:15 a. m. | Retraso: 1s | RSI: 44.5
+[ALERTA] Silencio Detectado a las 12:10:33 a. m. | Retraso: 1s | RSI: 43.8
+[ALERTA] Silencio Detectado a las 12:10:51 a. m. | Retraso: 1s | RSI: 43.3
+[ALERTA] Silencio Detectado a las 12:11:09 a. m. | Retraso: 1s | RSI: 42.8
+[ALERTA] Silencio Detectado a las 12:11:27 a. m. | Retraso: 1s | RSI: 42.4
+[ALERTA] Silencio Detectado a las 12:11:45 a. m. | Retraso: 1s | RSI: 41.7
+[ALERTA] Silencio Detectado a las 12:12:03 a. m. | Retraso: 1s | RSI: 41.0
+[ALERTA] Silencio Detectado a las 12:12:21 a. m. | Retraso: 1s | RSI: 40.6
+[ALERTA] Silencio Detectado a las 12:12:39 a. m. | Retraso: 1s | RSI: 40.1
+[ALERTA] Silencio Detectado a las 12:12:57 a. m. | Retraso: 1s | RSI: 39.5
+[ALERTA] Silencio Detectado a las 12:13:15 a. m. | Retraso: 1s | RSI: 39.0
+[ALERTA] Silencio Detectado a las 12:13:33 a. m. | Retraso: 1s | RSI: 38.5
+[ALERTA] Silencio Detectado a las 12:13:51 a. m. | Retraso: 1s | RSI: 38.1
+[ALERTA] Silencio Detectado a las 12:14:09 a. m. | Retraso: 1s | RSI: 37.6
+[ALERTA] Silencio Detectado a las 12:14:27 a. m. | Retraso: 1s | RSI: 37.1
+[ALERTA] Silencio Detectado a las 12:14:45 a. m. | Retraso: 1s | RSI: 36.7
+[ALERTA] Silencio Detectado a las 12:15:03 a. m. | Retraso: 1s | RSI: 36.1
+[ALERTA] Silencio Detectado a las 12:15:21 a. m. | Retraso: 1s | RSI: 35.5
+[ALERTA] Silencio Detectado a las 12:15:39 a. m. | Retraso: 1s | RSI: 35.1
+
+============ RESULTADOS MODO HESITATION ============
+✔️ Ganados: 0  |  ❌ Perdidos: 55
+💰 PnL NETO FINAL: $-23.74
+
+--- HISTORIAL DE TRADES ---
+[1] ⏰ 11:59:09 p. m. a 11:59:24 p. m. | ⏱️ TIME-STOP (-0.42$)
+[2] ⏰ 11:59:27 p. m. a 11:59:42 p. m. | ⏱️ TIME-STOP (-0.44$)
+[3] ⏰ 11:59:45 p. m. a 12:00:00 a. m. | ⏱️ TIME-STOP (-0.44$)
+[4] ⏰ 12:00:03 a. m. a 12:00:18 a. m. | ⏱️ TIME-STOP (-0.43$)
+[5] ⏰ 12:00:21 a. m. a 12:00:36 a. m. | ⏱️ TIME-STOP (-0.43$)
+[6] ⏰ 12:00:39 a. m. a 12:00:54 a. m. | ⏱️ TIME-STOP (-0.45$)
+[7] ⏰ 12:00:57 a. m. a 12:01:12 a. m. | ⏱️ TIME-STOP (-0.43$)
+[8] ⏰ 12:01:15 a. m. a 12:01:30 a. m. | ⏱️ TIME-STOP (-0.44$)
+[9] ⏰ 12:01:33 a. m. a 12:01:48 a. m. | ⏱️ TIME-STOP (-0.43$)
+[10] ⏰ 12:01:51 a. m. a 12:02:06 a. m. | ⏱️ TIME-STOP (-0.43$)
+[11] ⏰ 12:02:09 a. m. a 12:02:24 a. m. | ⏱️ TIME-STOP (-0.43$)
+[12] ⏰ 12:02:27 a. m. a 12:02:42 a. m. | ⏱️ TIME-STOP (-0.43$)
+[13] ⏰ 12:02:45 a. m. a 12:03:00 a. m. | ⏱️ TIME-STOP (-0.43$)
+[14] ⏰ 12:03:03 a. m. a 12:03:18 a. m. | ⏱️ TIME-STOP (-0.43$)
+[15] ⏰ 12:03:21 a. m. a 12:03:36 a. m. | ⏱️ TIME-STOP (-0.42$)
+[16] ⏰ 12:03:39 a. m. a 12:03:54 a. m. | ⏱️ TIME-STOP (-0.43$)
+[17] ⏰ 12:03:57 a. m. a 12:04:12 a. m. | ⏱️ TIME-STOP (-0.43$)
+[18] ⏰ 12:04:15 a. m. a 12:04:30 a. m. | ⏱️ TIME-STOP (-0.41$)
+[19] ⏰ 12:04:33 a. m. a 12:04:48 a. m. | ⏱️ TIME-STOP (-0.44$)
+[20] ⏰ 12:04:51 a. m. a 12:05:06 a. m. | ⏱️ TIME-STOP (-0.45$)
+[21] ⏰ 12:05:09 a. m. a 12:05:24 a. m. | ⏱️ TIME-STOP (-0.43$)
+[22] ⏰ 12:05:27 a. m. a 12:05:42 a. m. | ⏱️ TIME-STOP (-0.45$)
+[23] ⏰ 12:05:45 a. m. a 12:06:00 a. m. | ⏱️ TIME-STOP (-0.43$)
+[24] ⏰ 12:06:03 a. m. a 12:06:18 a. m. | ⏱️ TIME-STOP (-0.44$)
+[25] ⏰ 12:06:21 a. m. a 12:06:36 a. m. | ⏱️ TIME-STOP (-0.42$)
+[26] ⏰ 12:06:39 a. m. a 12:06:54 a. m. | ⏱️ TIME-STOP (-0.42$)
+[27] ⏰ 12:06:57 a. m. a 12:07:12 a. m. | ⏱️ TIME-STOP (-0.42$)
+[28] ⏰ 12:07:15 a. m. a 12:07:30 a. m. | ⏱️ TIME-STOP (-0.45$)
+[29] ⏰ 12:07:33 a. m. a 12:07:48 a. m. | ⏱️ TIME-STOP (-0.41$)
+[30] ⏰ 12:07:51 a. m. a 12:08:06 a. m. | ⏱️ TIME-STOP (-0.44$)
+[31] ⏰ 12:08:09 a. m. a 12:08:24 a. m. | ⏱️ TIME-STOP (-0.44$)
+[32] ⏰ 12:08:27 a. m. a 12:08:42 a. m. | ⏱️ TIME-STOP (-0.44$)
+[33] ⏰ 12:08:45 a. m. a 12:09:00 a. m. | ⏱️ TIME-STOP (-0.43$)
+[34] ⏰ 12:09:03 a. m. a 12:09:18 a. m. | ⏱️ TIME-STOP (-0.44$)
+[35] ⏰ 12:09:21 a. m. a 12:09:36 a. m. | ⏱️ TIME-STOP (-0.43$)
+[36] ⏰ 12:09:39 a. m. a 12:09:54 a. m. | ⏱️ TIME-STOP (-0.45$)
+[37] ⏰ 12:09:57 a. m. a 12:10:12 a. m. | ⏱️ TIME-STOP (-0.44$)
+[38] ⏰ 12:10:15 a. m. a 12:10:30 a. m. | ⏱️ TIME-STOP (-0.43$)
+[39] ⏰ 12:10:33 a. m. a 12:10:48 a. m. | ⏱️ TIME-STOP (-0.44$)
+[40] ⏰ 12:10:51 a. m. a 12:11:06 a. m. | ⏱️ TIME-STOP (-0.42$)
+[41] ⏰ 12:11:09 a. m. a 12:11:24 a. m. | ⏱️ TIME-STOP (-0.42$)
+[42] ⏰ 12:11:27 a. m. a 12:11:42 a. m. | ⏱️ TIME-STOP (-0.44$)
+[43] ⏰ 12:11:45 a. m. a 12:12:00 a. m. | ⏱️ TIME-STOP (-0.45$)
+[44] ⏰ 12:12:03 a. m. a 12:12:18 a. m. | ⏱️ TIME-STOP (-0.42$)
+[45] ⏰ 12:12:21 a. m. a 12:12:36 a. m. | ⏱️ TIME-STOP (-0.42$)
+[46] ⏰ 12:12:39 a. m. a 12:12:54 a. m. | ⏱️ TIME-STOP (-0.45$)
+[47] ⏰ 12:12:57 a. m. a 12:13:12 a. m. | ⏱️ TIME-STOP (-0.43$)
+[48] ⏰ 12:13:15 a. m. a 12:13:30 a. m. | ⏱️ TIME-STOP (-0.42$)
+[49] ⏰ 12:13:33 a. m. a 12:13:48 a. m. | ⏱️ TIME-STOP (-0.43$)
+[50] ⏰ 12:13:51 a. m. a 12:14:06 a. m. | ⏱️ TIME-STOP (-0.42$)
+[51] ⏰ 12:14:09 a. m. a 12:14:24 a. m. | ⏱️ TIME-STOP (-0.43$)
+[52] ⏰ 12:14:27 a. m. a 12:14:42 a. m. | ⏱️ TIME-STOP (-0.42$)
+[53] ⏰ 12:14:45 a. m. a 12:15:00 a. m. | ⏱️ TIME-STOP (-0.45$)
+[54] ⏰ 12:15:03 a. m. a 12:15:18 a. m. | ⏱️ TIME-STOP (-0.42$)
+[55] ⏰ 12:15:21 a. m. a 12:15:36 a. m. | ⏱️ TIME-STOP (-0.43$)
+====================================================
+

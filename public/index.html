@@ -277,7 +277,17 @@
             </div>
             <div class="input-group">
                 <label>STOP LOSS DE BALA (MAX -$)</label>
-                <input type="number" id="inSl" step="0.10" value="1">
+                <input type="number" id="inSl" step="0.10" value="1.5">
+            </div>
+            <div class="row" style="gap: 10px;">
+                <div class="input-group" style="flex: 1;">
+                    <label>GATILLO RSI (🎯)</label>
+                    <input type="number" id="inRsiThreshold" step="1" value="25">
+                </div>
+                <div class="input-group" style="flex: 1;">
+                    <label>RECARGA (SEGS)</label>
+                    <input type="number" id="inQuickReload" step="1" value="3">
+                </div>
             </div>
             <div class="input-group"
                 style="flex-direction: row; align-items: center; justify-content: space-between; border-top: 1px solid #1f2937; padding-top: 15px; margin-top: 5px;">
@@ -351,6 +361,8 @@
                         if (c.multiplier) document.getElementById('inMult').value = c.multiplier;
                         if (c.timeStopTicks) document.getElementById('inStopTicks').value = c.timeStopTicks;
                         if (c.stopLoss) document.getElementById('inSl').value = c.stopLoss;
+                        if (c.rsiThreshold) document.getElementById('inRsiThreshold').value = c.rsiThreshold;
+                        if (c.quickReloadSeconds) document.getElementById('inQuickReload').value = c.quickReloadSeconds;
                         if (typeof c.useTickFrequency !== 'undefined') document.getElementById('inTickMode').checked = c.useTickFrequency;
                         isInitialized = true;
                     }
@@ -402,6 +414,8 @@
                 payload.multiplier = document.getElementById('inMult').value;
                 payload.timeStopTicks = document.getElementById('inStopTicks').value;
                 payload.stopLoss = document.getElementById('inSl').value;
+                payload.rsiThreshold = document.getElementById('inRsiThreshold').value;
+                payload.quickReloadSeconds = document.getElementById('inQuickReload').value;
                 payload.useTickFrequency = document.getElementById('inTickMode').checked;
             }
 
