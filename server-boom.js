@@ -311,7 +311,8 @@ function connectWebSocket() {
 }
 
 function processTick(quote) {
-    const rsi = calculateRSI(tickHistory, 14);
+    // Escala MetaTrader 5 (Velas 1M): 14 periodos * 60 ticks/min = 840 ticks
+    const rsi = calculateRSI(tickHistory, 840);
 
     // --- RADAR VISUAL EN CONSOLA (CADA 10 SEGUNDOS) ---
     const now = Date.now();
@@ -333,8 +334,8 @@ function processTick(quote) {
         return;
     }
 
-    const cci = calculateCCI(tickHistory, 14);
-    const sma50 = calculateSMA(tickHistory, 50);
+    const cci = calculateCCI(tickHistory, 840);
+    const sma50 = calculateSMA(tickHistory, 3000); // 50 periodos M1
 
     if (!sma50 || isNaN(rsi) || isNaN(cci)) return;
 
@@ -352,6 +353,7 @@ function executeTrade() {
     isBuying = true;
     const req = {
         buy: 1,
+        price: BOOM_CONFIG.stake,
         parameters: {
             amount: BOOM_CONFIG.stake,
             basis: 'stake',
