@@ -60,13 +60,14 @@ app.get('/', (req, res) => {
         window.onload = () => {
             const extremeSurge = () => {
                 document.title = "BOOM 1000 SNIPER PRO 💥"; 
+                const root = document.getElementById('root');
                 
-                // 1. Cirugía Estética Quirúrgica (Textos de etiquetas y títulos)
+                // 1. Cirugía Estética Quirúrgica (Textos)
                 const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
                 let node;
                 while (node = walker.nextNode()) {
                     let val = node.nodeValue;
-                    // Limpieza de branding viejo
+                    if (!val) continue;
                     if (val.includes('Step Index') || val.includes('STEP INDEX') || val.includes('GOLD') || val.includes('ORO') || val.includes('XAUUSD')) {
                         node.nodeValue = val
                             .replace(/Step Index/gi, 'BOOM 1000')
@@ -75,41 +76,45 @@ app.get('/', (req, res) => {
                             .replace(/ORO/gi, 'BOOM 1000')
                             .replace(/XAUUSD/gi, 'B1000');
                     }
-                    // Re-etiquetado de parámetros (Lo que el usuario pidió)
                     if (val.includes('MOMENTUM (TICKS)')) { node.nodeValue = 'TIME-STOP (TICKS)'; }
                     if (val.includes('PRECISIÓN (DIST)')) { node.nodeValue = 'CCI FILTER (S)'; }
                     if (val.includes('TAKE PROFIT (🚀 $)')) { node.nodeValue = 'SPIKE TARGET ($)'; }
                     if (val.includes('INVERSIÓN BY DEFAULT')) { node.nodeValue = 'STAKE SNIPER ($)'; }
-                    if (val.includes('ESTADO ALPHA')) { node.nodeValue = 'MODO SNIPER'; }
-                    if (val.includes('ALPHA')) { node.nodeValue = 'SNIPER'; }
-                    if (val.includes('ESTÁNDAR')) { node.nodeValue = 'BOOM MODE'; }
                 }
 
-                // 2. Ocultar secciones dinámicas de React (Polling agresivo)
+                // 2. Ocultar secciones dinámicas (Con cautela)
                 document.querySelectorAll('div, section, h2, h3, p, span, h1').forEach(el => {
-                    const txt = el.textContent.toUpperCase();
-                    // Ocultar trailing/híbrido/alpha/oro
-                    if (txt.includes('TRAILING') || txt.includes('HÍBRIDO') || txt.includes('ALPHA') || (txt.includes('ORO') && !txt.includes('BOOM')) || txt.includes('XAUUSD')) {
-                         // Buscamos el contenedor más cercano que parezca una tarjeta o sección
-                         let container = el.closest('.card') || el.closest('div') || el.parentElement;
-                         if (container && container.children.length < 5) { // Para no ocultar el body accidentalmente
+                    const txt = (el.textContent || '').toUpperCase();
+                    if (!txt) return;
+
+                    // Ocultar si dice Trailing/Híbrido/Alpha/Oro (Fuera de Boom)
+                    const isInvalid = txt.includes('TRAILING') || 
+                                     txt.includes('HÍBRIDO') || 
+                                     txt.includes('ALPHA') || 
+                                     (txt.includes('ORO') && !txt.includes('BOOM')) || 
+                                     txt.includes('XAUUSD') ||
+                                     (txt.includes('STEP INDEX') && !txt.includes('B1000'));
+
+                    if (isInvalid) {
+                         let container = el.closest('.card') || el.closest('section') || el.parentElement;
+                         // NUNCA ocultar el root o elementos grandes que sirven de base
+                         if (container && container !== root && container !== document.body && container.children.length < 5) {
                              container.style.display = 'none';
                              container.style.visibility = 'hidden';
                          }
                     }
                 });
 
-                // 3. Forzar valores visuales para evitar confusión
+                // 3. Forzar valores visuales
                 document.querySelectorAll('input').forEach(input => {
                     if (input.value == "750") input.value = "200";
                     if (input.value == "5" && !input.getAttribute('data-fixed')) {
-                        input.value = "15"; // Reflejar Time-stop
+                        input.value = "15"; 
                         input.setAttribute('data-fixed', 'true');
                     }
                 });
             };
-            extremeSurge();
-            setInterval(extremeSurge, 500); // Polling ultra-rápido para ganarle a React
+            try { extremeSurge(); setInterval(extremeSurge, 1000); } catch(e) { console.error(e); }
         };
     </script>
     `;
