@@ -413,7 +413,11 @@ function finalizeTrade(contract) {
 
     botState.currentContractId = null;
     botState.activeContracts = [];
-    botState.cooldownRemaining = BOOM_CONFIG.cooldownSeconds;
+
+    // --- LÓGICA DE RECARGA: RÁFAGA vs DESCANSO ---
+    // Si ganamos, hay nuevo trend = Enfriamiento largo (45s)
+    // Si perdimos el Time-Stop, el Spike podría estar a un segundo de salir = Recarga rapida (3s)
+    botState.cooldownRemaining = (profit > 0) ? BOOM_CONFIG.cooldownSeconds : 3;
 
     if (cooldownIntervalId) clearInterval(cooldownIntervalId);
     cooldownIntervalId = setInterval(() => {
