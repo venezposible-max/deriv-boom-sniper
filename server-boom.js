@@ -43,7 +43,8 @@ let botState = {
     lastScanLogTime: 0,
     sessionDuration: 0,
     lastTickTime: 0,
-    currentRSI: 50
+    currentRSI: 50,
+    trackingContracts: new Map() // Rastreador de trades en paralelo
 };
 
 let tickHistory = [];
@@ -332,33 +333,47 @@ function connectWebSocket() {
 
         if (msg.msg_type === 'proposal_open_contract') {
             const contract = msg.proposal_open_contract;
+            if (!contract) return;
 
-            // Actualizar contrato activo para la UI
-            if (contract && !contract.is_sold) {
-                botState.currentContractId = contract.contract_id;
-                botState.activeContracts = [contract];
+            const cId = contract.contract_id;
+
+            if (contract.is_sold) {
+                if (botState.trackingContracts.has(cId)) {
+                    finalizeTrade(contract);
+                    botState.trackingContracts.delete(cId);
+                    if (botState.currentContractId === cId) botState.currentContractId = null;
+                }
+                return;
             }
 
-            if (contract && contract.is_sold) {
-                finalizeTrade(contract);
-            } else if (contract && !contract.is_sold) {
-                // Monitoreo Activo (Time-Stop Reloj Real + TP/SL Dinámico Manual)
-                const secondsElapsed = Math.floor((Date.now() - botState.tradeStartTime) / 1000);
-                const profit = parseFloat(contract.profit);
+            // Si es un contrato nuevo que no estamos trackeando, anotar su tiempo de inicio
+            if (!botState.trackingContracts.has(cId)) {
+                botState.trackingContracts.set(cId, {
+                    startTime: Date.now(),
+                    lastUpdate: Date.now()
+                });
+            }
 
-                if (profit >= BOOM_CONFIG.takeProfit) {
-                    console.log(`🎯 TAKE PROFIT ALCANZADO: +$${profit.toFixed(2)}`);
-                    botState.currentContractId = null; // Prevenir cierres dobles
-                    ws.send(JSON.stringify({ sell: contract.contract_id, price: 0 }));
-                } else if (profit <= -Math.abs(BOOM_CONFIG.stopLoss)) {
-                    console.log(`🛡️ STOP LOSS CUBIERTO: -$${Math.abs(profit).toFixed(2)}`);
-                    botState.currentContractId = null;
-                    ws.send(JSON.stringify({ sell: contract.contract_id, price: 0 }));
-                } else if (secondsElapsed >= BOOM_CONFIG.timeStopTicks && profit < 2.00) {
-                    console.log(`⏱️ TIME-STOP RELOJ: Límite de ${BOOM_CONFIG.timeStopTicks} segundos reales alcanzado. Cerrando Venta con ${profit.toFixed(2)}$`);
-                    botState.currentContractId = null;
-                    ws.send(JSON.stringify({ sell: contract.contract_id, price: 0 }));
-                }
+            botState.currentContractId = cId;
+            botState.activeContracts = [contract]; // Para la UI simple
+
+            const tracker = botState.trackingContracts.get(cId);
+            const secondsElapsed = Math.floor((Date.now() - tracker.startTime) / 1000);
+            const profit = parseFloat(contract.profit);
+
+            // LOGICA DE CIERRE INDIVIDUAL
+            if (profit >= BOOM_CONFIG.takeProfit) {
+                console.log(`🎯 TP [${cId}]: +$${profit.toFixed(2)}`);
+                botState.trackingContracts.delete(cId);
+                ws.send(JSON.stringify({ sell: cId, price: 0 }));
+            } else if (profit <= -Math.abs(BOOM_CONFIG.stopLoss)) {
+                console.log(`🛡️ SL [${cId}]: -$${Math.abs(profit).toFixed(2)}`);
+                botState.trackingContracts.delete(cId);
+                ws.send(JSON.stringify({ sell: cId, price: 0 }));
+            } else if (secondsElapsed >= BOOM_CONFIG.timeStopTicks && profit < 2.00) {
+                console.log(`⏱️ TS [${cId}]: ${secondsElapsed}s >= ${BOOM_CONFIG.timeStopTicks}s. Cerrando con ${profit.toFixed(2)}$`);
+                botState.trackingContracts.delete(cId);
+                ws.send(JSON.stringify({ sell: cId, price: 0 }));
             }
         }
     });
