@@ -175,7 +175,6 @@ app.post('/api/control', (req, res) => {
         }
 
         if (stopLoss) BOOM_CONFIG.stopLoss = Number(stopLoss);
-        if (timeStopTicks) BOOM_CONFIG.timeStopTicks = Number(timeStopTicks);
 
         saveState();
         console.log(`▶️ BOT BOOM 1000 ENCENDIDO | Sniper Mode | Mult: ${BOOM_CONFIG.multiplier}`);
