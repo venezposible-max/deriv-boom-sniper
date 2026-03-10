@@ -151,10 +151,20 @@ function calculateSMA(prices, period) {
     return prices.slice(-period).reduce((a, b) => a + b, 0) / period;
 }
 
+// Transformador de Ticks puros de Deriv a Velas Simuladas de 1 Minuto (M1).
+// Crucial para que los osciladores no colapsen a 0.0 por movimientos microscopicos repetidos.
+function downsampleTicksToCandles(ticks, ticksPerCandle = 60) {
+    let candles = [];
+    for (let i = 0; i < ticks.length; i += ticksPerCandle) {
+        candles.push(ticks[i]);
+    }
+    return candles;
+}
+
 function calculateRSI(prices, period) {
     if (prices.length < period + 1) return 50;
-    // RSI Avanzado de Welles Wilder usando los últimos 2000 ticks para suavizado real
-    let startIndex = prices.length - 2000;
+    // Adaptado a Velas M1: Tomamos máximo histórico disponible suavizado (60 Velas)
+    let startIndex = prices.length - 60;
     if (startIndex < 1) startIndex = 1;
 
     let avgGain = 0;
@@ -313,8 +323,11 @@ function connectWebSocket() {
 }
 
 function processTick(quote) {
-    // RSI ultra sensible Periodo 14 (suavizado con 2000 ticks de memoria base)
-    const rsi = calculateRSI(tickHistory, 14);
+    // 1. Transformar miles de ticks ruidosos en Velas Sólidas M1
+    const m1_candles = downsampleTicksToCandles(tickHistory, 60);
+
+    // 2. Aplicar RSI Clásico 14 Periodos sobre las velas M1
+    const rsi = calculateRSI(m1_candles, 14);
 
     // --- RADAR VISUAL EN CONSOLA (CADA 10 SEGUNDOS) ---
     const now = Date.now();
@@ -336,8 +349,9 @@ function processTick(quote) {
         return;
     }
 
-    const cci = calculateCCI(tickHistory, 14);
-    const sma50 = calculateSMA(tickHistory, 50);
+    // El CCI y el SMA también usan velas y datos limpios de M1
+    const cci = calculateCCI(m1_candles, 14);
+    const sma50 = calculateSMA(m1_candles, 50);
 
     if (!sma50 || isNaN(rsi) || isNaN(cci)) return;
 
