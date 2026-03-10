@@ -270,6 +270,16 @@ function connectWebSocket() {
         ws.send(JSON.stringify({ authorize: process.env.DERIV_TOKEN || 'GzEO8iO7Y3N9Ym0' }));
     });
 
+    ws.on('close', () => {
+        console.log('⚠️ Conexión perdida. Reintentando en 5 segundos...');
+        setTimeout(connectWebSocket, 5000);
+    });
+
+    ws.on('error', (err) => {
+        console.error('❌ Error de Socket:', err.message);
+        ws.close();
+    });
+
     ws.on('message', (data) => {
         const msg = JSON.parse(data);
 
@@ -385,16 +395,17 @@ function connectWebSocket() {
                 });
             }
 
-            botState.currentContractId = cId;
-            botState.activeContracts = [contract];
-            botState.tradeProfit = profit; // <--- PROFIT EN VIVO PARA LA WEB
-            botState.tradeSeconds = secondsElapsed; // <--- SEGUNDOS EN VIVO PARA LA WEB
-
             const tracker = botState.trackingContracts.get(cId);
-            if (tracker.isClosing) return; // Evitar disparar múltiples órdenes de venta para el mismo ID
-
             const secondsElapsed = Math.floor((Date.now() - tracker.startTime) / 1000);
             const profit = parseFloat(contract.profit);
+
+            botState.currentContractId = cId;
+            botState.activeContracts = [contract];
+            botState.tradeProfit = profit;
+            botState.tradeSeconds = secondsElapsed;
+
+            if (tracker.isClosing) return;
+
 
             // LOGICA DE CIERRE INDIVIDUAL
             if (profit >= BOOM_CONFIG.takeProfit) {
