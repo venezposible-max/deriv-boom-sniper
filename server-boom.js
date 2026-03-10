@@ -14,14 +14,14 @@ const WEB_PASSWORD = process.env.WEB_PASSWORD || 'admin123';
 
 // --- ESTRATEGIA: SNIPER DE SPIKES (Seguro para $85) ---
 let BOOM_CONFIG = {
-    stake: 20,          // Mantener stake para el multiplicador
-    takeProfit: 50.00,  // Buscamos la ballena
-    stopLoss: 0.20,     // BALA CONTROLADA: Perderemos máximo esto si no hay spike
-    multiplier: 100,    // Multiplicador estándar para Boom
+    stake: 20,
+    takeProfit: 50.00,
+    stopLoss: 0.20,
+    multiplier: 200,    // Multiplicador válido (100, 200, 300, 400, 500)
     rsiPeriod: 14,
     cciPeriod: 14,
-    timeStopTicks: 15,  // El secreto: Solo esperamos 15 ticks por la explosión
-    cooldownSeconds: 45 // Descanso entre intentos
+    timeStopTicks: 15,
+    cooldownSeconds: 45
 };
 
 let botState = {
@@ -59,34 +59,49 @@ app.get('/', (req, res) => {
     <script>
         window.onload = () => {
             const cleanUI = () => {
-                document.title = "BOOM 1000 SNIPER 💥"; 
+                document.title = "BOOM 1000 SNIPER PRO 💥"; 
                 
-                // 1. Reemplazo de Texto
+                // 1. Cirugía Estética de Textos (Agresiva)
                 const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
                 let node;
                 while (node = walker.nextNode()) {
-                    if (node.nodeValue.includes('Step Index')) {
-                        node.nodeValue = node.nodeValue.replace(/Step Index/g, 'BOOM 1000');
+                    let val = node.nodeValue;
+                    if (val.includes('Step Index') || val.includes('STEP INDEX') || val.includes('GOLD') || val.includes('ORO') || val.includes('XAUUSD')) {
+                        node.nodeValue = val
+                            .replace(/Step Index/gi, 'BOOM 1000')
+                            .replace(/STEP INDEX/gi, 'BOOM 1000')
+                            .replace(/GOLD/gi, 'BOOM 1000')
+                            .replace(/ORO/gi, 'BOOM 1000')
+                            .replace(/XAUUSD/gi, 'B1000');
                     }
                 }
 
-                // 2. Ocultar Secciones innecesarias (Trailing, Híbrido, Alpha)
-                const keywords = ['TRAILING', 'HÍBRIDO', 'ALPHA'];
-                document.querySelectorAll('div, section, h2, h3, p, span').forEach(el => {
-                    keywords.forEach(key => {
-                        if (el.textContent && el.textContent.toUpperCase().includes(key)) {
-                            // Si es un contenedor o tiene el texto principal, lo ocultamos
-                            if (el.children.length === 0 || el.tagName.startsWith('H')) {
-                                // Subimos al padre que suele ser la tarjeta/sección
-                                let container = el.parentElement;
-                                if (container) container.style.display = 'none';
-                            }
+                // 2. Ocultar Secciones Innecesarias
+                const keywords = ['TRAILING', 'HÍBRIDO', 'ALPHA', 'STEP INDEX', 'MERCADO', 'ORO'];
+                document.querySelectorAll('div, section, h2, h3, p, span, h1').forEach(el => {
+                    if (el.children.length === 0 || el.tagName.startsWith('H')) {
+                        const txt = el.textContent.toUpperCase();
+                        // Ocultamos si dice Step Index u Oro en el título/etiqueta
+                        if (txt.includes('STEP INDEX') || (txt.includes('ORO') && !txt.includes('BOOM')) || txt.includes('XAUUSD')) {
+                             let container = el.closest('div') || el.parentElement;
+                             if (container) container.style.display = 'none';
                         }
-                    });
+                        // Ocultar trailing/híbrido
+                        if (txt.includes('TRAILING') || txt.includes('HÍBRIDO') || txt.includes('ALPHA')) {
+                             let container = el.closest('.card') || el.parentElement;
+                             if (container) container.style.display = 'none';
+                        }
+                    }
                 });
+
+                // 3. Forzar multiplicador visual a algo realista para Boom
+                const multInput = document.querySelector('input[type="number"]');
+                if (multInput && multInput.value == "750") {
+                    multInput.value = "200";
+                }
             };
             cleanUI();
-            setInterval(cleanUI, 1000); 
+            setInterval(cleanUI, 2000); 
         };
     </script>
     `;
@@ -116,12 +131,22 @@ app.post('/api/control', (req, res) => {
         botState.isRunning = true;
         if (stake) BOOM_CONFIG.stake = Number(stake);
         if (takeProfit) BOOM_CONFIG.takeProfit = Number(takeProfit);
-        if (multiplier) BOOM_CONFIG.multiplier = Number(multiplier);
+
+        if (multiplier) {
+            // Ajustar a valores permitidos por Deriv para Boom (100, 200, 300, 400, 500)
+            const val = Number(multiplier);
+            if (val >= 450) BOOM_CONFIG.multiplier = 500;
+            else if (val >= 350) BOOM_CONFIG.multiplier = 400;
+            else if (val >= 250) BOOM_CONFIG.multiplier = 300;
+            else if (val >= 150) BOOM_CONFIG.multiplier = 200;
+            else BOOM_CONFIG.multiplier = 100;
+        }
+
         if (stopLoss) BOOM_CONFIG.stopLoss = Number(stopLoss);
         if (timeStopTicks) BOOM_CONFIG.timeStopTicks = Number(timeStopTicks);
 
         saveState();
-        console.log(`▶️ BOT BOOM 1000 ENCENDIDO | Sniper Mode`);
+        console.log(`▶️ BOT BOOM 1000 ENCENDIDO | Sniper Mode | Mult: ${BOOM_CONFIG.multiplier}`);
         return res.json({ success: true, message: 'Bot Boom Sniper Activado', isRunning: true });
     }
 
@@ -307,12 +332,13 @@ function processTick(quote) {
     const cci = calculateCCI(tickHistory, 14);
     const sma50 = calculateSMA(tickHistory, 50);
 
-    if (!sma50) return;
+    if (!sma50 || isNaN(rsi) || isNaN(cci)) return;
 
-    // --- REGLAS SNIPER BOOM ---
+    // --- REGLAS SNIPER BOOM (Refinadas) ---
     const distSMA = Math.abs(quote - sma50) / sma50 * 100;
 
-    if (rsi < 25 && cci > -150 && distSMA < 0.12) {
+    // Evitamos disparos si el RSI es 0.0 (error de datos iniciales)
+    if (rsi > 5 && rsi < 25 && cci > -150 && distSMA < 0.12) {
         console.log(`💥 SEÑAL DETECTADA: RSI: ${rsi.toFixed(1)} | CCI: ${cci.toFixed(0)} | ¡FUEGO!`);
         executeTrade();
     }
