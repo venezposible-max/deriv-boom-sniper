@@ -395,29 +395,14 @@ function connectWebSocket() {
             }
         }
 
-        // --- WATCHDOG: SINCRONIZACIÓN DE PORTAFOLIO ---
+        // --- WATCHDOG SIMPLE: LIBERAR SI NO HAY NADA ABIERTO ---
         if (msg.msg_type === 'portfolio') {
-            const portfolio = msg.portfolio;
-            if (portfolio && portfolio.contracts) {
-                const derivIds = new Set(portfolio.contracts.map(c => c.contract_id.toString()));
-
-                // Limpiar IDs huérfanos en nuestra memoria
-                for (let [cId, _] of botState.trackingContracts) {
-                    if (!derivIds.has(cId.toString())) {
-                        console.log(`🧹 Watchdog: Trade [${cId}] ya no existe en Deriv. Limpiando.`);
-                        botState.trackingContracts.delete(cId);
-                        if (botState.currentContractId === cId) botState.currentContractId = null;
-                        isBuying = false;
-                    }
-                }
-
-                // Si Deriv dice que no hay nada, reset total
-                if (portfolio.contracts.length === 0 && (botState.trackingContracts.size > 0 || botState.currentContractId)) {
-                    console.log("✨ Watchdog: Portafolio vacío. Sniper reseteado.");
-                    botState.trackingContracts.clear();
-                    botState.currentContractId = null;
-                    isBuying = false;
-                }
+            const hasOpen = msg.portfolio && msg.portfolio.contracts && msg.portfolio.contracts.length > 0;
+            if (!hasOpen && (botState.currentContractId || isBuying || botState.trackingContracts.size > 0)) {
+                console.log("✨ Watchdog: Portafolio limpio en Deriv. Liberando Sniper.");
+                botState.currentContractId = null;
+                botState.trackingContracts.clear();
+                isBuying = false;
             }
         }
     });
@@ -457,14 +442,14 @@ function processTick(quote) {
         isBuying = false;
     }
 
-    const anyActive = botState.trackingContracts.size > 0;
-    const isRecentlyTraded = (now - botState.lastTradeTime < 2500); // Bloqueo de ráfaga de 2.5s
+    // PROTECCIÓN CRÍTICA: Solo un contrato a la vez.
+    const isRecentlyTraded = (now - botState.lastTradeTime < 5000); // Bloqueo de 5s para evitar ráfagas
 
-    if (anyActive || botState.currentContractId || botState.cooldownRemaining > 0 || isBuying || isRecentlyTraded) {
+    if (botState.currentContractId || botState.cooldownRemaining > 0 || isBuying || isRecentlyTraded) {
         // Log de depuración solo si estamos en zona rsi
         if (rsi <= BOOM_CONFIG.rsiThreshold && now - (botState.lastSkipLogTime || 0) > 5000) {
-            let razon = (anyActive || botState.currentContractId) ? "Contrato Abierto" : (isBuying ? "Esperando Confirmación Buy" : (isRecentlyTraded ? "Protección Ráfaga (2.5s)" : "En Enfriamiento"));
-            console.log(`ℹ️ SNIPER: RSI en ${rsi.toFixed(1)} pero ignorando disparo por: ${razon}`);
+            let razon = botState.currentContractId ? "Contrato Abierto" : (isBuying ? "En proceso de compra" : (isRecentlyTraded ? "Protección Ráfaga (5s)" : "En Enfriamiento"));
+            console.log(`ℹ️ SNIPER TRABADO: RSI en ${rsi.toFixed(1)} pero ignorando por: ${razon}`);
             botState.lastSkipLogTime = now;
         }
         return;
