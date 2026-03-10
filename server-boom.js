@@ -317,8 +317,8 @@ function processTick(quote) {
     // --- REGLAS SNIPER BOOM (Refinadas) ---
     const distSMA = Math.abs(quote - sma50) / sma50 * 100;
 
-    // Evitamos disparos si el RSI es 0.0 (error de datos iniciales)
-    if (rsi > 5 && rsi < 25 && cci > -150 && distSMA < 0.12) {
+    // Evitamos disparos solo si el RSI es exactamente 0.0 (error matemático)
+    if (rsi > 0.1 && rsi < 25 && cci > -150 && distSMA < 0.12) {
         console.log(`💥 SEÑAL DETECTADA: RSI: ${rsi.toFixed(1)} | CCI: ${cci.toFixed(0)} | ¡FUEGO!`);
         executeTrade();
     }
