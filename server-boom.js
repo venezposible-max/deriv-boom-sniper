@@ -257,7 +257,27 @@ function connectWebSocket() {
             tickHistory.push(quote);
             if (tickHistory.length > 500) tickHistory.shift();
 
+            if (botState.currentContractId) {
+                botState.ticksInTrade = (botState.ticksInTrade || 0) + 1;
+            }
+
             processTick(quote);
+        }
+
+        // --- MANEJAR COMPRA DE CONTRATO EXITOSA ---
+        if (msg.msg_type === 'buy') {
+            const contractId = msg.buy.contract_id;
+            botState.currentContractId = contractId;
+            botState.ticksInTrade = 0;
+            isBuying = false; // Desbloquear sistema de compra
+
+            // Suscribirnos al contrato manual y explícitamente (vital para Multiplicadores)
+            ws.send(JSON.stringify({
+                proposal_open_contract: 1,
+                contract_id: contractId,
+                subscribe: 1
+            }));
+            console.log(`📡 CONTRATO ABIERTO [${contractId}]. Esperando ${BOOM_CONFIG.timeStopTicks} ticks de Time-Stop...`);
         }
 
         if (msg.msg_type === 'proposal_open_contract') {
@@ -272,13 +292,14 @@ function connectWebSocket() {
             if (contract && contract.is_sold) {
                 finalizeTrade(contract);
             } else if (contract && !contract.is_sold) {
-                // Monitoreo de Time-Stop
-                const ticksElapsed = tickHistory.length - (botState.entryTickIdx || 0);
+                // Monitoreo de Time-Stop usando el contador real `ticksInTrade`
+                const ticksElapsed = botState.ticksInTrade || 0;
                 const profit = parseFloat(contract.profit);
 
-                // Si no hay spike en 15 ticks, cerramos con la "bala" de $0.20 - $1.00
+                // Si no hay spike en 15 ticks, cerramos con la "bala" de Stop Loss
                 if (ticksElapsed >= BOOM_CONFIG.timeStopTicks && profit < 2.00) {
-                    console.log(`🛡️ TIME-STOP: No hubo spike en ${BOOM_CONFIG.timeStopTicks} ticks. Abortando misión.`);
+                    console.log(`🛡️ TIME-STOP: No hubo spike en ${BOOM_CONFIG.timeStopTicks} ticks (${profit.toFixed(2)}$). Cerrando misión...`);
+                    botState.ticksInTrade = -9999; // Prevenir múltiples ventas simultáneas
                     ws.send(JSON.stringify({ sell: contract.contract_id, price: 0 }));
                 }
             }
@@ -328,7 +349,6 @@ function executeTrade() {
     isBuying = true;
     const req = {
         buy: 1,
-        subscribe: 1,
         price: BOOM_CONFIG.stake,
         parameters: {
             amount: BOOM_CONFIG.stake,
@@ -336,15 +356,18 @@ function executeTrade() {
             contract_type: 'MULTUP',
             currency: 'USD',
             symbol: SYMBOL,
-            multiplier: BOOM_CONFIG.multiplier
+            multiplier: BOOM_CONFIG.multiplier,
+            limit_order: {
+                stop_loss: BOOM_CONFIG.stopLoss,
+                take_profit: BOOM_CONFIG.takeProfit
+            }
         }
     };
     ws.send(JSON.stringify(req));
 
-    // Registrar el índice del tick de entrada para el Time-Stop
-    botState.entryTickIdx = tickHistory.length;
+    botState.ticksInTrade = 0;
 
-    // BLOQUEO EXTENDIDO: No permitir disparos en ráfaga (10 segundos de protección)
+    // BLOQUEO EXTENDIDO: Protección por si falla el WebSocket de respuesta 'buy'
     setTimeout(() => { isBuying = false; }, 10000);
 }
 
