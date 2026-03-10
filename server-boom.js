@@ -313,8 +313,8 @@ function connectWebSocket() {
 }
 
 function processTick(quote) {
-    // Escala MetaTrader 5 (Velas 1M): 14 periodos * 60 ticks/min = 840 ticks
-    const rsi = calculateRSI(tickHistory, 840);
+    // RSI ultra sensible Periodo 14 (suavizado con 2000 ticks de memoria base)
+    const rsi = calculateRSI(tickHistory, 14);
 
     // --- RADAR VISUAL EN CONSOLA (CADA 10 SEGUNDOS) ---
     const now = Date.now();
@@ -336,8 +336,8 @@ function processTick(quote) {
         return;
     }
 
-    const cci = calculateCCI(tickHistory, 840);
-    const sma50 = calculateSMA(tickHistory, 3000); // 50 periodos M1
+    const cci = calculateCCI(tickHistory, 14);
+    const sma50 = calculateSMA(tickHistory, 50);
 
     if (!sma50 || isNaN(rsi) || isNaN(cci)) return;
 
