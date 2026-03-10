@@ -134,6 +134,19 @@ app.post('/api/close', (req, res) => {
     return res.json({ success: true, message: 'Orden de venta enviada' });
 });
 
+// --- ENDPOINT: LIMPIAR HISTORIAL ---
+app.post('/api/clear-history', (req, res) => {
+    botState.tradeHistory = [];
+    botState.balanceHistory = [];
+    botState.pnlSession = 0;
+    botState.winsSession = 0;
+    botState.lossesSession = 0;
+    botState.totalTradesSession = 0;
+    botState.sessionDuration = 0;
+    saveState();
+    return res.json({ success: true, message: 'Historial y estadísticas de sesión limpiados' });
+});
+
 const PORT = process.env.PORT || 8080;
 app.listen(PORT, () => {
     console.log(`\n🚀 Iniciando Motor BOOM 1000 SNIPER...`);
