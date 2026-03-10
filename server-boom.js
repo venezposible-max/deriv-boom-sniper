@@ -44,7 +44,9 @@ let botState = {
     sessionDuration: 0,
     lastTickTime: 0,
     currentRSI: 50,
-    lastTradeTime: 0, // Nuevo: Para evitar ráfagas accidentales
+    lastTradeTime: 0,
+    tradeProfit: 0,   // Nuevo: Para ver ganancias en vivo
+    tradeSeconds: 0,  // Nuevo: Para el segundero en vivo
     trackingContracts: new Map()
 };
 
@@ -318,8 +320,14 @@ function connectWebSocket() {
             if (tickHistory.length > 4050) tickHistory.shift();
 
             if (botState.currentContractId) {
-                // Ya no contamos ticks aquí para el stop temporal, pero lo dejamos como métrica de data.
                 botState.ticksInTrade = (botState.ticksInTrade || 0) + 1;
+                // Calculamos segundos desde el inicio del trade para el Live View
+                if (botState.tradeStartTime) {
+                    botState.tradeSeconds = Math.floor((Date.now() - botState.tradeStartTime) / 1000);
+                }
+            } else {
+                botState.tradeSeconds = 0;
+                botState.tradeProfit = 0;
             }
 
             processTick(quote);
@@ -378,7 +386,9 @@ function connectWebSocket() {
             }
 
             botState.currentContractId = cId;
-            botState.activeContracts = [contract]; // Para la UI simple
+            botState.activeContracts = [contract];
+            botState.tradeProfit = profit; // <--- PROFIT EN VIVO PARA LA WEB
+            botState.tradeSeconds = secondsElapsed; // <--- SEGUNDOS EN VIVO PARA LA WEB
 
             const tracker = botState.trackingContracts.get(cId);
             if (tracker.isClosing) return; // Evitar disparar múltiples órdenes de venta para el mismo ID
