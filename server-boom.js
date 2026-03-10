@@ -44,7 +44,8 @@ let botState = {
     sessionDuration: 0,
     lastTickTime: 0,
     currentRSI: 50,
-    trackingContracts: new Map() // Rastreador de trades en paralelo
+    lastTradeTime: 0, // Nuevo: Para evitar ráfagas accidentales
+    trackingContracts: new Map()
 };
 
 let tickHistory = [];
@@ -166,12 +167,12 @@ app.listen(PORT, () => {
     setInterval(() => { if (botState.isRunning) botState.sessionDuration++; }, 1000);
 
     // --- WATCHDOG DE PORTAFOLIO (Sincronización Real) ---
-    // Cada 15 segundos verificamos si Deriv realmente tiene contratos abiertos
+    // Cada 5 segundos verificamos si Deriv realmente tiene contratos abiertos
     setInterval(() => {
         if (ws && ws.readyState === WebSocket.OPEN && botState.isRunning) {
             ws.send(JSON.stringify({ portfolio: 1 }));
         }
-    }, 15000);
+    }, 5000);
 
     // --- DETECTOR DE CONGELAMIENTO SÍSMICO (TICK HESITATION) ---
     // Chequea el pulso en un loop paralelo ultrarrápido (cada 150ms)
@@ -347,13 +348,16 @@ function connectWebSocket() {
             const cId = contract.contract_id;
 
             if (contract.is_sold) {
-                // Limpiar siempre el ID actual si este contrato es el que terminó
-                if (botState.currentContractId === cId) botState.currentContractId = null;
+                // Limpiar siempre el ID actual primero
+                if (botState.currentContractId === cId) {
+                    botState.currentContractId = null;
+                    isBuying = false;
+                }
 
                 if (botState.trackingContracts.has(cId)) {
                     finalizeTrade(contract);
                     botState.trackingContracts.delete(cId);
-                    console.log(`✅ Contrato [${cId}] cerrado y limpiado de memoria.`);
+                    console.log(`✅ Contrato [${cId}] cerrado y purgado.`);
                 }
                 return;
             }
@@ -382,6 +386,10 @@ function connectWebSocket() {
                 ws.send(JSON.stringify({ sell: cId, price: 0 }));
             } else if (profit <= -Math.abs(BOOM_CONFIG.stopLoss)) {
                 console.log(`🛡️ SL [${cId}]: -$${Math.abs(profit).toFixed(2)}. Enviando orden de venta...`);
+                tracker.isClosing = true;
+                ws.send(JSON.stringify({ sell: cId, price: 0 }));
+            } else if (secondsElapsed >= BOOM_CONFIG.timeStopTicks && profit < 2.00) {
+                console.log(`⏱️ TS [${cId}]: ${secondsElapsed}s >= ${BOOM_CONFIG.timeStopTicks}s. Enviando orden de venta...`);
                 tracker.isClosing = true;
                 ws.send(JSON.stringify({ sell: cId, price: 0 }));
             }
@@ -450,11 +458,12 @@ function processTick(quote) {
     }
 
     const anyActive = botState.trackingContracts.size > 0;
+    const isRecentlyTraded = (now - botState.lastTradeTime < 2500); // Bloqueo de ráfaga de 2.5s
 
-    if (anyActive || botState.currentContractId || botState.cooldownRemaining > 0 || isBuying) {
+    if (anyActive || botState.currentContractId || botState.cooldownRemaining > 0 || isBuying || isRecentlyTraded) {
         // Log de depuración solo si estamos en zona rsi
         if (rsi <= BOOM_CONFIG.rsiThreshold && now - (botState.lastSkipLogTime || 0) > 5000) {
-            let razon = (anyActive || botState.currentContractId) ? "Contrato Abierto" : (isBuying ? "Esperando Confirmación Buy" : "En Enfriamiento");
+            let razon = (anyActive || botState.currentContractId) ? "Contrato Abierto" : (isBuying ? "Esperando Confirmación Buy" : (isRecentlyTraded ? "Protección Ráfaga (2.5s)" : "En Enfriamiento"));
             console.log(`ℹ️ SNIPER: RSI en ${rsi.toFixed(1)} pero ignorando disparo por: ${razon}`);
             botState.lastSkipLogTime = now;
         }
@@ -488,6 +497,7 @@ function processTick(quote) {
 function executeTrade() {
     isBuying = true;
     botState.lastBuyAttemptTime = Date.now();
+    botState.lastTradeTime = Date.now(); // Activar protección de ráfaga
     const req = {
         buy: 1,
         price: BOOM_CONFIG.stake,
