@@ -110,11 +110,7 @@ app.get('/api/status', (req, res) => {
 
 // --- ENDPOINT: CONTROL REMOTO (START/STOP/CONFIG) ---
 app.post('/api/control', (req, res) => {
-    const { action, password, stake, takeProfit, multiplier, stopLoss, timeStopTicks } = req.body;
-
-    if (password !== WEB_PASSWORD) {
-        return res.status(401).json({ success: false, error: 'Contraseña incorrecta' });
-    }
+    const { action, stake, takeProfit, multiplier, stopLoss, timeStopTicks } = req.body;
 
     if (action === 'START') {
         botState.isRunning = true;
@@ -149,8 +145,7 @@ app.post('/api/control', (req, res) => {
 
 // --- ENDPOINT: TRADES MANUALES ---
 app.post('/api/trade', (req, res) => {
-    const { action, password } = req.body;
-    if (password !== WEB_PASSWORD) return res.status(401).json({ success: false, error: 'Contraseña incorrecta' });
+    const { action } = req.body;
     if (botState.currentContractId || isBuying) return res.status(400).json({ success: false, error: 'Ya hay una operación activa.' });
 
     if (action === 'MULTUP' || action === 'MULTDOWN' || action === 'CALL' || action === 'PUT') {
@@ -161,8 +156,7 @@ app.post('/api/trade', (req, res) => {
 
 // --- ENDPOINT: CIERRE MANUAL ---
 app.post('/api/close', (req, res) => {
-    const { password, contractId } = req.body;
-    if (password !== WEB_PASSWORD) return res.status(401).json({ success: false, error: 'Contraseña incorrecta' });
+    const { contractId } = req.body;
     const idToClose = contractId || botState.currentContractId;
     if (!idToClose) return res.status(400).json({ success: false, error: 'No hay nada que cerrar.' });
 
