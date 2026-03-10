@@ -19,7 +19,7 @@ let BOOM_CONFIG = {
     multiplier: 200,    // Multiplicador válido (100, 200, 300, 400, 500)
     rsiPeriod: 14,
     cciPeriod: 14,
-    timeStopTicks: 15,
+    timeStopTicks: 60,
     cooldownSeconds: 45,
     rsiThreshold: 25,     // Nuevo: Gatillo configurable
     quickReloadSeconds: 3, // Nuevo: Recarga configurable

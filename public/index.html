@@ -354,8 +354,8 @@
                     document.getElementById('winsView').innerText = d.winsSession || 0;
                     document.getElementById('lossesView').innerText = d.lossesSession || 0;
 
-                    // Solo sobrescribimos los valores de los inputs si es la primera carga y el bot está en pause
-                    if (!isInitialized && !isRunning && c) {
+                    // Solo sobrescribimos los valores de los inputs si es la primera carga (aunque esté corriendo)
+                    if (!isInitialized && c) {
                         if (c.stake) document.getElementById('inStake').value = c.stake;
                         if (c.takeProfit) document.getElementById('inTp').value = c.takeProfit;
                         if (c.multiplier) document.getElementById('inMult').value = c.multiplier;
