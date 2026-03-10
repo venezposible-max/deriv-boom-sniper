@@ -212,13 +212,17 @@
 
         <div class="card">
             <div class="row">
-                <div>
+                <div style="flex: 1;">
                     <div class="label">ESTADO DEL BOT</div>
-                    <div class="value" id="statusView" style="color: #6b7280;">APAGADO</div>
+                    <div class="value" id="statusView" style="color: #6b7280; font-size: 1.1rem;">APAGADO</div>
                 </div>
-                <div style="text-align: right;">
+                <div style="flex: 1; text-align: center;">
+                    <div class="label">RSI M1 (🎯 25)</div>
+                    <div class="value" id="rsiView" style="color: #3b82f6; font-size: 1.1rem;">--</div>
+                </div>
+                <div style="flex: 1; text-align: right;">
                     <div class="label">PnL SESIÓN</div>
-                    <div class="value" id="pnlView">$0.00</div>
+                    <div class="value" id="pnlView" style="font-size: 1.1rem;">$0.00</div>
                 </div>
             </div>
             <div class="row" style="margin-top: 15px;">
@@ -307,6 +311,13 @@
                     const pnl = parseFloat(d.pnlSession || 0);
                     document.getElementById('pnlView').innerText = (pnl >= 0 ? "+" : "") + "$" + pnl.toFixed(2);
                     document.getElementById('pnlView').className = "value " + (pnl >= 0 ? "green" : "red");
+
+                    const rsi = parseFloat(d.currentRSI || 50);
+                    const rsiEl = document.getElementById('rsiView');
+                    rsiEl.innerText = rsi.toFixed(1);
+                    if (rsi <= 25) rsiEl.style.color = "#10b981"; // Verde cacería
+                    else if (rsi <= 35) rsiEl.style.color = "#f59e0b"; // Amarilo alerta
+                    else rsiEl.style.color = "#3b82f6"; // Azul normal
 
                     document.getElementById('winsView').innerText = d.winsSession || 0;
                     document.getElementById('lossesView').innerText = d.lossesSession || 0;

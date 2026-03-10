@@ -40,7 +40,8 @@ let botState = {
     cooldownRemaining: 0,
     lastScanLogTime: 0,
     sessionDuration: 0,
-    lastTickTime: 0
+    lastTickTime: 0,
+    currentRSI: 50
 };
 
 let tickHistory = [];
@@ -367,6 +368,7 @@ function processTick(quote) {
 
     // 2. Aplicar RSI Clásico 14 Periodos sobre las velas M1
     const rsi = calculateRSI(m1_candles, 14);
+    botState.currentRSI = isNaN(rsi) ? 50 : rsi;
 
     // --- RADAR VISUAL EN CONSOLA (CADA 10 SEGUNDOS) ---
     const now = Date.now();
