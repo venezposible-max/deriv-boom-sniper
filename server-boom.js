@@ -175,7 +175,7 @@ app.listen(PORT, () => {
             const m1_candles = downsampleTicksToCandles(tickHistory, 60);
             const rsi = calculateRSI(m1_candles, 14);
 
-            if (rsi >= 0 && rsi <= 25) {
+            if (rsi >= 0 && rsi <= BOOM_CONFIG.rsiThreshold) {
                 console.log(`\n🧊🔥 ¡CONGELAMIENTO DETECTADO! (${delay}ms de silencio) | RSI: ${rsi.toFixed(1)} -> DISPARO ANTICIPADO DEL SNIPER 💥`);
                 // Evitar spam de triggers, moviendo el ultimo tick al futuro
                 botState.lastTickTime = Date.now() + 5000;
@@ -378,7 +378,7 @@ function processTick(quote) {
     const now = Date.now();
     if (now - botState.lastScanLogTime > 10000) {
         let zona = "⏳ ZONA NEUTRAL (Paciencia...)";
-        if (rsi <= 25) zona = "🎯 ALERTA: SOBREVENTA PROFUNDA (Dedo en el gatillo)";
+        if (rsi <= BOOM_CONFIG.rsiThreshold) zona = `🎯 ALERTA: ZONA DE DISPARO (RSI <= ${BOOM_CONFIG.rsiThreshold})`;
         else if (rsi <= 35) zona = "⚠️ ACERCÁNDOSE A SOBREVENTA";
         else if (rsi >= 70) zona = "🔥 SOBRECOMPRA (Muy lejos de disparar)";
 
