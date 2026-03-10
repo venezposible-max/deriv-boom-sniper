@@ -124,14 +124,21 @@ app.get('/', (req, res) => {
 app.use(express.static(path.join(__dirname, 'public')));
 
 app.get('/api/status', (req, res) => {
-    // Mapeamos BOOM_CONFIG a los nombres que la interfaz ya conoce para que los rellene
+    // Mapeamos BOOM_CONFIG a los nombres completos que la interfaz React requiere
     const mappedConfig = {
         stake: BOOM_CONFIG.stake,
         takeProfit: BOOM_CONFIG.takeProfit,
         multiplier: BOOM_CONFIG.multiplier,
-        momentum: BOOM_CONFIG.timeStopTicks, // Mapeo de Time-Stop
+        momentum: BOOM_CONFIG.timeStopTicks,
         stopLoss: BOOM_CONFIG.stopLoss,
-        distLimit: 0.12 // Usamos esto para el filtro CCI/SMA
+        distLimit: 0.12,
+        smaPeriod: 50,
+        smaLongPeriod: 200,
+        rsiPeriod: 14,
+        rsiLow: 25,
+        rsiHigh: 75,
+        useHybrid: false,
+        useTrailing: false
     };
 
     res.json({
