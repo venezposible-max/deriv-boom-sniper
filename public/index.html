@@ -254,6 +254,16 @@
                 <label>STOP LOSS DE BALA (MAX -$)</label>
                 <input type="number" id="inSl" step="0.10" value="1">
             </div>
+            <div class="input-group"
+                style="flex-direction: row; align-items: center; justify-content: space-between; border-top: 1px solid #1f2937; padding-top: 15px; margin-top: 5px;">
+                <div>
+                    <label style="margin-bottom: 2px;">MODO CONGELAMIENTO (TICK FREQUENCY) 🤖</label>
+                    <div style="font-size: 0.65rem; color: #9ca3af; line-height: 1.2;">Al activar, el Bot esperará un
+                        silencio en el servidor de >2.5s para disparar.</div>
+                </div>
+                <input type="checkbox" id="inTickMode"
+                    style="width: 20px; height: 20px; accent-color: #10b981; cursor: pointer;">
+            </div>
 
             <button id="btnStart" class="btn-start" onclick="toggleBot()">INICIAR SNIPER PRO 🚀</button>
         </div>
@@ -308,6 +318,7 @@
                         if (c.multiplier) document.getElementById('inMult').value = c.multiplier;
                         if (c.timeStopTicks) document.getElementById('inStopTicks').value = c.timeStopTicks;
                         if (c.stopLoss) document.getElementById('inSl').value = c.stopLoss;
+                        if (typeof c.useTickFrequency !== 'undefined') document.getElementById('inTickMode').checked = c.useTickFrequency;
                         isInitialized = true;
                     }
 
@@ -358,6 +369,7 @@
                 payload.multiplier = document.getElementById('inMult').value;
                 payload.timeStopTicks = document.getElementById('inStopTicks').value;
                 payload.stopLoss = document.getElementById('inSl').value;
+                payload.useTickFrequency = document.getElementById('inTickMode').checked;
             }
 
             try {

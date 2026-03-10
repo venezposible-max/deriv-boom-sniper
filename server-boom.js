@@ -20,7 +20,8 @@ let BOOM_CONFIG = {
     rsiPeriod: 14,
     cciPeriod: 14,
     timeStopTicks: 15,
-    cooldownSeconds: 45
+    cooldownSeconds: 45,
+    useTickFrequency: false // Modo avanzado apagado por default
 };
 
 let botState = {
@@ -38,7 +39,8 @@ let botState = {
     activeStrategy: 'SNIPER',
     cooldownRemaining: 0,
     lastScanLogTime: 0,
-    sessionDuration: 0
+    sessionDuration: 0,
+    lastTickTime: 0
 };
 
 let tickHistory = [];
@@ -70,7 +72,7 @@ app.get('/api/status', (req, res) => {
 });
 
 app.post('/api/control', (req, res) => {
-    const { action, stake, takeProfit, multiplier, stopLoss, timeStopTicks } = req.body;
+    const { action, stake, takeProfit, multiplier, stopLoss, timeStopTicks, useTickFrequency } = req.body;
 
     if (action === 'START') {
         botState.isRunning = true;
@@ -89,6 +91,7 @@ app.post('/api/control', (req, res) => {
         }
 
         if (stopLoss) BOOM_CONFIG.stopLoss = Number(stopLoss);
+        if (typeof useTickFrequency !== 'undefined') BOOM_CONFIG.useTickFrequency = Boolean(useTickFrequency);
 
         saveState();
         console.log(`▶️ BOT BOOM 1000 ENCENDIDO | Sniper Mode | Mult: ${BOOM_CONFIG.multiplier}`);
@@ -154,6 +157,27 @@ app.listen(PORT, () => {
 
     // --- CRONÓMETRO DE SESIÓN ---
     setInterval(() => { if (botState.isRunning) botState.sessionDuration++; }, 1000);
+
+    // --- DETECTOR DE CONGELAMIENTO SÍSMICO (TICK HESITATION) ---
+    // Chequea el pulso en un loop paralelo ultrarrápido (cada 150ms)
+    setInterval(() => {
+        if (!botState.isRunning || !BOOM_CONFIG.useTickFrequency || botState.currentContractId || botState.cooldownRemaining > 0 || isBuying) return;
+        if (!botState.lastTickTime || tickHistory.length < 60) return;
+
+        const delay = Date.now() - botState.lastTickTime;
+        // Si hay silencio absoluto por más de 2500 milisegundos y menos de 3.5s (para evitar repeticiones)
+        if (delay >= 2500 && delay < 3500) {
+            const m1_candles = downsampleTicksToCandles(tickHistory, 60);
+            const rsi = calculateRSI(m1_candles, 14);
+
+            if (rsi >= 0 && rsi <= 25) {
+                console.log(`\n🧊🔥 ¡CONGELAMIENTO DETECTADO! (${delay}ms de silencio) | RSI: ${rsi.toFixed(1)} -> DISPARO ANTICIPADO DEL SNIPER 💥`);
+                // Evitar spam de triggers, moviendo el ultimo tick al futuro
+                botState.lastTickTime = Date.now() + 5000;
+                executeTrade();
+            }
+        }
+    }, 150);
 
     connectWebSocket();
 });
@@ -336,6 +360,8 @@ function connectWebSocket() {
 }
 
 function processTick(quote) {
+    botState.lastTickTime = Date.now();
+
     // 1. Transformar miles de ticks ruidosos en Velas Sólidas M1
     const m1_candles = downsampleTicksToCandles(tickHistory, 60);
 
@@ -373,8 +399,16 @@ function processTick(quote) {
     // ya que una caída tan profunda (RSI < 25) naturalmente aleja al 
     // precio de sus promedios. Disparamos directo por agotamiento de caída.
     if (rsi >= 0 && rsi <= 25) {
-        console.log(`💥 SEÑAL ACTIVA: RSI cayó a ${rsi.toFixed(1)} -> ¡Disparo inminente! (CCI: ${cci.toFixed(0)})`);
-        executeTrade();
+        if (BOOM_CONFIG.useTickFrequency) {
+            // No disparamos normal. Esperaremos a que el motor paralelo detecte el congelamiento.
+            if (Date.now() - (botState.lastFreezeLogTime || 0) > 3000) {
+                console.log(`🧊 RSI Letal (${rsi.toFixed(1)}). Sniper apuntando. Esperando silencio (Tick Hesitation)...`);
+                botState.lastFreezeLogTime = Date.now();
+            }
+        } else {
+            console.log(`💥 SEÑAL ACTIVA: RSI cayó a ${rsi.toFixed(1)} -> ¡Disparo inminente! (CCI: ${cci.toFixed(0)})`);
+            executeTrade();
+        }
     }
 }
 
