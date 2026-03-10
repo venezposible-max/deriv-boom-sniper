@@ -390,7 +390,21 @@ function processTick(quote) {
         botState.lastScanLogTime = now;
     }
 
-    if (!botState.isRunning || botState.currentContractId || botState.cooldownRemaining > 0 || isBuying) {
+    if (!botState.isRunning) return;
+
+    // Monitor de Seguridad: Si isBuying se queda pegado más de 5 seg, resetear.
+    if (isBuying && now - (botState.lastBuyAttemptTime || 0) > 5000) {
+        console.log("⚠️ Reseteando bandera de compra por timeout...");
+        isBuying = false;
+    }
+
+    if (botState.currentContractId || botState.cooldownRemaining > 0 || isBuying) {
+        // Log de depuración solo si estamos en zona rsi
+        if (rsi <= BOOM_CONFIG.rsiThreshold && now - (botState.lastSkipLogTime || 0) > 5000) {
+            let razon = botState.currentContractId ? "Contrato Abierto" : (isBuying ? "Esperando Confirmación Buy" : "En Enfriamiento");
+            console.log(`ℹ️ SNIPER: RSI en ${rsi.toFixed(1)} pero ignorando disparo por: ${razon}`);
+            botState.lastSkipLogTime = now;
+        }
         return;
     }
 
@@ -420,6 +434,7 @@ function processTick(quote) {
 
 function executeTrade() {
     isBuying = true;
+    botState.lastBuyAttemptTime = Date.now();
     const req = {
         buy: 1,
         price: BOOM_CONFIG.stake,
