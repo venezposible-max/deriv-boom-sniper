@@ -263,17 +263,28 @@ function connectWebSocket() {
 }
 
 function processTick(quote) {
+    const rsi = calculateRSI(tickHistory, 14);
+
+    // --- RADAR VISUAL EN CONSOLA (CADA 10 SEGUNDOS) ---
+    const now = Date.now();
+    if (now - botState.lastScanLogTime > 10000) {
+        let zona = "⏳ ZONA NEUTRAL (Paciencia...)";
+        if (rsi <= 25) zona = "🎯 ALERTA: SOBREVENTA PROFUNDA (Dedo en el gatillo)";
+        else if (rsi <= 35) zona = "⚠️ ACERCÁNDOSE A SOBREVENTA";
+        else if (rsi >= 70) zona = "🔥 SOBRECOMPRA (Muy lejos de disparar)";
+
+        let estadoBot = botState.isRunning
+            ? (botState.cooldownRemaining > 0 ? `ENFRIAMIENTO (${botState.cooldownRemaining}s)` : "CAZANDO SPIKES")
+            : "APAGADO";
+
+        console.log(`📡 RADAR BOOM 1000 -> RSI: ${rsi.toFixed(1)} | Mercado: ${zona} | Motor: ${estadoBot}`);
+        botState.lastScanLogTime = now;
+    }
+
     if (!botState.isRunning || botState.currentContractId || botState.cooldownRemaining > 0 || isBuying) {
-        // Log de escaneo cada 30 segundos
-        const now = Date.now();
-        if (now - botState.lastScanLogTime > 30000) {
-            console.log(`🔍 BOOM SCAN: RSI: ${calculateRSI(tickHistory, 14).toFixed(1)} | Cooldown: ${botState.cooldownRemaining}s | Memoria: ${tickHistory.length}/500`);
-            botState.lastScanLogTime = now;
-        }
         return;
     }
 
-    const rsi = calculateRSI(tickHistory, 14);
     const cci = calculateCCI(tickHistory, 14);
     const sma50 = calculateSMA(tickHistory, 50);
 
