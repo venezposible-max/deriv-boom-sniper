@@ -509,12 +509,32 @@
             } catch (e) {
                 console.error("Error enviando control:", e);
                 alert("Error de conexión al enviar la orden.");
-                btn.innerText = isRunning ? "DETENER ALGORITMO ⏸️" : "INICIAR SNIPER PRO 🚀";
+                btn.innerText = isRunning ? "DETENER ALGORITMO ⏸️" : "INICIAR ALGORITMO 🚀";
             }
         }
 
+        // --- VALORES POR DEFECTO DINÁMICOS ---
+        document.getElementById('inStrategy').addEventListener('change', (e) => {
+            const strategy = e.target.value;
+            const btn = document.getElementById('btnStart');
+
+            if (strategy === 'TREND_GRINDER') {
+                document.getElementById('inTp').value = "0.50";
+                document.getElementById('inStopTicks').value = "300"; // 5 Velas
+                document.getElementById('inRsiThreshold').value = "70";
+                document.getElementById('inSl').value = "2.50";
+                btn.innerText = "INICIAR TREND GRINDER 🌾";
+            } else {
+                document.getElementById('inTp').value = "4.00";
+                document.getElementById('inStopTicks').value = "50";
+                document.getElementById('inRsiThreshold').value = "25";
+                document.getElementById('inSl').value = "2.50";
+                btn.innerText = "INICIAR SNIPER PRO 🚀";
+            }
+        });
+
         setInterval(fetchStatus, 1000);
-        setTimeout(fetchStatus, 100); // Llama inmediatamente al cargar
+        setTimeout(fetchStatus, 100); 
     </script>
 </body>
 
