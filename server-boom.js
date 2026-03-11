@@ -502,12 +502,22 @@ function processTick(quote) {
     const now = Date.now();
     if (now - botState.lastScanLogTime > 10000) {
         let zona = "⏳ ZONA NEUTRAL (Paciencia...)";
-        if (rsi <= BOOM_CONFIG.rsiThreshold) zona = `🎯 ALERTA: ZONA DE DISPARO (RSI <= ${BOOM_CONFIG.rsiThreshold})`;
-        else if (rsi <= 35) zona = "⚠️ ACERCÁNDOSE A SOBREVENTA";
-        else if (rsi >= 70) zona = "🔥 SOBRECOMPRA (Muy lejos de disparar)";
+        const isSniper = (botState.activeStrategy === 'SNIPER');
 
+        if (isSniper) {
+            if (rsi <= BOOM_CONFIG.rsiThreshold) zona = `🎯 ALERTA: ZONA DE DISPARO (RSI <= ${BOOM_CONFIG.rsiThreshold})`;
+            else if (rsi <= 35) zona = "⚠️ ACERCÁNDOSE A SOBREVENTA";
+            else if (rsi >= 70) zona = "🔥 SOBRECOMPRA (Muy lejos de disparar)";
+        } else {
+            // Trend Grinder
+            if (rsi >= 70) zona = `🎯 ALERTA: ZONA DE COSECHA (RSI >= 70)`;
+            else if (rsi >= 60) zona = "⚠️ SUBIENDO A ZONA DE COSECHA";
+            else zona = "📉 ESPERANDO SUBIDA (RSI bajo)";
+        }
+
+        let motorStatus = isSniper ? "CAZANDO SPIKES" : "COSECHANDO TREND";
         let estadoBot = botState.isRunning
-            ? (botState.cooldownRemaining > 0 ? `ENFRIAMIENTO (${botState.cooldownRemaining}s)` : "CAZANDO SPIKES")
+            ? (botState.cooldownRemaining > 0 ? `ENFRIAMIENTO (${botState.cooldownRemaining}s)` : motorStatus)
             : "APAGADO";
 
         console.log(`📡 RADAR BOOM 500 -> RSI: ${rsi.toFixed(1)} | Mercado: ${zona} | Motor: ${estadoBot}`);
@@ -598,7 +608,11 @@ function finalizeTrade(contract) {
 
     if (profit > 0) {
         botState.winsSession++;
-        console.log(`🎯 ¡SPIKE CAZADO! Ganancia: +$${profit.toFixed(2)} 💰💰💰`);
+        if (botState.activeStrategy === 'SNIPER') {
+            console.log(`🎯 ¡SPIKE CAZADO! Ganancia: +$${profit.toFixed(2)} 💰💰💰`);
+        } else {
+            console.log(`🌾 ¡COSECHA EXITOSA! Ganancia: +$${profit.toFixed(2)} 💰💰💰`);
+        }
         botState.cooldownRemaining = BOOM_CONFIG.cooldownSeconds; // 45s
     } else {
         botState.lossesSession++;
