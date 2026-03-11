@@ -312,6 +312,16 @@ function connectWebSocket() {
 
             ws.send(JSON.stringify({ subscribe: 1, ticks: SYMBOL }));
             ws.send(JSON.stringify({ balance: 1, subscribe: 1 }));
+
+            // --- RECOUP: RECUPERAR SUSCRIPCIÓN TRAS REINICIO ---
+            if (botState.currentContractId) {
+                console.log(`♻️ Recuperando seguimiento del contrato [${botState.currentContractId}]...`);
+                ws.send(JSON.stringify({
+                    proposal_open_contract: 1,
+                    contract_id: botState.currentContractId,
+                    subscribe: 1
+                }));
+            }
         }
 
         // --- MANEJO DE HISTORIAL PARA WARM START ---
@@ -338,6 +348,22 @@ function connectWebSocket() {
             } else {
                 botState.tradeSeconds = 0;
                 botState.tradeProfit = 0;
+            }
+
+            // --- CIERRE DE EMERGENCIA (Si el contrato se queda huérfano) ---
+            if (botState.currentContractId && botState.tradeSeconds > (BOOM_CONFIG.timeStopTicks + 30)) {
+                if (botState.tradeSeconds % 30 === 0) { // Cada 30s reintentamos vender
+                    console.log(`🚨 EMERGENCIA: Contrato [${botState.currentContractId}] excedió tiempo (${botState.tradeSeconds}s). Forzando venta...`);
+                    ws.send(JSON.stringify({ sell: botState.currentContractId, price: 0 }));
+
+                    // Si ya es un tiempo ridículo (más de 10 min), limpiar memoria local por las malas
+                    if (botState.tradeSeconds > 600) {
+                        console.log("💣 Tiempo absurdo detectado. Reseteando botState localmente.");
+                        botState.currentContractId = null;
+                        botState.trackingContracts.clear();
+                        isBuying = false;
+                    }
+                }
             }
 
             processTick(quote);
