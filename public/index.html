@@ -261,7 +261,7 @@
                     <div class="value" id="statusView" style="color: #6b7280; font-size: 1.1rem;">APAGADO</div>
                 </div>
                 <div style="flex: 1; text-align: center;">
-                    <div class="label">RSI M1 (🎯 25)</div>
+                    <div class="label" id="labelRsi">RSI M1 (🎯 25)</div>
                     <div class="value" id="rsiView" style="color: #3b82f6; font-size: 1.1rem;">--</div>
                 </div>
                 <div style="flex: 1; text-align: right;">
@@ -271,11 +271,11 @@
             </div>
             <div class="row" style="margin-top: 15px;">
                 <div>
-                    <div class="label">SPIKES CAZADOS</div>
+                    <div class="label" id="labelWins">SPIKES CAZADOS</div>
                     <div class="value green" id="winsView">0</div>
                 </div>
                 <div style="text-align: right;">
-                    <div class="label">BALAS PERDIDAS</div>
+                    <div class="label" id="labelLosses">BALAS PERDIDAS</div>
                     <div class="value red" id="lossesView">0</div>
                 </div>
             </div>
@@ -385,6 +385,22 @@
 
                     document.getElementById('winsView').innerText = d.winsSession || 0;
                     document.getElementById('lossesView').innerText = d.lossesSession || 0;
+
+                    // --- ACTUALIZACIÓN DINÁMICA DE ETIQUETAS ---
+                    const labelWins = document.getElementById('labelWins');
+                    const labelLosses = document.getElementById('labelLosses');
+                    const labelRsi = document.getElementById('labelRsi');
+                    const isSniper = (d.activeStrategy === 'SNIPER');
+
+                    if (isSniper) {
+                        labelWins.innerText = "SPIKES CAZADOS";
+                        labelLosses.innerText = "BALAS PERDIDAS";
+                        labelRsi.innerText = `RSI M1 (🎯 ${c.rsiThreshold || 25})`;
+                    } else {
+                        labelWins.innerText = "TREND CAZADOS";
+                        labelLosses.innerText = "COSECHAS FALLIDAS";
+                        labelRsi.innerText = `RSI M1 (🎯 70)`;
+                    }
 
                     // Solo sobrescribimos los valores de los inputs si es la primera carga (aunque esté corriendo)
                     if (!isInitialized && c) {
