@@ -8,22 +8,22 @@ const fs = require('fs');
 // CONFIGURACIÓN: BOOM 1000 SNIPER 2026
 // ==========================================
 const APP_ID = 1089;
-const SYMBOL = 'BOOM1000'; // El Rey de las Explosiones
+const SYMBOL = 'BOOM500'; // El Rey de las Explosiones
 const STATE_FILE = path.join(__dirname, 'persistent-state-boom.json');
 const WEB_PASSWORD = process.env.WEB_PASSWORD || 'admin123';
 
 let BOOM_CONFIG = {
     stake: 20,
-    takeProfit: 2.00,
-    stopLoss: 1.50,
-    multiplier: 200,    // Multiplicador válido (100, 200, 300, 400, 500)
+    takeProfit: 4.00, // Subimos TP por defecto para compensar desangre
+    stopLoss: 2.50,
+    multiplier: 200,
     rsiPeriod: 14,
     cciPeriod: 14,
-    timeStopTicks: 60,
+    timeStopTicks: 50, // En el 500 el ciclo es más rápido, 50 ticks suele bastar
     cooldownSeconds: 45,
-    rsiThreshold: 25,     // Nuevo: Gatillo configurable
-    quickReloadSeconds: 3, // Nuevo: Recarga configurable
-    useTickFrequency: false // Modo avanzado apagado por default
+    rsiThreshold: 25,
+    quickReloadSeconds: 3,
+    useTickFrequency: false
 };
 
 let botState = {
@@ -37,7 +37,7 @@ let botState = {
     balanceHistory: [],
     activeContracts: [],
     currentContractId: null,
-    activeSymbol: 'BOOM1000',
+    activeSymbol: 'BOOM500',
     activeStrategy: 'SNIPER',
     cooldownRemaining: 0,
     lastScanLogTime: 0,
@@ -103,14 +103,14 @@ app.post('/api/control', (req, res) => {
         if (typeof useTickFrequency !== 'undefined') BOOM_CONFIG.useTickFrequency = Boolean(useTickFrequency);
 
         saveState();
-        console.log(`▶️ BOT BOOM 1000 ENCENDIDO | Sniper Mode | Mult: ${BOOM_CONFIG.multiplier}`);
+        console.log(`▶️ BOT BOOM 500 ENCENDIDO | Sniper Mode | Mult: ${BOOM_CONFIG.multiplier}`);
         return res.json({ success: true, message: 'Bot Boom Sniper Activado', isRunning: true });
     }
 
     if (action === 'STOP') {
         botState.isRunning = false;
         saveState();
-        console.log(`⏸️ BOT BOOM 1000 DETENIDO.`);
+        console.log(`⏸️ BOT BOOM 500 DETENIDO.`);
         return res.json({ success: true, message: 'Bot Pausado', isRunning: false });
     }
 
@@ -133,7 +133,7 @@ app.post('/api/trade', (req, res) => {
 
     if (action === 'MULTUP' || action === 'MULTDOWN' || action === 'CALL' || action === 'PUT') {
         executeTrade(); // En Boom solo usamos MULTUP para spikes
-        return res.json({ success: true, message: `Disparo manual enviado a BOOM 1000` });
+        return res.json({ success: true, message: `Disparo manual enviado a BOOM 500` });
     }
 });
 
@@ -162,7 +162,7 @@ app.post('/api/clear-history', (req, res) => {
 
 const PORT = process.env.PORT || 8080;
 app.listen(PORT, () => {
-    console.log(`\n🚀 Iniciando Motor BOOM 1000 SNIPER...`);
+    console.log(`\n🚀 Iniciando Motor BOOM 500 SNIPER...`);
     console.log(`🌍 Módulo Web en puerto ${PORT}`);
 
     // --- CRONÓMETRO DE SESIÓN ---
@@ -484,7 +484,7 @@ function processTick(quote) {
             ? (botState.cooldownRemaining > 0 ? `ENFRIAMIENTO (${botState.cooldownRemaining}s)` : "CAZANDO SPIKES")
             : "APAGADO";
 
-        console.log(`📡 RADAR BOOM 1000 -> RSI: ${rsi.toFixed(1)} | Mercado: ${zona} | Motor: ${estadoBot}`);
+        console.log(`📡 RADAR BOOM 500 -> RSI: ${rsi.toFixed(1)} | Mercado: ${zona} | Motor: ${estadoBot}`);
         botState.lastScanLogTime = now;
     }
 
@@ -515,7 +515,7 @@ function processTick(quote) {
     if (!sma50 || isNaN(rsi) || isNaN(cci)) return;
 
     // --- REGLAS SNIPER BOOM (Refinadas) ---
-    // En Boom 1000 ignoraremos el CCI estricto y la cercanía al SMA,
+    // En Boom 500 ignoraremos el CCI estricto y la cercanía al SMA,
     // ya que una caída tan profunda (RSI < Threshold) naturalmente aleja al 
     // precio de sus promedios. Disparamos directo por agotamiento de caída.
     if (rsi >= 0 && rsi <= BOOM_CONFIG.rsiThreshold) {

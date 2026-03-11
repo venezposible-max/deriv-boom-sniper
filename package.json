@@ -1,7 +1,7 @@
 {
     "name": "deriv-boom-sniper",
     "version": "1.0.0",
-    "description": "Bot especializado en Sniper de Spikes para BOOM 1000",
+    "description": "Bot especializado en Sniper de Spikes para BOOM 500",
     "main": "server-boom.js",
     "scripts": {
         "start": "node server-boom.js"
