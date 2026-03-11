@@ -541,19 +541,18 @@ function processTick(quote) {
     if (!sma50 || isNaN(rsi) || isNaN(cci)) return;
 
     // --- REGLAS SNIPER BOOM (Refinadas) ---
-    // En Boom 500 ignoraremos el CCI estricto y la cercanía al SMA,
-    // ya que una caída tan profunda (RSI < Threshold) naturalmente aleja al 
-    // precio de sus promedios. Disparamos directo por agotamiento de caída.
-    if (rsi >= 0 && rsi <= BOOM_CONFIG.rsiThreshold) {
-        if (BOOM_CONFIG.useTickFrequency) {
-            // No disparamos normal. Esperaremos a que el motor paralelo detecte el congelamiento.
-            if (Date.now() - (botState.lastFreezeLogTime || 0) > 3000) {
-                console.log(`🧊 RSI Letal (${rsi.toFixed(1)}). Sniper apuntando. Esperando silencio (Tick Hesitation)...`);
-                botState.lastFreezeLogTime = Date.now();
+    if (botState.activeStrategy === 'SNIPER') {
+        if (rsi >= 0 && rsi <= BOOM_CONFIG.rsiThreshold) {
+            if (BOOM_CONFIG.useTickFrequency) {
+                // No disparamos normal. Esperaremos a que el motor paralelo detecte el congelamiento.
+                if (Date.now() - (botState.lastFreezeLogTime || 0) > 3000) {
+                    console.log(`🧊 RSI Letal (${rsi.toFixed(1)}). Sniper apuntando. Esperando silencio (Tick Hesitation)...`);
+                    botState.lastFreezeLogTime = Date.now();
+                }
+            } else {
+                console.log(`💥 SEÑAL ACTIVA: RSI cayó a ${rsi.toFixed(1)} (Meta: ${BOOM_CONFIG.rsiThreshold}) -> ¡Disparo inminente! (CCI: ${cci.toFixed(0)})`);
+                executeTrade();
             }
-        } else {
-            console.log(`💥 SEÑAL ACTIVA: RSI cayó a ${rsi.toFixed(1)} (Meta: ${BOOM_CONFIG.rsiThreshold}) -> ¡Disparo inminente! (CCI: ${cci.toFixed(0)})`);
-            executeTrade();
         }
     }
 
