@@ -201,6 +201,22 @@ app.listen(PORT, () => {
         }
     }, 150);
 
+    // --- CIERRE PREVENTIVO POR HESITACIÓN (Sólo Trend Grinder) ---
+    setInterval(() => {
+        if (!botState.isRunning || botState.activeStrategy !== 'TREND_GRINDER' || !botState.currentContractId) return;
+        if (!botState.lastTickTime) return;
+
+        const delay = Date.now() - botState.lastTickTime;
+        const tracker = botState.trackingContracts.get(botState.currentContractId);
+
+        // Si hay silencio > 2.5s y tenemos ganancia real (aunque sea 0.01), cerramos por seguridad.
+        if (delay >= 2500 && botState.tradeProfit > 0 && tracker && !tracker.isClosing) {
+            console.log(`\n🛡️ CIERRE PREVENTIVO: Silencio de ${delay}ms detectado. Asegurando ganancia de +$${botState.tradeProfit.toFixed(2)} ante sospecha de Spike.`);
+            tracker.isClosing = true;
+            ws.send(JSON.stringify({ sell: botState.currentContractId, price: 0 }));
+        }
+    }, 200);
+
     connectWebSocket();
 });
 
