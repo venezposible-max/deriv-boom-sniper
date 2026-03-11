@@ -317,13 +317,22 @@
                 <div>
                     <label style="margin-bottom: 2px;">MODO CONGELAMIENTO (TICK FREQUENCY) 🤖</label>
                     <div style="font-size: 0.65rem; color: #9ca3af; line-height: 1.2;">Al activar, el Bot esperará un
-                        silencio en el servidor de >2.5s para disparar.</div>
+                        silencio en el servidor de >2.5s para disparar (Solo Sniper).</div>
                 </div>
                 <input type="checkbox" id="inTickMode"
                     style="width: 20px; height: 20px; accent-color: #10b981; cursor: pointer;">
             </div>
 
-            <button id="btnStart" class="btn-start" onclick="toggleBot()">INICIAR SNIPER PRO 🚀</button>
+            <div class="input-group" style="margin-top: 15px; border-top: 1px solid #1f2937; padding-top: 15px;">
+                <label>ESTRATEGIA ACTIVA</label>
+                <select id="inStrategy"
+                    style="width: 100%; padding: 12px; background: #1a1a24; border: 1px solid #2d2d3a; border-radius: 8px; color: white; font-weight: bold; font-family: 'Inter', sans-serif;">
+                    <option value="SNIPER">🚀 SNIPER (Cazar Spikes)</option>
+                    <option value="TREND_GRINDER">🌾 TREND GRINDER (5 Velas)</option>
+                </select>
+            </div>
+
+            <button id="btnStart" class="btn-start" onclick="toggleBot()">INICIAR ALGORITMO 🚀</button>
         </div>
 
         <div class="card">
@@ -386,6 +395,7 @@
                         if (c.stopLoss) document.getElementById('inSl').value = c.stopLoss;
                         if (c.rsiThreshold) document.getElementById('inRsiThreshold').value = c.rsiThreshold;
                         if (c.quickReloadSeconds) document.getElementById('inQuickReload').value = c.quickReloadSeconds;
+                        if (d.activeStrategy) document.getElementById('inStrategy').value = d.activeStrategy;
                         if (typeof c.useTickFrequency !== 'undefined') document.getElementById('inTickMode').checked = c.useTickFrequency;
                         isInitialized = true;
                     }
@@ -406,20 +416,20 @@
                         const lp = parseFloat(d.tradeProfit || 0);
                         const ls = parseInt(d.tradeSeconds || 0);
                         const limit = parseInt(c.timeStopTicks || 70);
-                        
+
                         const lpEl = document.getElementById('liveProfitView');
                         lpEl.innerText = (lp >= 0 ? "+" : "") + "$" + lp.toFixed(2);
                         lpEl.style.color = (lp >= 0 ? "#10b981" : "#ef4444");
-                        
+
                         document.getElementById('liveTimerView').innerText = ls;
                         document.getElementById('liveLimitView').innerText = limit;
                         document.getElementById('liveTradeId').innerText = "CONTRATO EN VIVO #" + d.currentContractId.toString().slice(-6);
-                        
+
                         // Barra de progreso y Badge
                         const pct = Math.min((ls / limit) * 100, 100);
                         const badge = document.getElementById('liveStatusBadge');
                         const bar = document.getElementById('liveProgressBar');
-                        
+
                         bar.style.width = pct + "%";
                         if (lp > 0) {
                             badge.innerText = "¡SPIKE DETECTADO! 🔥";
@@ -467,6 +477,7 @@
             const payload = { action };
 
             if (!isRunning) {
+                payload.strategy = document.getElementById('inStrategy').value;
                 payload.stake = document.getElementById('inStake').value;
                 payload.takeProfit = document.getElementById('inTp').value;
                 payload.multiplier = document.getElementById('inMult').value;

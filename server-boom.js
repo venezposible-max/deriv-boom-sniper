@@ -46,8 +46,10 @@ let botState = {
     currentRSI: 50,
     lastTradeTime: 0,
     tradeProfit: 0,   // Nuevo: Para ver ganancias en vivo
-    tradeSeconds: 0,  // Nuevo: Para el segundero en vivo
-    trackingContracts: new Map()
+    tradeSeconds: 0,
+    trackingContracts: new Map(),
+    trendCandleCount: 0, // Contador de velas para Trend Grinder
+    entryPriceTrend: 0    // Precio de entrada para filtro anti-spike
 };
 
 let tickHistory = [];
@@ -71,8 +73,8 @@ app.get('/api/status', (req, res) => {
         success: true,
         data: {
             ...botState,
-            activeSymbol: 'BOOM 1000',
-            activeStrategy: 'SNIPER'
+            activeSymbol: SYMBOL,
+            activeStrategy: botState.activeStrategy
         },
         config: BOOM_CONFIG,
     });
@@ -83,6 +85,7 @@ app.post('/api/control', (req, res) => {
 
     if (action === 'START') {
         botState.isRunning = true;
+        if (req.body.strategy) botState.activeStrategy = req.body.strategy;
         if (stake) BOOM_CONFIG.stake = Number(stake);
         if (takeProfit) BOOM_CONFIG.takeProfit = Number(takeProfit);
         if (timeStopTicks) BOOM_CONFIG.timeStopTicks = Number(timeStopTicks);
@@ -380,8 +383,10 @@ function connectWebSocket() {
 
             botState.currentContractId = contractId;
             botState.ticksInTrade = 0;
+            botState.trendCandleCount = 0; // Reset para Trend Grinder
+            botState.entryPriceTrend = tickHistory[tickHistory.length - 1] || 0;
             botState.tradeStartTime = Date.now();
-            isBuying = false; // Solo aquí se libera el Sniper para seguimiento
+            isBuying = false;
 
             // Suscribirnos al contrato manual y explícitamente (vital para Multiplicadores)
             ws.send(JSON.stringify({
@@ -429,6 +434,27 @@ function connectWebSocket() {
             botState.activeContracts = [contract];
             botState.tradeProfit = profit;
             botState.tradeSeconds = secondsElapsed;
+
+            // --- FILTRO ANTI-SPIKE (Para Trend Grinder) ---
+            if (botState.activeStrategy === 'TREND_GRINDER' && !tracker.isClosing) {
+                // Si el precio sube (en Boom esto es Spike), cerrar YA.
+                // MultiDown pierde dinero si el precio sube.
+                const currentTick = tickHistory[tickHistory.length - 1];
+                if (currentTick > botState.entryPriceTrend + 0.1) {
+                    console.log(`🛡️ FILTRO ANTI-SPIKE: Movimiento alcista detectado. Cerrando Trend Grinder...`);
+                    tracker.isClosing = true;
+                    ws.send(JSON.stringify({ sell: cId, price: 0 }));
+                    return;
+                }
+
+                // Cierre por cosecha de 5 velas (aprox 300 ticks)
+                if (botState.ticksInTrade >= 300) {
+                    console.log(`🌾 COSECHA COMPLETADA: 5 velas trend recolectadas. Cerrando...`);
+                    tracker.isClosing = true;
+                    ws.send(JSON.stringify({ sell: cId, price: 0 }));
+                    return;
+                }
+            }
 
             if (tracker.isClosing) return;
 
@@ -530,19 +556,29 @@ function processTick(quote) {
             executeTrade();
         }
     }
+
+    // --- REGLAS TREND GRINDER (Cosechador de Velas) ---
+    if (botState.activeStrategy === 'TREND_GRINDER') {
+        // Entramos cuando el RSI está muy alto (Agotamiento de Spikes)
+        if (rsi >= 70) {
+            console.log(`🌾 TREND GRINDER: RSI en ${rsi.toFixed(1)} (Sobrecompra). Iniciando cosecha de velas trend...`);
+            executeTrade();
+        }
+    }
 }
 
 function executeTrade() {
     isBuying = true;
     botState.lastBuyAttemptTime = Date.now();
     botState.lastTradeTime = Date.now(); // Activar protección de ráfaga
+    const isSniper = (botState.activeStrategy === 'SNIPER');
     const req = {
         buy: 1,
         price: BOOM_CONFIG.stake,
         parameters: {
             amount: BOOM_CONFIG.stake,
             basis: 'stake',
-            contract_type: 'MULTUP',
+            contract_type: isSniper ? 'MULTUP' : 'MULTDOWN',
             currency: 'USD',
             symbol: SYMBOL,
             multiplier: BOOM_CONFIG.multiplier
