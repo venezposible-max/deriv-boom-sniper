@@ -48,8 +48,9 @@ let botState = {
     tradeProfit: 0,   // Nuevo: Para ver ganancias en vivo
     tradeSeconds: 0,
     trackingContracts: new Map(),
-    trendCandleCount: 0, // Contador de velas para Trend Grinder
-    entryPriceTrend: 0    // Precio de entrada para filtro anti-spike
+    trendCandleCount: 0,
+    entryPriceTrend: 0,
+    lastTrendWaitLog: 0
 };
 
 let tickHistory = [];
@@ -568,10 +569,21 @@ function processTick(quote) {
 
     // --- REGLAS TREND GRINDER (Cosechador de Velas) ---
     if (botState.activeStrategy === 'TREND_GRINDER') {
-        // Entramos cuando el RSI está muy alto (Agotamiento de Spikes)
+        // Filtro de Agotamiento: RSI alto + Confirmación de Tick bajista
         if (rsi >= 70) {
-            console.log(`🌾 TREND GRINDER: RSI en ${rsi.toFixed(1)} (Sobrecompra). Iniciando cosecha de velas trend...`);
-            executeTrade();
+            const currentPrice = tickHistory[tickHistory.length - 1];
+            const prevPrice = tickHistory[tickHistory.length - 2];
+
+            if (prevPrice && currentPrice < prevPrice) {
+                console.log(`🌾 TREND GRINDER: RSI en ${rsi.toFixed(1)} (Agotamiento Confirmado). Iniciando cosecha...`);
+                executeTrade();
+            } else {
+                // Loguear espera cada 3 segundos para no saturar
+                if (Date.now() - botState.lastTrendWaitLog > 3000) {
+                    console.log(`⏳ TREND GRINDER: RSI Alto (${rsi.toFixed(1)}). Esperando que el precio deje de subir...`);
+                    botState.lastTrendWaitLog = Date.now();
+                }
+            }
         }
     }
 }
