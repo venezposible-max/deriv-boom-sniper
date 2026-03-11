@@ -402,7 +402,7 @@
                         labelRsi.innerText = `RSI M1 (🎯 70)`;
                     }
 
-                    // Solo sobrescribimos los valores de los inputs si es la primera carga (aunque esté corriendo)
+                    // Solo sobrescribimos los valores de los inputs si es la primera carga
                     if (!isInitialized && c) {
                         if (c.stake) document.getElementById('inStake').value = c.stake;
                         if (c.takeProfit) document.getElementById('inTp').value = c.takeProfit;
@@ -422,7 +422,7 @@
                         btn.innerText = "DETENER ALGORITMO ⏸️";
                     } else {
                         btn.className = "btn-start";
-                        btn.innerText = "INICIAR SNIPER PRO 🚀";
+                        btn.innerText = isSniper ? "INICIAR SNIPER PRO 🚀" : "INICIAR TREND GRINDER 🌾";
                     }
 
                     // --- ACTUALIZACIÓN DE TARJETA EN VIVO ---
@@ -441,18 +441,17 @@
                         document.getElementById('liveLimitView').innerText = limit;
                         document.getElementById('liveTradeId').innerText = "CONTRATO EN VIVO #" + d.currentContractId.toString().slice(-6);
 
-                        // Barra de progreso y Badge
                         const pct = Math.min((ls / limit) * 100, 100);
                         const badge = document.getElementById('liveStatusBadge');
                         const bar = document.getElementById('liveProgressBar');
 
                         bar.style.width = pct + "%";
                         if (lp > 0) {
-                            badge.innerText = "¡SPIKE DETECTADO! 🔥";
+                            badge.innerText = isSniper ? "¡SPIKE DETECTADO! 🔥" : "¡PROVECHO! 🌾";
                             badge.style.background = "#10b981";
                             bar.style.background = "#10b981";
                         } else {
-                            badge.innerText = "ESPERANDO SPIKE... ⏳";
+                            badge.innerText = isSniper ? "ESPERANDO SPIKE... ⏳" : "COSECHANDO... ⏳";
                             badge.style.background = "#3b82f6";
                             bar.style.background = "#3b82f6";
                         }
@@ -468,15 +467,15 @@
                         d.tradeHistory.slice(0, 10).forEach(t => {
                             const p = parseFloat(t.profit);
                             hv.innerHTML += `
-                            <div class="history-item">
-                                <div>
-                                    <div class="history-type">${t.type}</div>
-                                    <div class="history-time">${t.timestamp}</div>
-                                </div>
-                                <div class="history-profit" style="color:${p >= 0 ? '#10b981' : '#ef4444'};">
-                                    ${p >= 0 ? "+" : ""}$${p.toFixed(2)}
-                                </div>
-                            </div>`;
+                        <div class="history-item">
+                            <div>
+                                <div class="history-type">${t.type}</div>
+                                <div class="history-time">${t.timestamp}</div>
+                            </div>
+                            <div class="history-profit" style="color:${p >= 0 ? '#10b981' : '#ef4444'};">
+                                ${p >= 0 ? "+" : ""}$${p.toFixed(2)}
+                            </div>
+                        </div>`;
                         });
                     }
                 }
@@ -520,12 +519,10 @@
                 notif.innerText = r.message || r.error;
 
                 setTimeout(() => { notif.style.display = 'none'; }, 3000);
-
                 await fetchStatus();
             } catch (e) {
                 console.error("Error enviando control:", e);
                 alert("Error de conexión al enviar la orden.");
-                btn.innerText = isRunning ? "DETENER ALGORITMO ⏸️" : "INICIAR ALGORITMO 🚀";
             }
         }
 
@@ -539,13 +536,19 @@
                 document.getElementById('inStopTicks').value = "300"; // 5 Velas
                 document.getElementById('inRsiThreshold').value = "70";
                 document.getElementById('inSl').value = "2.50";
-                btn.innerText = "INICIAR TREND GRINDER 🌾";
+                document.getElementById('labelWins').innerText = "TREND CAZADOS";
+                document.getElementById('labelLosses').innerText = "COSECHAS FALLIDAS";
+                document.getElementById('labelRsi').innerText = "RSI M1 (🎯 70)";
+                if (!isRunning) btn.innerText = "INICIAR TREND GRINDER 🌾";
             } else {
                 document.getElementById('inTp').value = "4.00";
                 document.getElementById('inStopTicks').value = "50";
                 document.getElementById('inRsiThreshold').value = "25";
                 document.getElementById('inSl').value = "2.50";
-                btn.innerText = "INICIAR SNIPER PRO 🚀";
+                document.getElementById('labelWins').innerText = "SPIKES CAZADOS";
+                document.getElementById('labelLosses').innerText = "BALAS PERDIDAS";
+                document.getElementById('labelRsi').innerText = "RSI M1 (🎯 25)";
+                if (!isRunning) btn.innerText = "INICIAR SNIPER PRO 🚀";
             }
         });
 
