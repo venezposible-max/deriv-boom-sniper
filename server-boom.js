@@ -148,8 +148,18 @@ app.post('/api/switch-market', (req, res) => {
     candleHistory = []; // Limpiar velas del mercado anterior
     saveState();
 
-    // Reconectar con el nuevo símbolo
-    if (ws) ws.close();
+    // Reconectar con el nuevo símbolo y limpiar suscripciones previas
+    if (ws && ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({ forget_all: 'ticks' }));
+        ws.send(JSON.stringify({ forget_all: 'candles' }));
+        setTimeout(() => {
+            if (ws.readyState === WebSocket.OPEN) {
+                ws.send(JSON.stringify({ authorize: process.env.DERIV_TOKEN || 'TSuD37g6G593Uis' }));
+            }
+        }, 500);
+    } else {
+        connectDeriv();
+    }
 
     res.json({ success: true, symbol: botState.symbol, config: GOLD_CONFIG });
 });
@@ -229,6 +239,9 @@ function connectDeriv() {
 
         if (msg.msg_type === 'ohlc' && msg.ohlc) {
             const ohlc = msg.ohlc;
+            // VERIFICACIÓN DE SÍMBOLO: Ignorar velas que no sean del mercado activo
+            if (ohlc.symbol !== botState.symbol) return;
+
             const existing = candleHistory.find(c => c.epoch === ohlc.open_time);
             if (existing) {
                 existing.close = ohlc.close;
@@ -242,7 +255,10 @@ function connectDeriv() {
         }
 
         if (msg.msg_type === 'tick' && msg.tick) {
-            botState.marketStatus = 'OPEN'; // Si llega un tick, el mercado está abierto
+            // VERIFICACIÓN DE SÍMBOLO: Ignorar ticks que no sean del mercado activo
+            if (msg.tick.symbol !== botState.symbol) return;
+
+            botState.marketStatus = 'OPEN';
             const quote = parseFloat(msg.tick.quote);
             if (!isNaN(quote)) {
                 botState.lastTickPrice = quote;
