@@ -354,12 +354,19 @@
                 isRunning = data.isRunning;
                 const price = parseFloat(data.lastTickPrice);
                 const priceDisplay = document.getElementById('priceDisplay');
-                if (price > 0) {
+
+                if (data.marketStatus === 'CLOSED') {
+                    priceDisplay.innerText = "MERCADO CERRADO";
+                    priceDisplay.style.fontSize = "1.8rem";
+                    priceDisplay.style.color = "#ff4d4d";
+                } else if (price > 0) {
                     priceDisplay.innerText = price.toFixed(2);
                     priceDisplay.style.fontSize = "3.5rem";
+                    priceDisplay.style.color = "#ffd700";
                 } else {
                     priceDisplay.innerText = "Cargando...";
                     priceDisplay.style.fontSize = "2.0rem";
+                    priceDisplay.style.color = "#ffd700";
                 }
 
                 document.getElementById('balanceDisplay').innerText = "SALDO: $" + (data.balance || 0).toFixed(2);
@@ -482,6 +489,10 @@
 
         async function switchMarket(symbol) {
             if (isRunning) return;
+            // Reset visual
+            document.getElementById('priceDisplay').innerText = "Sincronizando...";
+            document.getElementById('priceDisplay').style.color = "#ffd700";
+
             const res = await fetch('/api/switch-market', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },

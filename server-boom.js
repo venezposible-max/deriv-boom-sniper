@@ -55,7 +55,8 @@ let botState = {
     rsiOverbought: 70,
     rsiOversold: 30,
     lastRSI: 50,
-    symbol: 'frxXAUUSD'
+    symbol: 'frxXAUUSD',
+    marketStatus: 'OPEN' // OPEN, CLOSED, or SEARCHING
 };
 
 // --- CARGAR ESTADO PREVIO ---
@@ -141,6 +142,8 @@ app.post('/api/switch-market', (req, res) => {
     if (botState.isRunning) return res.status(400).json({ success: false, error: 'Detén el bot primero' });
 
     botState.symbol = symbol;
+    botState.marketStatus = 'SEARCHING';
+    botState.lastTickPrice = 0;
     GOLD_CONFIG = MARKET_CONFIGS[symbol]; // Cargar la config de ese mercado
     candleHistory = []; // Limpiar velas del mercado anterior
     saveState();
@@ -185,6 +188,13 @@ function connectDeriv() {
 
         if (msg.error) {
             console.error(`⚠️ Error de Deriv [${msg.msg_type || 'N/A'}]: ${msg.error.message}`);
+
+            // Detectar mercado cerrado
+            if (msg.error.code === 'MarketIsClosed') {
+                botState.marketStatus = 'CLOSED';
+                console.log(`🚫 MERCADO CERRADO detectado para ${botState.symbol}`);
+            }
+
             if (msg.msg_type === 'ticks' || msg.msg_type === 'tick') {
                 if (botState.symbol === 'frxXAUUSD') {
                     console.log(`⚠️ Re-intentando con símbolo alternativo: XAUUSD`);
@@ -231,6 +241,7 @@ function connectDeriv() {
         }
 
         if (msg.msg_type === 'tick' && msg.tick) {
+            botState.marketStatus = 'OPEN'; // Si llega un tick, el mercado está abierto
             const quote = parseFloat(msg.tick.quote);
             if (!isNaN(quote)) {
                 botState.lastTickPrice = quote;
