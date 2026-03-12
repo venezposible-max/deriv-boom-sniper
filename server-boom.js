@@ -12,9 +12,9 @@ const STATE_FILE = path.join(__dirname, 'gold-state.json');
 
 let MARKET_CONFIGS = {
     'frxXAUUSD': {
-        stake: 50,
-        takeProfit: 1.00,
-        stopLoss: 0.50,
+        stake: 10,
+        takeProfit: 2.50,
+        stopLoss: 3.00,
         multiplier: 200,
         rsiPeriod: 14,
         emaPeriod: 20,
