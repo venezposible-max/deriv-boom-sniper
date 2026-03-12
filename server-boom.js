@@ -346,9 +346,9 @@ function executeTrade(type) {
             symbol: botState.symbol,
             multiplier: GOLD_CONFIG.multiplier,
             limit_order: {
-                // Cálculo dinámico según precio actual: (Movimiento / Precio) * Stake * Multiplicador
-                take_profit: (GOLD_CONFIG.takeProfit / botState.lastTickPrice) * GOLD_CONFIG.stake * GOLD_CONFIG.multiplier,
-                stop_loss: (GOLD_CONFIG.stopLoss / botState.lastTickPrice) * GOLD_CONFIG.stake * GOLD_CONFIG.multiplier
+                // En contratos de multiplicadores, TP y SL son montos DIRECTOS en USD
+                take_profit: parseFloat(GOLD_CONFIG.takeProfit.toFixed(2)),
+                stop_loss: parseFloat(GOLD_CONFIG.stopLoss.toFixed(2))
             }
         }
     };
