@@ -192,6 +192,7 @@ function connectDeriv() {
             // Detectar mercado cerrado
             if (msg.error.code === 'MarketIsClosed') {
                 botState.marketStatus = 'CLOSED';
+                botState.lastTickPrice = 0; // Limpiar precio viejo
                 console.log(`🚫 MERCADO CERRADO detectado para ${botState.symbol}`);
             }
 
