@@ -336,8 +336,9 @@ function executeTrade(type) {
     if (isBuying) return;
     isBuying = true;
     const roundedStake = parseFloat(Number(GOLD_CONFIG.stake).toFixed(2));
-    const roundedTP = parseFloat(Number(GOLD_CONFIG.takeProfit).toFixed(2));
-    const roundedSL = parseFloat(Number(GOLD_CONFIG.stopLoss).toFixed(2));
+    // Asegurar un mínimo de 1.50 USD para TP y SL para evitar rechazos de Deriv en Oro
+    const roundedTP = Math.max(1.50, parseFloat(Number(GOLD_CONFIG.takeProfit).toFixed(2)));
+    const roundedSL = Math.max(1.50, parseFloat(Number(GOLD_CONFIG.stopLoss).toFixed(2)));
 
     const req = {
         buy: 1,
