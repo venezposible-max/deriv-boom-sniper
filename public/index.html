@@ -262,9 +262,17 @@
                     <div class="stat-label">Mercado</div>
                     <div id="marketStatusText" class="stat-value">--</div>
                 </div>
+            </div>
+            <div class="stat-row" style="margin-top: 15px;">
                 <div class="stat-box">
                     <div class="stat-label">RSI (14)</div>
                     <div id="rsiValue" class="stat-value">--</div>
+                </div>
+                <div class="stat-box">
+                    <div class="stat-label">EMA (20)</div>
+                    <div id="emaValue" class="stat-value">--</div>
+                    <div id="emaPosition"
+                        style="font-size: 8px; font-weight: 700; margin-top: 4px; text-transform: uppercase;">--</div>
                 </div>
                 <div class="stat-box">
                     <div class="stat-label">PnL Sesión</div>
@@ -431,6 +439,19 @@
 
                 const ema = data.currentEMA || 0;
                 document.getElementById('emaValue').innerText = ema.toFixed(2);
+
+                const emaPos = document.getElementById('emaPosition');
+                if (price > 0 && ema > 0) {
+                    if (price > ema) {
+                        emaPos.innerText = "ENCIMA ↑";
+                        emaPos.style.color = "#00ffa3";
+                    } else {
+                        emaPos.innerText = "DEBAJO ↓";
+                        emaPos.style.color = "#ff4d4d";
+                    }
+                } else {
+                    emaPos.innerText = "--";
+                }
 
                 const rsiBar = document.getElementById('rsiBar');
                 rsiBar.style.width = rsi + "%";
