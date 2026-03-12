@@ -255,16 +255,16 @@
         <div class="card" id="statusCard">
             <div class="stat-row">
                 <div class="stat-box">
-                    <div class="stat-label">Estado</div>
-                    <div id="statusText" class="stat-value">APAGADO</div>
+                    <div class="stat-label">Bot</div>
+                    <div id="statusText" class="stat-value">OFF</div>
+                </div>
+                <div class="stat-box">
+                    <div class="stat-label">Mercado</div>
+                    <div id="marketStatusText" class="stat-value">--</div>
                 </div>
                 <div class="stat-box">
                     <div class="stat-label">RSI (14)</div>
                     <div id="rsiValue" class="stat-value">--</div>
-                </div>
-                <div class="stat-box">
-                    <div class="stat-label">EMA (20)</div>
-                    <div id="emaValue" class="stat-value">--</div>
                 </div>
                 <div class="stat-box">
                     <div class="stat-label">PnL Sesión</div>
@@ -384,8 +384,20 @@
                 document.getElementById('btnGold').disabled = isRunning;
                 document.getElementById('btnV100').disabled = isRunning;
 
-                document.getElementById('statusText').innerText = isRunning ? "ACTIVO" : "APAGADO";
+                document.getElementById('statusText').innerText = isRunning ? "ON" : "OFF";
                 document.getElementById('statusText').className = "stat-value " + (isRunning ? "green" : "");
+
+                const mStatus = document.getElementById('marketStatusText');
+                if (data.marketStatus === 'CLOSED') {
+                    mStatus.innerText = "CERRADO";
+                    mStatus.style.color = "#ff4d4d";
+                } else if (data.marketStatus === 'OPEN') {
+                    mStatus.innerText = "ABIERTO";
+                    mStatus.style.color = "#00ffa3";
+                } else {
+                    mStatus.innerText = "BUSCANDO...";
+                    mStatus.style.color = "#ffd700";
+                }
 
                 // Bloquear inputs si el bot está corriendo para evitar cambios accidentales
                 const inputIds = ['stake', 'multiplier', 'tp', 'sl', 'rsiOverbought', 'rsiOversold'];
