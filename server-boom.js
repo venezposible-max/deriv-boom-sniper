@@ -137,6 +137,16 @@ app.post('/api/sell-contract', (req, res) => {
     res.status(400).json({ success: false, error: 'No hay contrato activo' });
 });
 
+app.post('/api/trade', (req, res) => {
+    const { action } = req.body;
+    if (botState.currentContractId || isBuying) return res.status(400).json({ success: false, error: 'Ya hay una operación en curso.' });
+    if (action === 'MULTUP' || action === 'MULTDOWN') {
+        executeTrade(action);
+        return res.json({ success: true, message: `Disparo manual ${action} enviado` });
+    }
+    res.status(400).json({ success: false, error: 'Acción de trade de prueba inválida' });
+});
+
 app.post('/api/switch-market', (req, res) => {
     const { symbol } = req.body;
     if (botState.isRunning) return res.status(400).json({ success: false, error: 'Detén el bot primero' });

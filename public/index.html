@@ -309,6 +309,14 @@
         </div>
 
         <div class="card" id="settingsForm">
+            <div class="stat-row" style="margin-bottom: 20px;">
+                <button onclick="manualTrade('MULTUP')"
+                    style="flex:1; margin-right:5px; padding: 15px; border-radius: 12px; border: none; background: #00ffa3; color: #000; font-weight: 900; cursor: pointer;">MANUAL
+                    UP 📈</button>
+                <button onclick="manualTrade('MULTDOWN')"
+                    style="flex:1; margin-left:5px; padding: 15px; border-radius: 12px; border: none; background: #ff4d4d; color: #fff; font-weight: 900; cursor: pointer;">MANUAL
+                    DOWN 📉</button>
+            </div>
             <div class="input-group">
                 <label>Inversión (Stake USD)</label>
                 <input type="number" id="stake" value="50">
@@ -517,6 +525,15 @@
         async function sellContract() {
             if (!confirm("¿Quieres cerrar la operación actual manualmente?")) return;
             await fetch('/api/sell-contract', { method: 'POST' });
+            fetchStatus();
+        }
+
+        async function manualTrade(action) {
+            await fetch('/api/trade', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action })
+            });
             fetchStatus();
         }
 
