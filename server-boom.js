@@ -5,677 +5,372 @@ const path = require('path');
 const fs = require('fs');
 
 // ==========================================
-// CONFIGURACIÓN: BOOM 1000 SNIPER 2026
+// 🥇 GOLD SNIPER PRO (XAU/USD) - 2026
 // ==========================================
 const APP_ID = 1089;
-const SYMBOL = 'BOOM500'; // El Rey de las Explosiones
-const STATE_FILE = path.join(__dirname, 'persistent-state-boom.json');
-const WEB_PASSWORD = process.env.WEB_PASSWORD || 'admin123';
+const STATE_FILE = path.join(__dirname, 'gold-state.json');
 
-let BOOM_CONFIG = {
-    stake: 20,
-    takeProfit: 4.00, // Subimos TP por defecto para compensar desangre
-    stopLoss: 2.50,
-    multiplier: 200,
-    rsiPeriod: 14,
-    cciPeriod: 14,
-    timeStopTicks: 50, // En el 500 el ciclo es más rápido, 50 ticks suele bastar
-    cooldownSeconds: 45,
-    rsiThreshold: 25,
-    quickReloadSeconds: 3,
-    useTickFrequency: false
+let MARKET_CONFIGS = {
+    'frxXAUUSD': {
+        stake: 50,
+        takeProfit: 1.00,
+        stopLoss: 0.50,
+        multiplier: 200,
+        rsiPeriod: 14,
+        emaPeriod: 20,
+        rsiOverbought: 70,
+        rsiOversold: 30,
+        granularity: 300
+    },
+    'R_100': {
+        stake: 10,
+        takeProfit: 1.00,
+        stopLoss: 0.50,
+        multiplier: 200,
+        rsiPeriod: 14,
+        emaPeriod: 20,
+        rsiOverbought: 70,
+        rsiOversold: 30,
+        granularity: 300
+    }
 };
 
+let GOLD_CONFIG = MARKET_CONFIGS['frxXAUUSD'];
+
 let botState = {
-    isRunning: false, // PARADA DE EMERGENCIA POR DEFECTO
+    isRunning: false,
     balance: 0,
     pnlSession: 0,
     winsSession: 0,
     lossesSession: 0,
     totalTradesSession: 0,
     tradeHistory: [],
-    balanceHistory: [],
-    activeContracts: [],
     currentContractId: null,
-    activeSymbol: 'BOOM500',
-    activeStrategy: 'SNIPER',
-    cooldownRemaining: 0,
-    lastScanLogTime: 0,
-    sessionDuration: 0,
-    lastTickTime: 0,
     currentRSI: 50,
-    lastTradeTime: 0,
-    tradeProfit: 0,   // Nuevo: Para ver ganancias en vivo
+    currentEMA: 0,
+    lastTickPrice: 0,
+    tradeStartTime: null,
+    tradeProfit: 0,
     tradeSeconds: 0,
-    trackingContracts: new Map(),
-    trendCandleCount: 0,
-    entryPriceTrend: 0,
-    lastTrendWaitLog: 0
+    rsiOverbought: 70,
+    rsiOversold: 30,
+    lastRSI: 50,
+    symbol: 'frxXAUUSD'
 };
 
-let tickHistory = [];
+// --- CARGAR ESTADO PREVIO ---
+if (fs.existsSync(STATE_FILE)) {
+    try {
+        const data = JSON.parse(fs.readFileSync(STATE_FILE));
+        if (data.botState) botState = { ...botState, ...data.botState, isRunning: false };
+        if (data.botState) botState = { ...botState, ...data.botState, isRunning: false };
+        if (data.marketConfigs) {
+            MARKET_CONFIGS = { ...MARKET_CONFIGS, ...data.marketConfigs };
+            GOLD_CONFIG = MARKET_CONFIGS[botState.symbol];
+            // Sincronizar botState con la config cargada
+            botState.rsiOverbought = GOLD_CONFIG.rsiOverbought;
+            botState.rsiOversold = GOLD_CONFIG.rsiOversold;
+        }
+        console.log("📂 Estado y configuración cargados con éxito.");
+    } catch (e) { console.log("⚠️ No se pudo cargar el estado previo."); }
+}
+
+let candleHistory = [];
 let ws;
 let isBuying = false;
-let cooldownIntervalId = null;
 
-// --- INICIALIZACIÓN DE SERVIDOR WEB PARA RAILWAY ---
+// --- SERVIDOR WEB ---
 const app = express();
 app.use(cors());
 app.use(express.json());
-
-app.get('/', (req, res) => {
-    res.sendFile(path.join(__dirname, 'public', 'index.html'));
-});
-
 app.use(express.static(path.join(__dirname, 'public')));
 
 app.get('/api/status', (req, res) => {
-    res.json({
-        success: true,
-        data: {
-            ...botState,
-            activeSymbol: SYMBOL,
-            activeStrategy: botState.activeStrategy
-        },
-        config: BOOM_CONFIG,
-    });
+    res.json({ success: true, data: botState, config: GOLD_CONFIG });
 });
 
 app.post('/api/control', (req, res) => {
-    const { action, stake, takeProfit, multiplier, stopLoss, timeStopTicks, useTickFrequency, rsiThreshold, quickReloadSeconds } = req.body;
-
+    const { action, stake, takeProfit, stopLoss, multiplier, rsiOverbought, rsiOversold } = req.body;
     if (action === 'START') {
         botState.isRunning = true;
-        if (req.body.strategy) botState.activeStrategy = req.body.strategy;
-        if (stake) BOOM_CONFIG.stake = Number(stake);
-        if (takeProfit) BOOM_CONFIG.takeProfit = Number(takeProfit);
-        if (timeStopTicks) BOOM_CONFIG.timeStopTicks = Number(timeStopTicks);
-        if (rsiThreshold) BOOM_CONFIG.rsiThreshold = Number(rsiThreshold);
-        if (quickReloadSeconds) BOOM_CONFIG.quickReloadSeconds = Number(quickReloadSeconds);
+        if (stake) GOLD_CONFIG.stake = Number(stake);
+        if (takeProfit) GOLD_CONFIG.takeProfit = Number(takeProfit);
+        if (stopLoss) GOLD_CONFIG.stopLoss = Number(stopLoss);
+        if (multiplier) GOLD_CONFIG.multiplier = Number(multiplier);
+        if (rsiOverbought) { GOLD_CONFIG.rsiOverbought = Number(rsiOverbought); botState.rsiOverbought = Number(rsiOverbought); }
+        if (rsiOversold) { GOLD_CONFIG.rsiOversold = Number(rsiOversold); botState.rsiOversold = Number(rsiOversold); }
 
-        if (multiplier) {
-            // Ajustar a valores permitidos por Deriv para Boom (100, 200, 300, 400, 500)
-            const val = Number(multiplier);
-            if (val >= 450) BOOM_CONFIG.multiplier = 500;
-            else if (val >= 350) BOOM_CONFIG.multiplier = 400;
-            else if (val >= 250) BOOM_CONFIG.multiplier = 300;
-            else if (val >= 150) BOOM_CONFIG.multiplier = 200;
-            else BOOM_CONFIG.multiplier = 100;
-        }
-
-        if (stopLoss) BOOM_CONFIG.stopLoss = Number(stopLoss);
-        if (typeof useTickFrequency !== 'undefined') BOOM_CONFIG.useTickFrequency = Boolean(useTickFrequency);
-
+        // Actualizar el almacenamiento maestro
+        MARKET_CONFIGS[botState.symbol] = { ...GOLD_CONFIG };
         saveState();
-        console.log(`▶️ BOT BOOM 500 ENCENDIDO | Sniper Mode | Mult: ${BOOM_CONFIG.multiplier}`);
-        return res.json({ success: true, message: 'Bot Boom Sniper Activado', isRunning: true });
+        const marketName = botState.symbol === 'frxXAUUSD' ? 'ORO' : 'V100';
+        console.log(`▶️ SNIPER INICIADO | ${marketName} (${botState.symbol}) | Stake: ${GOLD_CONFIG.stake} | RSI: ${GOLD_CONFIG.rsiOversold}/${GOLD_CONFIG.rsiOverbought}`);
+        return res.json({ success: true, message: `Sniper en ${marketName} Activado` });
     }
-
     if (action === 'STOP') {
         botState.isRunning = false;
         saveState();
-        console.log(`⏸️ BOT BOOM 500 DETENIDO.`);
-        return res.json({ success: true, message: 'Bot Pausado', isRunning: false });
+        const marketName = botState.symbol === 'frxXAUUSD' ? 'ORO' : 'V100';
+        console.log(`⏸️ SNIPER ${marketName} DETENIDO.`);
+        return res.json({ success: true, message: 'Bot Pausado' });
     }
-
-    if (action === 'FORCE_CLEAR') {
-        botState.currentContractId = null;
-        botState.activeContracts = [];
-        if (botState.trackingContracts) botState.trackingContracts.clear();
-        isBuying = false;
-        saveState();
-        return res.json({ success: true, message: 'Trades de Boom limpiados y rastreador reseteado' });
-    }
-
     res.status(400).json({ success: false, error: 'Acción inválida' });
 });
 
-// --- ENDPOINT: TRADES MANUALES ---
-app.post('/api/trade', (req, res) => {
-    const { action } = req.body;
-    if (botState.currentContractId || isBuying) return res.status(400).json({ success: false, error: 'Ya hay una operación activa.' });
-
-    if (action === 'MULTUP' || action === 'MULTDOWN' || action === 'CALL' || action === 'PUT') {
-        executeTrade(); // En Boom solo usamos MULTUP para spikes
-        return res.json({ success: true, message: `Disparo manual enviado a BOOM 500` });
-    }
-});
-
-// --- ENDPOINT: CIERRE MANUAL ---
-app.post('/api/close', (req, res) => {
-    const { contractId } = req.body;
-    const idToClose = contractId || botState.currentContractId;
-    if (!idToClose) return res.status(400).json({ success: false, error: 'No hay nada que cerrar.' });
-
-    ws.send(JSON.stringify({ sell: idToClose, price: 0 }));
-    return res.json({ success: true, message: 'Orden de venta enviada' });
-});
-
-// --- ENDPOINT: LIMPIAR HISTORIAL ---
 app.post('/api/clear-history', (req, res) => {
     botState.tradeHistory = [];
-    botState.balanceHistory = [];
     botState.pnlSession = 0;
     botState.winsSession = 0;
     botState.lossesSession = 0;
     botState.totalTradesSession = 0;
-    botState.sessionDuration = 0;
     saveState();
-    return res.json({ success: true, message: 'Historial y estadísticas de sesión limpiados' });
+    return res.json({ success: true, message: 'Historial limpiado' });
 });
 
-const PORT = process.env.PORT || 8080;
-app.listen(PORT, () => {
-    console.log(`\n🚀 Iniciando Motor BOOM 500 SNIPER...`);
-    console.log(`🌍 Módulo Web en puerto ${PORT}`);
-
-    // --- CRONÓMETRO DE SESIÓN ---
-    setInterval(() => { if (botState.isRunning) botState.sessionDuration++; }, 1000);
-
-    // --- WATCHDOG DE PORTAFOLIO (Sincronización Real) ---
-    // Cada 5 segundos verificamos si Deriv realmente tiene contratos abiertos
-    setInterval(() => {
-        if (ws && ws.readyState === WebSocket.OPEN && botState.isRunning) {
-            ws.send(JSON.stringify({ portfolio: 1 }));
-        }
-    }, 5000);
-
-    // --- DETECTOR DE CONGELAMIENTO SÍSMICO (TICK HESITATION) ---
-    // Chequea el pulso en un loop paralelo ultrarrápido (cada 150ms)
-    setInterval(() => {
-        if (!botState.isRunning || !BOOM_CONFIG.useTickFrequency || botState.currentContractId || botState.cooldownRemaining > 0 || isBuying) return;
-        if (!botState.lastTickTime || tickHistory.length < 60) return;
-
-        const delay = Date.now() - botState.lastTickTime;
-        // Si hay silencio absoluto por más de 2500 milisegundos y menos de 3.5s (para evitar repeticiones)
-        if (delay >= 2500 && delay < 3500) {
-            const m1_candles = downsampleTicksToCandles(tickHistory, 60);
-            const rsi = calculateRSI(m1_candles, 14);
-
-            if (rsi >= 0 && rsi <= BOOM_CONFIG.rsiThreshold) {
-                console.log(`\n🧊🔥 ¡CONGELAMIENTO DETECTADO! (${delay}ms de silencio) | RSI: ${rsi.toFixed(1)} -> DISPARO ANTICIPADO DEL SNIPER 💥`);
-                // Evitar spam de triggers, moviendo el ultimo tick al futuro
-                botState.lastTickTime = Date.now() + 5000;
-                executeTrade();
-            }
-        }
-    }, 150);
-
-    // --- CIERRE PREVENTIVO POR HESITACIÓN (Sólo Trend Grinder) ---
-    setInterval(() => {
-        if (!botState.isRunning || botState.activeStrategy !== 'TREND_GRINDER' || !botState.currentContractId) return;
-        if (!botState.lastTickTime) return;
-
-        const delay = Date.now() - botState.lastTickTime;
-        const tracker = botState.trackingContracts.get(botState.currentContractId);
-
-        // Si hay silencio > 2.5s y tenemos ganancia real (aunque sea 0.01), cerramos por seguridad.
-        if (delay >= 2500 && botState.tradeProfit > 0 && tracker && !tracker.isClosing) {
-            console.log(`\n🛡️ CIERRE PREVENTIVO: Silencio de ${delay}ms detectado. Asegurando ganancia de +$${botState.tradeProfit.toFixed(2)} ante sospecha de Spike.`);
-            tracker.isClosing = true;
-            ws.send(JSON.stringify({ sell: botState.currentContractId, price: 0 }));
-        }
-    }, 200);
-
-    connectWebSocket();
+app.post('/api/sell-contract', (req, res) => {
+    const WebSocket = require('ws');
+    if (botState.currentContractId && ws && ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({ sell: botState.currentContractId, price: 0 }));
+        return res.json({ success: true, message: 'Orden de cierre enviada' });
+    }
+    res.status(400).json({ success: false, error: 'No hay contrato activo' });
 });
 
-// --- INDICADORES TÉCNICOS ---
-function calculateSMA(prices, period) {
-    if (prices.length < period) return null;
-    return prices.slice(-period).reduce((a, b) => a + b, 0) / period;
-}
+app.post('/api/switch-market', (req, res) => {
+    const { symbol } = req.body;
+    if (botState.isRunning) return res.status(400).json({ success: false, error: 'Detén el bot primero' });
 
-// Transformador de Ticks puros de Deriv a Velas Simuladas de 1 Minuto (M1).
-// Crucial para que los osciladores no colapsen a 0.0 por movimientos microscopicos repetidos.
-function downsampleTicksToCandles(ticks, ticksPerCandle = 60) {
-    let candles = [];
-    for (let i = 0; i < ticks.length; i += ticksPerCandle) {
-        candles.push(ticks[i]);
-    }
-    return candles;
-}
+    botState.symbol = symbol;
+    GOLD_CONFIG = MARKET_CONFIGS[symbol]; // Cargar la config de ese mercado
+    candleHistory = []; // Limpiar velas del mercado anterior
+    saveState();
 
-function calculateRSI(prices, period) {
-    if (prices.length < period + 1) return 50;
-    // Adaptado a Velas M1: Tomamos máximo histórico disponible suavizado (60 Velas)
-    let startIndex = prices.length - 60;
-    if (startIndex < 1) startIndex = 1;
+    // Reconectar con el nuevo símbolo
+    if (ws) ws.close();
 
-    let avgGain = 0;
-    let avgLoss = 0;
+    res.json({ success: true, symbol: botState.symbol, config: GOLD_CONFIG });
+});
 
-    // 1. SMA inicial (primeras 14 velas desde atrás)
-    for (let i = startIndex; i < startIndex + period; i++) {
-        let diff = prices[i] - prices[i - 1];
-        if (diff > 0) avgGain += diff;
-        else if (diff < 0) avgLoss += Math.abs(diff);
-    }
-    avgGain /= period;
-    avgLoss /= period;
-
-    // 2. Wilder Smoothing hasta el presente
-    for (let i = startIndex + period; i < prices.length; i++) {
-        let diff = prices[i] - prices[i - 1];
-        let currentGain = diff > 0 ? diff : 0;
-        let currentLoss = diff < 0 ? Math.abs(diff) : 0;
-
-        avgGain = ((avgGain * (period - 1)) + currentGain) / period;
-        avgLoss = ((avgLoss * (period - 1)) + currentLoss) / period;
-    }
-
-    if (avgLoss === 0) return 100;
-
-    let rs = avgGain / avgLoss;
-    return 100 - (100 / (1 + rs));
-}
-
-function calculateCCI(prices, period) {
-    if (prices.length < period) return 0;
-    const sma = calculateSMA(prices, period);
-    let meanDev = 0;
-    const slice = prices.slice(-period);
-    for (let p of slice) meanDev += Math.abs(p - sma);
-    meanDev = meanDev / period;
-    if (meanDev === 0) return 0;
-    return (prices[prices.length - 1] - sma) / (0.015 * meanDev);
-}
-
-// --- LÓGICA DE CONEXIÓN Y MERCADO ---
-function connectWebSocket() {
+// --- LÓGICA DE TRADING ---
+function connectDeriv() {
     ws = new WebSocket(`wss://ws.derivws.com/websockets/v3?app_id=${APP_ID}`);
 
     ws.on('open', () => {
-        console.log(`✅ Socket Abierto. Autorizando con Token...`);
-        ws.send(JSON.stringify({ authorize: process.env.DERIV_TOKEN || 'GzEO8iO7Y3N9Ym0' }));
-    });
-
-    ws.on('close', () => {
-        console.log('⚠️ Conexión perdida. Reintentando en 5 segundos...');
-        setTimeout(connectWebSocket, 5000);
-    });
-
-    ws.on('error', (err) => {
-        console.error('❌ Error de Socket:', err.message);
-        ws.close();
+        const marketName = botState.symbol === 'frxXAUUSD' ? 'ORO' : 'V100';
+        console.log(`✅ Conectado a Deriv (Módulo ${marketName})`);
+        // Priorizar token del entorno, luego token manual del estado si existiera, o el fallback
+        const token = process.env.DERIV_TOKEN || 'TSuD37g6G593Uis';
+        if (token === 'TSuD37g6G593Uis') {
+            console.log("⚠️ ATENCIÓN: Usando token de respaldo. Asegúrate de configurar DERIV_TOKEN en Railway.");
+        }
+        ws.send(JSON.stringify({ authorize: token }));
     });
 
     ws.on('message', (data) => {
         const msg = JSON.parse(data);
-
-        if (msg.error) {
-            const errMsg = (msg.error.message || '').toLowerCase();
-            console.error(`⚠️ Error en BOOM: ${msg.error.message}`);
-            isBuying = false;
-
-            if (errMsg.includes('100 contracts') || errMsg.includes('more than 100')) {
-                console.log('🛑 LÍMITE ALCANZADO: Tienes 100+ contratos abiertos. Pausando disparos 2 min.');
-                botState.cooldownRemaining = 120;
-                const timer = setInterval(() => {
-                    if (botState.cooldownRemaining > 0) botState.cooldownRemaining--;
-                    else clearInterval(timer);
-                }, 1000);
-            }
-            return;
-        }
-
         if (msg.msg_type === 'authorize') {
-            console.log(`✅ DERIV CONECTADO - Usuario: ${msg.authorize.fullname}`);
-            // --- CALENTAMIENTO INSTANTÁNEO (WARM START) ---
-            console.log(`🚀 Solicitando historial de ticks para arranque inmediato...`);
+            console.log(`✅ Autenticado con éxito: ${msg.authorize.fullname || 'Usuario'}`);
+            ws.send(JSON.stringify({ subscribe: 1, ticks: botState.symbol }));
             ws.send(JSON.stringify({
-                ticks_history: SYMBOL,
-                count: 4000,
+                ticks_history: botState.symbol,
                 end: 'latest',
-                style: 'ticks'
-            }));
-
-            ws.send(JSON.stringify({ subscribe: 1, ticks: SYMBOL }));
-            ws.send(JSON.stringify({ balance: 1, subscribe: 1 }));
-
-            // --- RECOUP: RECUPERAR SUSCRIPCIÓN TRAS REINICIO ---
-            if (botState.currentContractId) {
-                console.log(`♻️ Recuperando seguimiento del contrato [${botState.currentContractId}]...`);
-                ws.send(JSON.stringify({
-                    proposal_open_contract: 1,
-                    contract_id: botState.currentContractId,
-                    subscribe: 1
-                }));
-            }
-        }
-
-        // --- MANEJO DE HISTORIAL PARA WARM START ---
-        if (msg.msg_type === 'history') {
-            tickHistory = [...msg.history.prices];
-            console.log(`📡 Memoria cargada instantáneamente: ${tickHistory.length} ticks. 🔥 SISTEMA LISTO.`);
-        }
-
-        if (msg.msg_type === 'balance') {
-            botState.balance = msg.balance.balance;
-            console.log(`💰 SALDO: $${botState.balance.toFixed(2)}`);
-        }
-        if (msg.msg_type === 'tick') {
-            const quote = parseFloat(msg.tick.quote);
-            tickHistory.push(quote);
-            if (tickHistory.length > 4050) tickHistory.shift();
-
-            if (botState.currentContractId) {
-                botState.ticksInTrade = (botState.ticksInTrade || 0) + 1;
-                // Calculamos segundos desde el inicio del trade para el Live View
-                if (botState.tradeStartTime) {
-                    botState.tradeSeconds = Math.floor((Date.now() - botState.tradeStartTime) / 1000);
-                }
-            } else {
-                botState.tradeSeconds = 0;
-                botState.tradeProfit = 0;
-            }
-
-            // --- CIERRE DE EMERGENCIA (Si el contrato se queda huérfano) ---
-            if (botState.currentContractId && botState.tradeSeconds > (BOOM_CONFIG.timeStopTicks + 30)) {
-                if (botState.tradeSeconds % 30 === 0) { // Cada 30s reintentamos vender
-                    console.log(`🚨 EMERGENCIA: Contrato [${botState.currentContractId}] excedió tiempo (${botState.tradeSeconds}s). Forzando venta...`);
-                    ws.send(JSON.stringify({ sell: botState.currentContractId, price: 0 }));
-
-                    // Si ya es un tiempo ridículo (más de 10 min), limpiar memoria local por las malas
-                    if (botState.tradeSeconds > 600) {
-                        console.log("💣 Tiempo absurdo detectado. Reseteando botState localmente.");
-                        botState.currentContractId = null;
-                        botState.trackingContracts.clear();
-                        isBuying = false;
-                    }
-                }
-            }
-
-            processTick(quote);
-        }
-
-        if (msg.msg_type === 'buy') {
-            const contractId = msg.buy.contract_id;
-
-            // Si ya teníamos uno, ignorar este (para evitar dobles involuntarios)
-            if (botState.currentContractId) {
-                console.log(`⚠️ Ignorando duplicado de compra [${contractId}] para no dejar huérfanos.`);
-                return;
-            }
-
-            botState.currentContractId = contractId;
-            botState.ticksInTrade = 0;
-            botState.trendCandleCount = 0; // Reset para Trend Grinder
-            botState.entryPriceTrend = tickHistory[tickHistory.length - 1] || 0;
-            botState.tradeStartTime = Date.now();
-            isBuying = false;
-
-            // Suscribirnos al contrato manual y explícitamente (vital para Multiplicadores)
-            ws.send(JSON.stringify({
-                proposal_open_contract: 1,
-                contract_id: contractId,
+                count: 100,
+                style: 'candles',
+                granularity: GOLD_CONFIG.granularity,
                 subscribe: 1
             }));
-            console.log(`📡 CONTRATO ABIERTO [${contractId}]. Cronómetro activo: Esperando ${BOOM_CONFIG.timeStopTicks} SEGUNDOS...`);
+            ws.send(JSON.stringify({ balance: 1, subscribe: 1 }));
+            console.log(`📡 Suscripciones enviadas para ${botState.symbol}`);
+        }
+
+        if (msg.error) {
+            console.error(`⚠️ Error de Deriv [${msg.msg_type || 'N/A'}]: ${msg.error.message}`);
+            if (msg.msg_type === 'ticks' || msg.msg_type === 'tick') {
+                if (botState.symbol === 'frxXAUUSD') {
+                    console.log(`⚠️ Re-intentando con símbolo alternativo: XAUUSD`);
+                    botState.symbol = 'XAUUSD';
+                    ws.send(JSON.stringify({ subscribe: 1, ticks: 'XAUUSD' }));
+                    ws.send(JSON.stringify({
+                        ticks_history: 'XAUUSD',
+                        end: 'latest',
+                        count: 100,
+                        style: 'candles',
+                        granularity: GOLD_CONFIG.granularity,
+                        subscribe: 1
+                    }));
+                }
+            }
+        }
+
+        if (msg.msg_type === 'balance') botState.balance = msg.balance.balance;
+
+        if (msg.msg_type === 'candles') {
+            candleHistory = msg.candles.map(c => ({
+                epoch: c.epoch,
+                open: c.open,
+                high: c.high,
+                low: c.low,
+                close: c.close
+            }));
+            console.log(`📡 Historial cargado: ${candleHistory.length} velas.`);
+            processStrategy();
+        }
+
+        if (msg.msg_type === 'ohlc' && msg.ohlc) {
+            const ohlc = msg.ohlc;
+            const existing = candleHistory.find(c => c.epoch === ohlc.open_time);
+            if (existing) {
+                existing.close = ohlc.close;
+                existing.high = ohlc.high;
+                existing.low = ohlc.low;
+            } else {
+                candleHistory.push({ epoch: ohlc.open_time, open: ohlc.open, high: ohlc.high, low: ohlc.low, close: ohlc.close });
+                if (candleHistory.length > 100) candleHistory.shift();
+            }
+            processStrategy();
+        }
+
+        if (msg.msg_type === 'tick' && msg.tick) {
+            const quote = parseFloat(msg.tick.quote);
+            if (!isNaN(quote)) {
+                botState.lastTickPrice = quote;
+                if (botState.currentContractId && botState.tradeStartTime) {
+                    botState.tradeSeconds = Math.floor((Date.now() - botState.tradeStartTime) / 1000);
+                }
+            }
+        }
+
+        if (msg.msg_type === 'buy' && msg.buy) {
+            botState.currentContractId = msg.buy.contract_id;
+            botState.tradeStartTime = Date.now();
+            isBuying = false;
+            console.log(`🎯 POSICIÓN ABIERTA [${msg.buy.contract_id}]`);
+            ws.send(JSON.stringify({
+                proposal_open_contract: 1,
+                contract_id: msg.buy.contract_id,
+                subscribe: 1
+            }));
+        } else if (msg.msg_type === 'buy' && msg.error) {
+            isBuying = false;
+            console.log(`⚠️ ERROR AL COMPRAR: ${msg.error.message}`);
         }
 
         if (msg.msg_type === 'proposal_open_contract') {
-            const contract = msg.proposal_open_contract;
-            if (!contract) return;
-
-            const cId = contract.contract_id;
-
-            if (contract.is_sold) {
-                // Limpiar siempre el ID actual primero
-                if (botState.currentContractId === cId) {
-                    botState.currentContractId = null;
-                    isBuying = false;
-                }
-
-                if (botState.trackingContracts.has(cId)) {
-                    finalizeTrade(contract);
-                    botState.trackingContracts.delete(cId);
-                    console.log(`✅ Contrato [${cId}] cerrado y purgado.`);
-                }
-                return;
-            }
-
-            // Si es un contrato nuevo que no estamos trackeando, anotar su tiempo de inicio
-            if (!botState.trackingContracts.has(cId)) {
-                botState.trackingContracts.set(cId, {
-                    startTime: Date.now(),
-                    lastUpdate: Date.now()
-                });
-            }
-
-            const tracker = botState.trackingContracts.get(cId);
-            const secondsElapsed = Math.floor((Date.now() - tracker.startTime) / 1000);
-            const profit = parseFloat(contract.profit);
-
-            botState.currentContractId = cId;
-            botState.activeContracts = [contract];
-            botState.tradeProfit = profit;
-            botState.tradeSeconds = secondsElapsed;
-
-            // --- FILTRO ANTI-SPIKE (Para Trend Grinder) ---
-            if (botState.activeStrategy === 'TREND_GRINDER' && !tracker.isClosing) {
-                // Si el precio sube (en Boom esto es Spike), cerrar YA.
-                // MultiDown pierde dinero si el precio sube.
-                const currentTick = tickHistory[tickHistory.length - 1];
-                if (currentTick > botState.entryPriceTrend + 0.1) {
-                    console.log(`🛡️ FILTRO ANTI-SPIKE: Movimiento alcista detectado. Cerrando Trend Grinder...`);
-                    tracker.isClosing = true;
-                    ws.send(JSON.stringify({ sell: cId, price: 0 }));
-                    return;
-                }
-
-                // Cierre por cosecha de 5 velas (aprox 300 ticks)
-                if (botState.ticksInTrade >= 300) {
-                    console.log(`🌾 COSECHA COMPLETADA: 5 velas trend recolectadas. Cerrando...`);
-                    tracker.isClosing = true;
-                    ws.send(JSON.stringify({ sell: cId, price: 0 }));
-                    return;
-                }
-            }
-
-            if (tracker.isClosing) return;
-
-
-            // LOGICA DE CIERRE INDIVIDUAL
-            if (profit >= BOOM_CONFIG.takeProfit) {
-                console.log(`🎯 TP [${cId}]: +$${profit.toFixed(2)}. Enviando orden de venta...`);
-                tracker.isClosing = true;
-                ws.send(JSON.stringify({ sell: cId, price: 0 }));
-            } else if (profit <= -Math.abs(BOOM_CONFIG.stopLoss)) {
-                console.log(`🛡️ SL [${cId}]: -$${Math.abs(profit).toFixed(2)}. Enviando orden de venta...`);
-                tracker.isClosing = true;
-                ws.send(JSON.stringify({ sell: cId, price: 0 }));
-            } else if (secondsElapsed >= BOOM_CONFIG.timeStopTicks && profit < 2.00) {
-                console.log(`⏱️ TS [${cId}]: ${secondsElapsed}s >= ${BOOM_CONFIG.timeStopTicks}s. Enviando orden de venta...`);
-                tracker.isClosing = true;
-                ws.send(JSON.stringify({ sell: cId, price: 0 }));
-            }
-        }
-
-        // --- WATCHDOG SIMPLE: LIBERAR SI NO HAY NADA ABIERTO ---
-        if (msg.msg_type === 'portfolio') {
-            const hasOpen = msg.portfolio && msg.portfolio.contracts && msg.portfolio.contracts.length > 0;
-            if (!hasOpen && (botState.currentContractId || isBuying || botState.trackingContracts.size > 0)) {
-                console.log("✨ Watchdog: Portafolio limpio en Deriv. Liberando Sniper.");
-                botState.currentContractId = null;
-                botState.trackingContracts.clear();
-                isBuying = false;
-            }
+            const c = msg.proposal_open_contract;
+            if (!c) return;
+            botState.tradeProfit = c.profit;
+            if (c.is_sold) finalizeTrade(c);
         }
     });
+
+    ws.on('close', () => setTimeout(connectDeriv, 5000));
 }
 
-function processTick(quote) {
-    botState.lastTickTime = Date.now();
+function processStrategy() {
+    if (candleHistory.length < GOLD_CONFIG.emaPeriod) return;
 
-    // 1. Transformar miles de ticks ruidosos en Velas Sólidas M1
-    const m1_candles = downsampleTicksToCandles(tickHistory, 60);
+    const closes = candleHistory.map(c => c.close);
+    const rsi = calculateRSI(closes, GOLD_CONFIG.rsiPeriod);
+    const ema = calculateEMA(closes, GOLD_CONFIG.emaPeriod);
+    const currentPrice = closes[closes.length - 1];
 
-    // 2. Aplicar RSI Clásico 14 Periodos sobre las velas M1
-    const rsi = calculateRSI(m1_candles, 14);
-    botState.currentRSI = isNaN(rsi) ? 50 : rsi;
+    const lastRSI = botState.lastRSI;
+    botState.currentRSI = rsi;
+    botState.currentEMA = ema;
+    botState.lastRSI = rsi; // Actualizar para el siguiente tick
 
-    // --- RADAR VISUAL EN CONSOLA (CADA 10 SEGUNDOS) ---
-    const now = Date.now();
-    if (now - botState.lastScanLogTime > 10000) {
-        let zona = "⏳ ZONA NEUTRAL (Paciencia...)";
-        const isSniper = (botState.activeStrategy === 'SNIPER');
+    if (!botState.isRunning || botState.currentContractId || isBuying) return;
 
-        if (isSniper) {
-            if (rsi <= BOOM_CONFIG.rsiThreshold) zona = `🎯 ALERTA: ZONA DE DISPARO (RSI <= ${BOOM_CONFIG.rsiThreshold})`;
-            else if (rsi <= 35) zona = "⚠️ ACERCÁNDOSE A SOBREVENTA";
-            else if (rsi >= 70) zona = "🔥 SOBRECOMPRA (Muy lejos de disparar)";
-        } else {
-            // Trend Grinder
-            if (rsi >= 70) zona = `🎯 ALERTA: ZONA DE COSECHA (RSI >= 70)`;
-            else if (rsi >= 60) zona = "⚠️ SUBIENDO A ZONA DE COSECHA";
-            else zona = "📉 ESPERANDO SUBIDA (RSI bajo)";
-        }
-
-        let motorStatus = isSniper ? "CAZANDO SPIKES" : "COSECHANDO TREND";
-        let estadoBot = botState.isRunning
-            ? (botState.cooldownRemaining > 0 ? `ENFRIAMIENTO (${botState.cooldownRemaining}s)` : motorStatus)
-            : "APAGADO";
-
-        console.log(`📡 RADAR BOOM 500 -> RSI: ${rsi.toFixed(1)} | Mercado: ${zona} | Motor: ${estadoBot}`);
-        botState.lastScanLogTime = now;
+    // LÓGICA DE CRUCE (Anti-ametralladora)
+    // Buy: RSI cruza hacia arriba el nivel de sobreventa (venía de < 30 y ahora > 30)
+    if (lastRSI <= GOLD_CONFIG.rsiOversold && rsi > GOLD_CONFIG.rsiOversold && currentPrice < ema) {
+        executeTrade('MULTUP');
+        console.log(`📡 SEÑAL COMPRA: RSI cruzó ${GOLD_CONFIG.rsiOversold} hacia arriba.`);
     }
-
-    if (!botState.isRunning) return;
-
-    // Monitor de Seguridad: Si isBuying se queda pegado más de 5 seg, resetear.
-    if (isBuying && now - (botState.lastBuyAttemptTime || 0) > 5000) {
-        console.log("⚠️ Reseteando bandera de compra por timeout...");
-        isBuying = false;
-    }
-
-    // BLOQUEO MAESTRO: Un disparo a la vez + Protección de Ráfaga 5s
-    const isRecentlyTraded = (now - botState.lastTradeTime < 5000);
-
-    if (botState.currentContractId || isBuying || botState.cooldownRemaining > 0 || isRecentlyTraded) {
-        if (rsi <= BOOM_CONFIG.rsiThreshold && now - (botState.lastSkipLogTime || 0) > 6000) {
-            let razon = botState.currentContractId ? "DISPARO EN VIVO" : (isBuying ? "ABRIENDO CONTRATO..." : "ENFRIAMIENTO / PROTECCIÓN");
-            console.log(`ℹ️ SNIPER BLOQUEADO: RSI en ${rsi.toFixed(1)} | Estado: ${razon}`);
-            botState.lastSkipLogTime = now;
-        }
-        return;
-    }
-
-    // El CCI y el SMA también usan velas y datos limpios de M1
-    const cci = calculateCCI(m1_candles, 14);
-    const sma50 = calculateSMA(m1_candles, 50);
-
-    if (!sma50 || isNaN(rsi) || isNaN(cci)) return;
-
-    // --- REGLAS SNIPER BOOM (Refinadas) ---
-    if (botState.activeStrategy === 'SNIPER') {
-        if (rsi >= 0 && rsi <= BOOM_CONFIG.rsiThreshold) {
-            if (BOOM_CONFIG.useTickFrequency) {
-                // No disparamos normal. Esperaremos a que el motor paralelo detecte el congelamiento.
-                if (Date.now() - (botState.lastFreezeLogTime || 0) > 3000) {
-                    console.log(`🧊 RSI Letal (${rsi.toFixed(1)}). Sniper apuntando. Esperando silencio (Tick Hesitation)...`);
-                    botState.lastFreezeLogTime = Date.now();
-                }
-            } else {
-                console.log(`💥 SEÑAL ACTIVA: RSI cayó a ${rsi.toFixed(1)} (Meta: ${BOOM_CONFIG.rsiThreshold}) -> ¡Disparo inminente! (CCI: ${cci.toFixed(0)})`);
-                executeTrade();
-            }
-        }
-    }
-
-    // --- REGLAS TREND GRINDER (Cosechador de Velas) ---
-    if (botState.activeStrategy === 'TREND_GRINDER') {
-        // Filtro de Agotamiento: RSI alto + Confirmación de Tick bajista
-        if (rsi >= 70) {
-            const currentPrice = tickHistory[tickHistory.length - 1];
-            const prevPrice = tickHistory[tickHistory.length - 2];
-
-            if (prevPrice && currentPrice < prevPrice) {
-                console.log(`🌾 TREND GRINDER: RSI en ${rsi.toFixed(1)} (Agotamiento Confirmado). Iniciando cosecha...`);
-                executeTrade();
-            } else {
-                // Loguear espera cada 3 segundos para no saturar
-                if (Date.now() - botState.lastTrendWaitLog > 3000) {
-                    console.log(`⏳ TREND GRINDER: RSI Alto (${rsi.toFixed(1)}). Esperando que el precio deje de subir...`);
-                    botState.lastTrendWaitLog = Date.now();
-                }
-            }
-        }
+    // Sell: RSI cruza hacia abajo el nivel de sobrecompra (venía de > 70 y ahora < 70)
+    else if (lastRSI >= GOLD_CONFIG.rsiOverbought && rsi < GOLD_CONFIG.rsiOverbought && currentPrice > ema) {
+        executeTrade('MULTDOWN');
+        console.log(`📡 SEÑAL VENTA: RSI cruzó ${GOLD_CONFIG.rsiOverbought} hacia abajo.`);
     }
 }
 
-function executeTrade() {
+function executeTrade(type) {
+    if (isBuying) return;
     isBuying = true;
-    botState.lastBuyAttemptTime = Date.now();
-    botState.lastTradeTime = Date.now(); // Activar protección de ráfaga
-    const isSniper = (botState.activeStrategy === 'SNIPER');
     const req = {
         buy: 1,
-        price: BOOM_CONFIG.stake,
+        price: GOLD_CONFIG.stake,
         parameters: {
-            amount: BOOM_CONFIG.stake,
+            amount: GOLD_CONFIG.stake,
             basis: 'stake',
-            contract_type: isSniper ? 'MULTUP' : 'MULTDOWN',
+            contract_type: type,
             currency: 'USD',
-            symbol: SYMBOL,
-            multiplier: BOOM_CONFIG.multiplier
+            symbol: botState.symbol,
+            multiplier: GOLD_CONFIG.multiplier,
+            limit_order: {
+                // Cálculo dinámico según precio actual: (Movimiento / Precio) * Stake * Multiplicador
+                take_profit: (GOLD_CONFIG.takeProfit / botState.lastTickPrice) * GOLD_CONFIG.stake * GOLD_CONFIG.multiplier,
+                stop_loss: (GOLD_CONFIG.stopLoss / botState.lastTickPrice) * GOLD_CONFIG.stake * GOLD_CONFIG.multiplier
+            }
         }
     };
     ws.send(JSON.stringify(req));
-
-    botState.ticksInTrade = 0;
-
-    // BLOQUEO EXTENDIDO: Protección por si falla el WebSocket de respuesta 'buy'
-    setTimeout(() => { isBuying = false; }, 10000);
 }
 
-function finalizeTrade(contract) {
-    const profit = parseFloat(contract.profit);
+function finalizeTrade(c) {
+    const profit = parseFloat(c.profit);
     botState.pnlSession += profit;
     botState.totalTradesSession++;
+    if (profit > 0) botState.winsSession++; else botState.lossesSession++;
 
-    if (profit > 0) {
-        botState.winsSession++;
-        if (botState.activeStrategy === 'SNIPER') {
-            console.log(`🎯 ¡SPIKE CAZADO! Ganancia: +$${profit.toFixed(2)} 💰💰💰`);
-        } else {
-            console.log(`🌾 ¡COSECHA EXITOSA! Ganancia: +$${profit.toFixed(2)} 💰💰💰`);
-        }
-        botState.cooldownRemaining = BOOM_CONFIG.cooldownSeconds; // 45s
-    } else {
-        botState.lossesSession++;
-        console.log(`🛡️ BALA PERDIDA: -$${Math.abs(profit).toFixed(2)} (Bajo control)`);
-        botState.cooldownRemaining = BOOM_CONFIG.quickReloadSeconds; // Ej: 3s
-    }
-
-    // --- REGISTRO DE TRADING HISTORIAL (Máximo 10) ---
-    const now = new Date();
     botState.tradeHistory.unshift({
-        id: contract.contract_id,
-        type: (contract.contract_type === 'MULTUP') ? 'BUY 🚀' : 'SELL ↘️',
+        type: c.contract_type === 'MULTUP' ? 'BUY 📈' : 'SELL 📉',
         profit: profit,
-        timestamp: now.toLocaleTimeString(),
-        duration: Math.floor((now.getTime() / 1000) - contract.date_start) + 's'
+        time: new Date().toLocaleTimeString()
     });
-    if (botState.tradeHistory.length > 10) botState.tradeHistory.pop();
+    if (botState.tradeHistory.length > 50) botState.tradeHistory.pop();
 
     botState.currentContractId = null;
-    botState.activeContracts = [];
-
-    // --- LÓGICA DE RECARGA: RÁFAGA vs DESCANSO ---
-    // Si ganamos, hay nuevo trend = Enfriamiento largo (45s)
-    // Si perdimos el Time-Stop, el Spike podría estar a un segundo de salir = Recarga rapida (3s)
-    botState.cooldownRemaining = (profit > 0) ? BOOM_CONFIG.cooldownSeconds : 3;
-
-    if (cooldownIntervalId) clearInterval(cooldownIntervalId);
-    cooldownIntervalId = setInterval(() => {
-        if (botState.cooldownRemaining > 0) botState.cooldownRemaining--;
-        else clearInterval(cooldownIntervalId);
-    }, 1000);
-
+    botState.tradeStartTime = null;
     saveState();
 }
 
-function saveState() {
-    try { fs.writeFileSync(STATE_FILE, JSON.stringify(botState)); } catch (e) { }
+function calculateRSI(prices, period) {
+    let avgGain = 0, avgLoss = 0;
+    for (let i = 1; i <= period; i++) {
+        let diff = prices[i] - prices[i - 1];
+        if (diff > 0) avgGain += diff; else avgLoss += Math.abs(diff);
+    }
+    avgGain /= period; avgLoss /= period;
+    for (let i = period + 1; i < prices.length; i++) {
+        let diff = prices[i] - prices[i - 1];
+        let cg = diff > 0 ? diff : 0;
+        let cl = diff < 0 ? Math.abs(diff) : 0;
+        avgGain = (avgGain * (period - 1) + cg) / period;
+        avgLoss = (avgLoss * (period - 1) + cl) / period;
+    }
+    return 100 - (100 / (1 + (avgGain / avgLoss)));
 }
+
+function calculateEMA(prices, period) {
+    let k = 2 / (period + 1);
+    let ema = prices[0];
+    for (let i = 1; i < prices.length; i++) ema = (prices[i] * k) + (ema * (1 - k));
+    return ema;
+}
+
+function saveState() {
+    try {
+        const data = {
+            botState: botState,
+            marketConfigs: MARKET_CONFIGS
+        };
+        fs.writeFileSync(STATE_FILE, JSON.stringify(data));
+    } catch (e) { }
+}
+
+const PORT = process.env.PORT || 8080;
+app.listen(PORT, () => {
+    console.log(`🚀 SERVIDOR ORO SNIPER LISTO EN PUERTO ${PORT}`);
+    connectDeriv();
+});
