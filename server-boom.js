@@ -335,23 +335,28 @@ function processStrategy() {
 function executeTrade(type) {
     if (isBuying) return;
     isBuying = true;
+    const roundedStake = parseFloat(Number(GOLD_CONFIG.stake).toFixed(2));
+    const roundedTP = parseFloat(Number(GOLD_CONFIG.takeProfit).toFixed(2));
+    const roundedSL = parseFloat(Number(GOLD_CONFIG.stopLoss).toFixed(2));
+
     const req = {
         buy: 1,
-        price: GOLD_CONFIG.stake,
+        price: roundedStake,
         parameters: {
-            amount: GOLD_CONFIG.stake,
+            amount: roundedStake,
             basis: 'stake',
             contract_type: type,
             currency: 'USD',
             symbol: botState.symbol,
-            multiplier: GOLD_CONFIG.multiplier,
+            multiplier: Math.round(GOLD_CONFIG.multiplier),
             limit_order: {
-                // En contratos de multiplicadores, TP y SL son montos DIRECTOS en USD
-                take_profit: parseFloat(GOLD_CONFIG.takeProfit.toFixed(2)),
-                stop_loss: parseFloat(GOLD_CONFIG.stopLoss.toFixed(2))
+                take_profit: roundedTP,
+                stop_loss: roundedSL
             }
         }
     };
+
+    console.log(`📡 ENVIANDO COMPRA: ${JSON.stringify(req)}`);
     ws.send(JSON.stringify(req));
 }
 
