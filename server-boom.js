@@ -241,7 +241,7 @@ function connectDeriv() {
             }
         }
 
-        if (msg.msg_type === 'balance') botState.balance = msg.balance.balance;
+        if (msg.msg_type === 'balance' && !msg.error && msg.balance) botState.balance = msg.balance.balance;
 
         if (msg.msg_type === 'candles') {
             candleHistory = msg.candles.map(c => ({
@@ -384,6 +384,7 @@ function finalizeTrade(c) {
 
     botState.currentContractId = null;
     botState.tradeStartTime = null;
+    console.log(`✅ OPERACIÓN CERRADA: Beneficio ${profit.toFixed(2)} USD`);
     saveState();
 }
 
