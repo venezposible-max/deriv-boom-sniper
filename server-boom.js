@@ -154,6 +154,14 @@ app.post('/api/switch-market', (req, res) => {
     botState.symbol = symbol;
     botState.marketStatus = 'SEARCHING';
     botState.lastTickPrice = 0;
+
+    // Libera operaciones atrapadas del mercado anterior (para que puedas operar en el nuevo)
+    botState.currentContractId = null;
+    isBuying = false;
+    botState.tradeProfit = 0;
+    botState.tradeStartTime = null;
+    botState.tradeSeconds = 0;
+
     GOLD_CONFIG = MARKET_CONFIGS[symbol]; // Cargar la config de ese mercado
     candleHistory = []; // Limpiar velas del mercado anterior
     saveState();
