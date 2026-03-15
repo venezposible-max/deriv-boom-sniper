@@ -498,13 +498,21 @@ function processStrategy() {
 
     // 1. COMPRA (ChoCh alcista)
     if (isBreakUp && momentumUp > minForce) {
-        console.log(`🔥 [CHOCH UP] Breakout High: ${lastSH} | Price: ${currentPrice} | Momentum: +${momentumUp.toFixed(2)} | Accel Real: ${trueAcceleration.toFixed(2)}`);
-        executeDynamicTrade('MULTUP', lastSL, currentPrice);
+        if (trueAcceleration >= 0) {
+            console.log(`🔥 [CHOCH UP] Breakout High: ${lastSH} | Price: ${currentPrice} | Momentum: +${momentumUp.toFixed(2)} | Accel Real: ${trueAcceleration.toFixed(2)}`);
+            executeDynamicTrade('MULTUP', lastSL, currentPrice);
+        } else {
+            console.log(`⚠️ [RECHAZADO UP] Momentum (+${momentumUp.toFixed(2)}) > ${minForce} PERO Aceleración Negativa (${trueAcceleration.toFixed(2)}). Trampa evitada.`);
+        }
     }
     // 2. VENTA (ChoCh bajista)
     else if (isBreakDown && momentumDown > minForce) {
-        console.log(`🔥 [CHOCH DOWN] Breakout Low: ${lastSL} | Price: ${currentPrice} | Momentum: -${momentumDown.toFixed(2)} | Accel Real: ${trueAcceleration.toFixed(2)}`);
-        executeDynamicTrade('MULTDOWN', lastSH, currentPrice);
+        if (trueAcceleration >= 0) {
+            console.log(`🔥 [CHOCH DOWN] Breakout Low: ${lastSL} | Price: ${currentPrice} | Momentum: -${momentumDown.toFixed(2)} | Accel Real: ${trueAcceleration.toFixed(2)}`);
+            executeDynamicTrade('MULTDOWN', lastSH, currentPrice);
+        } else {
+            console.log(`⚠️ [RECHAZADO DOWN] Momentum (-${momentumDown.toFixed(2)}) > ${minForce} PERO Aceleración Negativa (${trueAcceleration.toFixed(2)}). Trampa evitada.`);
+        }
     }
 
 

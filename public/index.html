@@ -451,9 +451,15 @@
                 else sig.style.color = "#888";
 
                 const accelBar = document.getElementById('accelBar');
-                const accelVal = Math.min(100, (data.tickAcceleration || 0) * 1000);
+                const rawAccel = data.tickAcceleration || 0;
+                const accelVal = Math.min(100, Math.abs(rawAccel) * 1000); // Math.abs para evitar CSS negativo
                 accelBar.style.width = accelVal + "%";
-                accelBar.style.backgroundColor = accelVal > 50 ? "#00ffa3" : "#ffd700";
+                // Color verde para UP, rojo para DOWN, amarillo para neutro
+                if (Math.abs(rawAccel) * 1000 > 50) {
+                    accelBar.style.backgroundColor = rawAccel > 0 ? "#00ffa3" : "#ff4d4d";
+                } else {
+                    accelBar.style.backgroundColor = "#ffd700";
+                }
 
                 document.getElementById('pnlValue').innerText = "$" + data.pnlSession.toFixed(2);
                 document.getElementById('pnlValue').className = "stat-value " + (data.pnlSession >= 0 ? "green" : "red");
