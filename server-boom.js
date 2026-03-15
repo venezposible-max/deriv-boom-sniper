@@ -335,10 +335,10 @@ function connectDeriv() {
             if (!isNaN(quote)) {
                 botState.lastTickPrice = quote;
 
-                // Acceleration Calculation
+                // Acceleration Calculation for UI and global momentum reference
                 let accel = 0;
                 if (botState.tickBuffer.length >= 5) {
-                    accel = Math.abs(botState.tickBuffer[botState.tickBuffer.length - 1] - botState.tickBuffer[botState.tickBuffer.length - 5]);
+                    accel = botState.tickBuffer[botState.tickBuffer.length - 1] - botState.tickBuffer[botState.tickBuffer.length - 5];
                 }
                 botState.tickAcceleration = accel;
 
