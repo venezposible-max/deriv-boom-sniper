@@ -342,10 +342,10 @@ function connectDeriv() {
                 if (botState.currentContractId && botState.isRunning) {
                     const contract = botState.activeContracts.find(c => c.id === botState.currentContractId);
                     if (contract && contract.entryPrice) {
-                        // Calcular ganancia real-time
-                        let diff = quote - contract.entryPrice;
-                        if (contract.type === 'MULTDOWN') diff = -diff;
-                        const liveProfit = diff * contract.multiplier * contract.stake;
+                        // Calcular ganancia real-time corregida (Fórmula Multiplicadores)
+                        let priceChangePct = (quote - contract.entryPrice) / contract.entryPrice;
+                        if (contract.type === 'MULTDOWN') priceChangePct = -priceChangePct;
+                        const liveProfit = priceChangePct * contract.multiplier * contract.stake;
 
                         botState.tradeProfit = liveProfit; // Actualizar UI
 
