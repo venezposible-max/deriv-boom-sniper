@@ -8,7 +8,7 @@ const fs = require('fs');
 // 🥇 GOLD SNIPER PRO (XAU/USD) - 2026
 // ==========================================
 const APP_ID = 1089;
-const STATE_FILE = path.join(__dirname, 'gold-state.json');
+const STATE_FILE = path.join(__dirname, 'persistent-state-boom.json');
 
 let MARKET_CONFIGS = {
     'frxXAUUSD': {
