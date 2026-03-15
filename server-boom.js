@@ -661,3 +661,15 @@ app.listen(PORT, () => {
     console.log('🚀 V100 DUAL SNIPER ENGINE READY - V_0_0_5_FIX (Multi-Trade + Time-Fix)');
     connectDeriv();
 });
+
+// --- ANTI-CRASH SYSTEM PARA SERVIDORES DE PRODUCCIÓN ---
+// Evita que el servidor Node.js se caiga por completo si hay un error no manejado
+process.on('uncaughtException', (err) => {
+    console.error('🔥 [CRÍTICO] Excepción no atrapada:', err);
+    saveState(); // Intenta salvar el estado antes de continuar
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+    console.error('🔥 [CRÍTICO] Promesa rechazada no manejada:', reason);
+    saveState();
+});
