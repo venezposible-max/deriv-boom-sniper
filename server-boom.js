@@ -335,20 +335,24 @@ function connectDeriv() {
             if (!isNaN(quote)) {
                 botState.lastTickPrice = quote;
 
-                // Acceleration Calculation for UI and global momentum reference
+                // 1. Guardar el tick actual en el buffer primero
+                botState.tickBuffer.push(quote);
+                if (botState.tickBuffer.length > 10) botState.tickBuffer.shift();
+
+                // 2. Calcular Momentum (Velocidad en 5 pasos) para la Interfaz y Referencia
                 let accel = 0;
                 if (botState.tickBuffer.length >= 5) {
                     accel = botState.tickBuffer[botState.tickBuffer.length - 1] - botState.tickBuffer[botState.tickBuffer.length - 5];
                 }
                 botState.tickAcceleration = accel;
 
-                // Acceleration Buffer
-                botState.tickBuffer.push(quote);
-                if (botState.tickBuffer.length > 10) botState.tickBuffer.shift();
-
                 if (botState.currentContractId && botState.tradeStartTime) {
                     botState.tradeSeconds = Math.floor((Date.now() - botState.tradeStartTime) / 1000);
                 }
+
+                // 3. EVALUACIÓN SNIPER (TICK-BASED): Disparar estrategia con cero latencia
+                processStrategy();
+
             }
         }
 
