@@ -329,16 +329,49 @@ function connectDeriv() {
             // VERIFICACIÓN DE SÍMBOLO: Ignorar ticks que no sean del mercado activo
             if (msg.tick.symbol !== botState.symbol) return;
 
-            botState.marketStatus = 'OPEN'; // Si llega un tick, el mercado está abierto sí o sí
+            botState.marketStatus = 'OPEN';
             const quote = parseFloat(msg.tick.quote);
             if (!isNaN(quote)) {
                 botState.lastTickPrice = quote;
 
-                // 1. Guardar el tick actual en el buffer primero
                 botState.tickBuffer.push(quote);
                 if (botState.tickBuffer.length > 10) botState.tickBuffer.shift();
 
-                // 2. Calcular Momentum (Velocidad en 5 pasos) para la Interfaz y Referencia
+                // ─── MASTER TRAILING (TICK-BY-TICK) ───
+                // Monitoreo ultra-rápido para asegurar ganancias
+                if (botState.currentContractId && botState.isRunning) {
+                    const contract = botState.activeContracts.find(c => c.id === botState.currentContractId);
+                    if (contract && contract.entryPrice) {
+                        // Calcular ganancia real-time
+                        let diff = quote - contract.entryPrice;
+                        if (contract.type === 'MULTDOWN') diff = -diff;
+                        const liveProfit = diff * contract.multiplier * contract.stake;
+
+                        botState.tradeProfit = liveProfit; // Actualizar UI
+
+                        // Actualizar Profit Máximo Alcanzado
+                        if (!contract.maxProfit || liveProfit > contract.maxProfit) {
+                            contract.maxProfit = liveProfit;
+                        }
+
+                        // Lógica pedida: >= 2 garantiza 1, >= 3 garantiza 2...
+                        if (contract.maxProfit >= 2.0) {
+                            const newFloor = Math.floor(contract.maxProfit) - 1.0;
+                            if (!contract.trailingFloor || newFloor > contract.trailingFloor) {
+                                contract.trailingFloor = newFloor;
+                                console.log(`🛡️ [PRO TRAILING] Nuevo Piso: $${newFloor.toFixed(2)} (Máx PnL: $${contract.maxProfit.toFixed(2)})`);
+                            }
+                        }
+
+                        // Disparar Cierre de Emergencia
+                        if (contract.trailingFloor && liveProfit <= contract.trailingFloor) {
+                            console.log(`⚡ [TRAIL HIT] Cerrando en $${liveProfit.toFixed(2)} para asegurar $${contract.trailingFloor.toFixed(2)}`);
+                            sellContract(contract.id);
+                        }
+                    }
+                }
+
+                // Calcular Momentum
                 let accel = 0;
                 if (botState.tickBuffer.length >= 5) {
                     accel = botState.tickBuffer[botState.tickBuffer.length - 1] - botState.tickBuffer[botState.tickBuffer.length - 5];
@@ -349,9 +382,7 @@ function connectDeriv() {
                     botState.tradeSeconds = Math.floor((Date.now() - botState.tradeStartTime) / 1000);
                 }
 
-                // 3. EVALUACIÓN SNIPER (TICK-BASED): Disparar estrategia con cero latencia
                 processStrategy();
-
             }
         }
 
@@ -379,8 +410,16 @@ function connectDeriv() {
             if (idx !== -1) {
                 botState.activeContracts[idx].profit = c.profit;
                 botState.activeContracts[idx].seconds = Math.floor((Date.now() - (c.purchase_time * 1000)) / 1000);
+
+                // Capturar datos para el Trailing Stop ultra-rápido
+                if (!botState.activeContracts[idx].entryPrice && c.entry_tick) {
+                    botState.activeContracts[idx].entryPrice = parseFloat(c.entry_tick);
+                    botState.activeContracts[idx].multiplier = c.multiplier;
+                    botState.activeContracts[idx].stake = parseFloat(c.buy_price);
+                    botState.activeContracts[idx].type = c.contract_type;
+                }
             } else if (!c.is_sold) {
-                // Si es un contrato nuevo que no teníamos registrado por alguna razón
+                // Si es un contrato nuevo
                 botState.activeContracts.push({
                     id: c.contract_id,
                     type: c.contract_type,
@@ -619,6 +658,12 @@ function executeTrade(type) {
 
     console.log(`📡 ENVIANDO COMPRA: ${JSON.stringify(req)}`);
     ws.send(JSON.stringify(req));
+}
+
+function sellContract(contractId) {
+    if (ws && ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({ sell: contractId, price: 0 }));
+    }
 }
 
 function finalizeTrade(c) {
