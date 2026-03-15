@@ -170,6 +170,8 @@ app.post('/api/switch-market', (req, res) => {
     botState.symbol = symbol;
     botState.marketStatus = 'SEARCHING';
     botState.lastTickPrice = 0;
+    botState.tickAcceleration = 0;
+    botState.tickBuffer = [];
 
     // Libera operaciones atrapadas del mercado anterior (para que puedas operar en el nuevo)
     botState.currentContractId = null;
