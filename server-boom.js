@@ -354,12 +354,15 @@ function connectDeriv() {
                             contract.maxProfit = liveProfit;
                         }
 
-                        // Lógica pedida: >= 2 garantiza 1, >= 3 garantiza 2...
-                        if (contract.maxProfit >= 2.0) {
-                            const newFloor = Math.floor(contract.maxProfit) - 1.0;
+                        // Lógica Refinada: Pasos de $0.50 para proteger más rápido
+                        if (contract.maxProfit >= 1.50) {
+                            // Escalón de $0.50. Ejemplo: $1.50 -> piso $0.75 | $2.00 -> piso $1.25
+                            const currentStep = Math.floor(contract.maxProfit / 0.50) * 0.50;
+                            const newFloor = currentStep - 0.75;
+
                             if (!contract.trailingFloor || newFloor > contract.trailingFloor) {
                                 contract.trailingFloor = newFloor;
-                                console.log(`🛡️ [PRO TRAILING] Nuevo Piso: $${newFloor.toFixed(2)} (Máx PnL: $${contract.maxProfit.toFixed(2)})`);
+                                console.log(`🛡️ [ELITE TRAILING] Escalón $${currentStep.toFixed(2)} -> Piso: $${newFloor.toFixed(2)} (Máx: $${contract.maxProfit.toFixed(2)})`);
                             }
                         }
 
