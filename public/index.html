@@ -498,20 +498,8 @@
                 `).join('');
             } catch (e) {
                 // Si hay un error (ej. caída de internet o servidor reiniciando)
-                const priceDisplay = document.getElementById('priceDisplay');
-                priceDisplay.innerText = "SEÑAL PERDIDA";
-                priceDisplay.style.fontSize = "1.8rem";
-                priceDisplay.style.color = "#ff4d4d";
-
-                const mStatus = document.getElementById('marketStatusText');
-                mStatus.innerText = "DESCONECTADO";
-                mStatus.style.color = "#888";
-
-                document.getElementById('statusText').innerText = "ERROR";
-                document.getElementById('statusText').className = "stat-value red";
-
-                document.getElementById('signalValue').innerText = "OFLINE";
-                document.getElementById('signalValue').style.color = "#888";
+                // Mantener los últimos datos en pantalla silenciosamente como caché visual.
+                console.warn('Conexión inestable: manteniendo caché visual en pantalla.', e);
             } finally {
                 isFetching = false;
             }
