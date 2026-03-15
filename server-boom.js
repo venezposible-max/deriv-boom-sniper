@@ -24,8 +24,8 @@ let MARKET_CONFIGS = {
     },
     'R_100': {
         stake: 10,
-        takeProfit: 1.00,
-        stopLoss: 0.50,
+        takeProfit: 1.50,
+        stopLoss: 1.00,
         multiplier: 200,
         rsiPeriod: 14,
         emaPeriod: 20,
@@ -474,11 +474,11 @@ function executeDynamicTrade(type, slPrice, entryPrice) {
     let tpAmount = GOLD_CONFIG.takeProfit > 0 ? GOLD_CONFIG.takeProfit : slAmount * 2;
 
     // Limites de seguridad para Deriv
-    // IMPORTANTE: El SL no puede ser mayor al Stake en muchas cuentas de Deriv
-    let finalSL = Math.max(0.5, parseFloat(slAmount.toFixed(2)));
+    // IMPORTANTE: Deriv exige mínimos (aprox 0.74 USD en algunos mercados)
+    let finalSL = Math.max(0.80, parseFloat(slAmount.toFixed(2)));
     if (finalSL >= stake) finalSL = parseFloat((stake * 0.95).toFixed(2)); // Cap al 95% del stake
 
-    let finalTP = Math.max(0.5, parseFloat(tpAmount.toFixed(2)));
+    let finalTP = Math.max(0.80, parseFloat(tpAmount.toFixed(2)));
     // Si el SL se capó, el TP debería ser al menos el doble del nuevo SL si es posible
     if (finalTP >= (stake * 2)) finalTP = parseFloat((stake * 1.9).toFixed(2));
 
