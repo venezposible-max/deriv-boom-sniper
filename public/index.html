@@ -352,7 +352,12 @@
     <script>
         let isRunning = false;
         let inputsLoaded = false;
+        let isFetching = false;
+
         async function fetchStatus() {
+            if (isFetching) return;
+            isFetching = true;
+
             try {
                 const res = await fetch('/api/status');
                 const { data, config } = await res.json();
@@ -491,7 +496,25 @@
                         <span class="${t.profit >= 0 ? 'green' : 'red'}">${t.profit >= 0 ? '+' : ''}$${t.profit.toFixed(2)}</span>
                     </div>
                 `).join('');
-            } catch (e) { }
+            } catch (e) {
+                // Si hay un error (ej. caída de internet o servidor reiniciando)
+                const priceDisplay = document.getElementById('priceDisplay');
+                priceDisplay.innerText = "SEÑAL PERDIDA";
+                priceDisplay.style.fontSize = "1.8rem";
+                priceDisplay.style.color = "#ff4d4d";
+
+                const mStatus = document.getElementById('marketStatusText');
+                mStatus.innerText = "DESCONECTADO";
+                mStatus.style.color = "#888";
+
+                document.getElementById('statusText').innerText = "ERROR";
+                document.getElementById('statusText').className = "stat-value red";
+
+                document.getElementById('signalValue').innerText = "OFLINE";
+                document.getElementById('signalValue').style.color = "#888";
+            } finally {
+                isFetching = false;
+            }
         }
 
         async function toggleBot() {
@@ -504,12 +527,17 @@
                 stopLoss: document.getElementById('stopLoss').value
             } : { action };
 
-            await fetch('/api/control', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(body)
-            });
-            fetchStatus();
+            try {
+                await fetch('/api/control', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(body)
+                });
+                fetchStatus();
+            } catch (e) {
+                console.error("Error contactando al servidor:", e);
+                // Si falla, fetchStatus forzará el estado OFFLINE en breve
+            }
         }
 
         async function clearHistory() {
@@ -520,17 +548,21 @@
 
         async function sellContract() {
             if (!confirm("¿Quieres cerrar la operación actual manualmente?")) return;
-            await fetch('/api/sell-contract', { method: 'POST' });
-            fetchStatus();
+            try {
+                await fetch('/api/sell-contract', { method: 'POST' });
+                fetchStatus();
+            } catch (e) { console.error(e); }
         }
 
         async function manualTrade(action) {
-            await fetch('/api/trade', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ action })
-            });
-            fetchStatus();
+            try {
+                await fetch('/api/trade', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ action })
+                });
+                fetchStatus();
+            } catch (e) { console.error(e); }
         }
 
         async function switchMarket(symbol) {
