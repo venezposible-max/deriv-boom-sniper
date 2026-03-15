@@ -435,34 +435,35 @@ function processStrategy() {
     const currentPrice = botState.lastTickPrice || candleHistory[candleHistory.length - 1].close;
 
     // --- PIVOT DETECTION (ChoCh Logic) ---
-    // Buscar el último Swing High (SH) genuino y el último Swing Low (SL) genuino
-    // Los buscamos INDEPENDIENTEMENTE para garantizar que SH > SL siempre
-    let lastSH = 0; // Último techo de estructura
-    let lastSL = Infinity; // Último piso de estructura
-
-    for (let i = candleHistory.length - 3; i > 10; i--) {
+    // PASO 1: Encontrar el Swing High más reciente
+    let lastSH = 0;
+    for (let i = candleHistory.length - 3; i > 5; i--) {
         const prev = candleHistory[i - 1];
         const cur = candleHistory[i];
         const next = candleHistory[i + 1];
-        if (!lastSH && cur.high > prev.high && cur.high > next.high) lastSH = cur.high;
-        if (lastSH) break; // Encontramos el SH más reciente, paramos
+        if (cur.high > prev.high && cur.high > next.high) {
+            lastSH = cur.high;
+            break;
+        }
     }
-    for (let i = candleHistory.length - 3; i > 10; i--) {
-        const prev = candleHistory[i - 1];
-        const cur = candleHistory[i];
-        const next = candleHistory[i + 1];
-        if (cur.low < prev.low && cur.low < next.low) { lastSL = cur.low; break; } // Último SL más reciente
-    }
-    if (lastSL === Infinity) lastSL = 0;
 
+    // PASO 2: Encontrar el Swing Low más reciente que esté DEBAJO del SH
+    // Esta condición (cur.low < lastSH) garantiza matemáticamente que SH > SL siempre
+    let lastSL = 0;
+    if (lastSH > 0) {
+        for (let i = candleHistory.length - 3; i > 5; i--) {
+            const prev = candleHistory[i - 1];
+            const cur = candleHistory[i];
+            const next = candleHistory[i + 1];
+            if (cur.low < prev.low && cur.low < next.low && cur.low < lastSH) {
+                lastSL = cur.low;
+                break;
+            }
+        }
+    }
+
+    // Si no encontramos un par válido, no operar
     if (!lastSH || !lastSL) return;
-
-    // VALIDACIÓN ESTRUCTURAL: El SH SIEMPRE debe ser mayor que el SL.
-    // Si están invertidos la estructura no es válida para operar.
-    if (lastSH <= lastSL) {
-        console.log(`⚠️ [ESTRUCTURA INVÁLIDA] SH=${lastSH} <= SL=${lastSL}. Omitiendo ciclo.`);
-        return;
-    }
 
     // Detectar si el precio rompe la estructura (ChoCh)
     const isBreakUp = currentPrice > lastSH;
