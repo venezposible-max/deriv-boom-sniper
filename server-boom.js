@@ -149,7 +149,6 @@ app.post('/api/clear-history', (req, res) => {
 });
 
 app.post('/api/sell-contract', (req, res) => {
-    const WebSocket = require('ws');
     if (botState.currentContractId && ws && ws.readyState === WebSocket.OPEN) {
         ws.send(JSON.stringify({ sell: botState.currentContractId, price: 0 }));
         return res.json({ success: true, message: 'Orden de cierre enviada' });
@@ -435,23 +434,26 @@ function processStrategy() {
     const currentPrice = botState.lastTickPrice || candleHistory[candleHistory.length - 1].close;
 
     // --- PIVOT DETECTION (ChoCh Logic) ---
-    // PASO 1: Encontrar el Swing High más reciente
+    // PASO 1: Encontrar el Swing High más reciente y guardar su índice
     let lastSH = 0;
+    let shIndex = -1;
     for (let i = candleHistory.length - 3; i > 5; i--) {
         const prev = candleHistory[i - 1];
         const cur = candleHistory[i];
         const next = candleHistory[i + 1];
         if (cur.high > prev.high && cur.high > next.high) {
             lastSH = cur.high;
+            shIndex = i;
             break;
         }
     }
 
-    // PASO 2: Encontrar el Swing Low más reciente que esté DEBAJO del SH
-    // Esta condición (cur.low < lastSH) garantiza matemáticamente que SH > SL siempre
+    // PASO 2: Buscar el Swing Low más reciente ANTES del SH (historia más antigua)
+    // Arrancamos desde shIndex-1 hacia atrás: garantiza que el SL es estructuralmente
+    // anterior al SH, es decir, el soporte real que precedió la ruptura alcista
     let lastSL = 0;
-    if (lastSH > 0) {
-        for (let i = candleHistory.length - 3; i > 5; i--) {
+    if (lastSH > 0 && shIndex > 6) {
+        for (let i = shIndex - 1; i > 5; i--) {
             const prev = candleHistory[i - 1];
             const cur = candleHistory[i];
             const next = candleHistory[i + 1];
@@ -464,6 +466,7 @@ function processStrategy() {
 
     // Si no encontramos un par válido, no operar
     if (!lastSH || !lastSL) return;
+
 
     // Detectar si el precio rompe la estructura (ChoCh)
     const isBreakUp = currentPrice > lastSH;
@@ -513,20 +516,20 @@ function processStrategy() {
 
     // 1. COMPRA (ChoCh alcista)
     if (isBreakUp && momentumUp > minForce) {
-        if (trueAcceleration >= 0) {
+        if (trueAcceleration > 0) { // Exige aceleración POSITIVA real, no solo plana
             console.log(`🔥 [CHOCH UP] Breakout High: ${lastSH} | Price: ${currentPrice} | Momentum: +${momentumUp.toFixed(2)} | Accel Real: ${trueAcceleration.toFixed(2)}`);
             executeDynamicTrade('MULTUP', lastSL, currentPrice);
         } else {
-            console.log(`⚠️ [RECHAZADO UP] Momentum (+${momentumUp.toFixed(2)}) > ${minForce} PERO Aceleración Negativa (${trueAcceleration.toFixed(2)}). Trampa evitada.`);
+            console.log(`⚠️ [RECHAZADO UP] Momentum (+${momentumUp.toFixed(2)}) OK pero Aceleración plana/negativa (${trueAcceleration.toFixed(2)}). Trampa evitada.`);
         }
     }
     // 2. VENTA (ChoCh bajista)
     else if (isBreakDown && momentumDown > minForce) {
-        if (trueAcceleration >= 0) {
+        if (trueAcceleration > 0) { // Exige aceleración POSITIVA real, no solo plana
             console.log(`🔥 [CHOCH DOWN] Breakout Low: ${lastSL} | Price: ${currentPrice} | Momentum: -${momentumDown.toFixed(2)} | Accel Real: ${trueAcceleration.toFixed(2)}`);
             executeDynamicTrade('MULTDOWN', lastSH, currentPrice);
         } else {
-            console.log(`⚠️ [RECHAZADO DOWN] Momentum (-${momentumDown.toFixed(2)}) > ${minForce} PERO Aceleración Negativa (${trueAcceleration.toFixed(2)}). Trampa evitada.`);
+            console.log(`⚠️ [RECHAZADO DOWN] Momentum (-${momentumDown.toFixed(2)}) OK pero Aceleración plana/negativa (${trueAcceleration.toFixed(2)}). Trampa evitada.`);
         }
     }
 
@@ -566,7 +569,6 @@ function executeDynamicTrade(type, slPrice, entryPrice) {
     // Si el SL se capó, el TP debería ser al menos el doble del nuevo SL si es posible
     if (finalTP >= (stake * 2)) finalTP = parseFloat((stake * 1.9).toFixed(2));
 
-    isBuying = true;
     const req = {
         buy: 1,
         price: stake,
