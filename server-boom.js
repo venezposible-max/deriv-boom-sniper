@@ -14,7 +14,7 @@ let MARKET_CONFIGS = {
     'frxXAUUSD': {
         stake: 10,
         takeProfit: 5.0,
-        stopLoss: 5.0,
+        stopLoss: 10.0,
         multiplier: 200,
         rsiPeriod: 14,
         emaPeriod: 20,
@@ -24,8 +24,8 @@ let MARKET_CONFIGS = {
     },
     'R_100': {
         stake: 10,
-        takeProfit: 1.50,
-        stopLoss: 1.00,
+        takeProfit: 5.0,
+        stopLoss: 10.0,
         multiplier: 200,
         rsiPeriod: 14,
         emaPeriod: 20,
