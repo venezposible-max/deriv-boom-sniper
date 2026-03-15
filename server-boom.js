@@ -265,11 +265,17 @@ function connectDeriv() {
                 console.error(`⚠️ Error de Deriv [${msg.msg_type || 'N/A'}]: ${msg.error.message}`);
             }
 
-            // Detectar mercado cerrado
+            // Detectar mercado cerrado SOLAMENTE si es del símbolo activo
+            const errorSymbol = msg.echo_req ? (msg.echo_req.ticks || msg.echo_req.ticks_history || msg.echo_req.subscribe) : null;
+
             if (msg.error.code === 'MarketIsClosed') {
-                botState.marketStatus = 'CLOSED';
-                botState.lastTickPrice = 0; // Limpiar precio viejo
-                console.log(`🚫 MERCADO CERRADO detectado para ${botState.symbol}`);
+                if (!errorSymbol || errorSymbol === botState.symbol) {
+                    botState.marketStatus = 'CLOSED';
+                    botState.lastTickPrice = 0;
+                    console.log(`🚫 MERCADO CERRADO confirmado para ${botState.symbol}`);
+                } else {
+                    console.log(`ℹ️ Ignorando mensaje de mercado cerrado para símbolo secundario: ${errorSymbol}`);
+                }
             }
 
             if (msg.msg_type === 'ticks' || msg.msg_type === 'tick') {
