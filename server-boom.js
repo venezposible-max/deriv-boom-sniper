@@ -237,6 +237,15 @@ function connectDeriv() {
             // 2. Pedimos el portafolio para ver si hay trades "huérfanos" (que se abrieron pero perdimos el ID)
             ws.send(JSON.stringify({ portfolio: 1 }));
 
+            // --- SINCRONIZACIÓN PERIÓDICA ---
+            // Revisar cada 15 segundos para asegurar que no perdemos trades
+            if (global.syncInterval) clearInterval(global.syncInterval);
+            global.syncInterval = setInterval(() => {
+                if (ws && ws.readyState === WebSocket.OPEN) {
+                    ws.send(JSON.stringify({ portfolio: 1 }));
+                }
+            }, 15000);
+
             console.log(`📡 Suscripciones enviadas para ${botState.symbol}`);
         }
 
@@ -373,14 +382,31 @@ function connectDeriv() {
         }
 
         if (msg.msg_type === 'portfolio') {
-            const contracts = msg.portfolio.contracts;
-            const activeOnSymbol = contracts.find(c => c.symbol === botState.symbol);
-            if (activeOnSymbol && !botState.currentContractId) {
-                console.log(`🎯 ¡Contrato huérfano detectado! Recuperando ID: ${activeOnSymbol.contract_id}`);
-                botState.currentContractId = activeOnSymbol.contract_id;
-                botState.tradeStartTime = activeOnSymbol.purchase_time * 1000;
-                ws.send(JSON.stringify({ proposal_open_contract: 1, contract_id: activeOnSymbol.contract_id, subscribe: 1 }));
-            }
+            const contracts = msg.portfolio.contracts || [];
+            // Filtrar solo los contratos de nuestro símbolo activo
+            const activeOnSymbol = contracts.filter(c => c.symbol === botState.symbol);
+
+            activeOnSymbol.forEach(c => {
+                // Si no lo tenemos registrado en activeContracts, lo agregamos y nos suscribimos
+                const exists = botState.activeContracts.find(x => x.id === c.contract_id);
+                if (!exists) {
+                    console.log(`🎯 Recuperando contrato activo del broker: ${c.contract_id}`);
+                    botState.activeContracts.push({
+                        id: c.contract_id,
+                        type: c.contract_type,
+                        profit: 0,
+                        seconds: 0
+                    });
+                    // Nos suscribimos a sus actualizaciones si no tenemos suscripción activa
+                    ws.send(JSON.stringify({ proposal_open_contract: 1, contract_id: c.contract_id, subscribe: 1 }));
+                }
+
+                // Actualizar ID global para compatibilidad con código viejo
+                if (!botState.currentContractId) {
+                    botState.currentContractId = c.contract_id;
+                    botState.tradeStartTime = (c.purchase_time * 1000);
+                }
+            });
         }
     });
 
