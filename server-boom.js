@@ -451,14 +451,26 @@ function processStrategy() {
     const isBreakUp = currentPrice > lastSH;
     const isBreakDown = currentPrice < lastSL;
 
-    // Tick Acceleration Check
+    // --- MOMENTUM Y ACELERACIÓN ESTRUCTURAL ---
     const ticks = botState.tickBuffer;
-    let acceleration = 0;
+    let momentumUp = 0;
+    let momentumDown = 0;
+    let trueAcceleration = 0;
+
     if (ticks.length >= 5) {
-        acceleration = Math.abs(ticks[ticks.length - 1] - ticks[ticks.length - 5]);
+        // Velocidad direccional neta (Últimos 4 pasos de precio)
+        momentumUp = ticks[ticks.length - 1] - ticks[ticks.length - 5];
+        momentumDown = ticks[ticks.length - 5] - ticks[ticks.length - 1];
+
+        // Aceleración Real (Rapidez actual vs Rapidez anterior)
+        const v1 = ticks[ticks.length - 1] - ticks[ticks.length - 3];
+        const v2 = ticks[ticks.length - 3] - ticks[ticks.length - 5];
+        trueAcceleration = Math.abs(v1) - Math.abs(v2);
     }
 
-    const minForce = botState.symbol === 'frxXAUUSD' ? 0.05 : 0.1; // Ajuste según mercado
+    // Fuerza mínima exigida para confiar en la ruptura (V100 es muy volátil, exige más confirmación direccional)
+    const minForce = botState.symbol === 'frxXAUUSD' ? 0.05 : 0.40;
+
 
     // --- COOLDOWN CHECK ---
     const now = Date.now();
@@ -481,15 +493,16 @@ function processStrategy() {
     }
 
     // 1. COMPRA (ChoCh alcista)
-    if (isBreakUp && acceleration > minForce) {
-        console.log(`🔥 [CHOCH UP] Breakout High: ${lastSH} | Price: ${currentPrice} | Accel: ${acceleration}`);
+    if (isBreakUp && momentumUp > minForce) {
+        console.log(`🔥 [CHOCH UP] Breakout High: ${lastSH} | Price: ${currentPrice} | Momentum: +${momentumUp.toFixed(2)} | Accel Real: ${trueAcceleration.toFixed(2)}`);
         executeDynamicTrade('MULTUP', lastSL, currentPrice);
     }
     // 2. VENTA (ChoCh bajista)
-    else if (isBreakDown && acceleration > minForce) {
-        console.log(`🔥 [CHOCH DOWN] Breakout Low: ${lastSL} | Price: ${currentPrice} | Accel: ${acceleration}`);
+    else if (isBreakDown && momentumDown > minForce) {
+        console.log(`🔥 [CHOCH DOWN] Breakout Low: ${lastSL} | Price: ${currentPrice} | Momentum: -${momentumDown.toFixed(2)} | Accel Real: ${trueAcceleration.toFixed(2)}`);
         executeDynamicTrade('MULTDOWN', lastSH, currentPrice);
     }
+
 
     botState.lastV100Structure = {
         hh: lastSH,
