@@ -435,21 +435,34 @@ function processStrategy() {
     const currentPrice = botState.lastTickPrice || candleHistory[candleHistory.length - 1].close;
 
     // --- PIVOT DETECTION (ChoCh Logic) ---
-    // Buscar el último Swing High (SH) y Swing Low (SL)
-    let lastSH = 0; // Last structural high
-    let lastSL = 0; // Last structural low
+    // Buscar el último Swing High (SH) genuino y el último Swing Low (SL) genuino
+    // Los buscamos INDEPENDIENTEMENTE para garantizar que SH > SL siempre
+    let lastSH = 0; // Último techo de estructura
+    let lastSL = Infinity; // Último piso de estructura
 
     for (let i = candleHistory.length - 3; i > 10; i--) {
         const prev = candleHistory[i - 1];
         const cur = candleHistory[i];
         const next = candleHistory[i + 1];
-
         if (!lastSH && cur.high > prev.high && cur.high > next.high) lastSH = cur.high;
-        if (!lastSL && cur.low < prev.low && cur.low < next.low) lastSL = cur.low;
-        if (lastSH && lastSL) break;
+        if (lastSH) break; // Encontramos el SH más reciente, paramos
     }
+    for (let i = candleHistory.length - 3; i > 10; i--) {
+        const prev = candleHistory[i - 1];
+        const cur = candleHistory[i];
+        const next = candleHistory[i + 1];
+        if (cur.low < prev.low && cur.low < next.low) { lastSL = cur.low; break; } // Último SL más reciente
+    }
+    if (lastSL === Infinity) lastSL = 0;
 
-    if (!lastSH || lastSL === 0) return;
+    if (!lastSH || !lastSL) return;
+
+    // VALIDACIÓN ESTRUCTURAL: El SH SIEMPRE debe ser mayor que el SL.
+    // Si están invertidos la estructura no es válida para operar.
+    if (lastSH <= lastSL) {
+        console.log(`⚠️ [ESTRUCTURA INVÁLIDA] SH=${lastSH} <= SL=${lastSL}. Omitiendo ciclo.`);
+        return;
+    }
 
     // Detectar si el precio rompe la estructura (ChoCh)
     const isBreakUp = currentPrice > lastSH;
@@ -472,8 +485,9 @@ function processStrategy() {
         trueAcceleration = Math.abs(v1) - Math.abs(v2);
     }
 
-    // Fuerza mínima exigida para confiar en la ruptura (V100 es muy volátil, exige más confirmación direccional)
-    const minForce = botState.symbol === 'frxXAUUSD' ? 0.05 : 0.40;
+    // Fuerza mínima exigida para confiar en la ruptura
+    // 0.25 en V100 (balance entre capturar impulsos reales y evitar ruido normal del mercado)
+    const minForce = botState.symbol === 'frxXAUUSD' ? 0.05 : 0.25;
 
 
     // --- COOLDOWN CHECK ---
@@ -550,7 +564,6 @@ function executeDynamicTrade(type, slPrice, entryPrice) {
     let finalTP = Math.max(0.80, parseFloat(tpAmount.toFixed(2)));
     // Si el SL se capó, el TP debería ser al menos el doble del nuevo SL si es posible
     if (finalTP >= (stake * 2)) finalTP = parseFloat((stake * 1.9).toFixed(2));
-
 
     isBuying = true;
     const req = {
