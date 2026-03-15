@@ -77,6 +77,10 @@ for (const file of STATE_FILES) {
             const data = JSON.parse(fs.readFileSync(file));
             if (data.botState) {
                 botState = { ...botState, ...data.botState };
+                // FORZAR RESET DE ESTADO DE MERCADO AL ARRANCAR
+                botState.marketStatus = 'SEARCHING';
+                botState.lastTickPrice = 0;
+                botState.tickBuffer = [];
                 // Garantizar que cargamos el historial
                 if (data.botState.tradeHistory) botState.tradeHistory = data.botState.tradeHistory;
                 if (data.botState.activeContracts) botState.activeContracts = data.botState.activeContracts;
@@ -320,7 +324,7 @@ function connectDeriv() {
             // VERIFICACIÓN DE SÍMBOLO: Ignorar ticks que no sean del mercado activo
             if (msg.tick.symbol !== botState.symbol) return;
 
-            botState.marketStatus = 'OPEN';
+            botState.marketStatus = 'OPEN'; // Si llega un tick, el mercado está abierto sí o sí
             const quote = parseFloat(msg.tick.quote);
             if (!isNaN(quote)) {
                 botState.lastTickPrice = quote;
