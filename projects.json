@@ -1,0 +1,128 @@
+[
+  {
+    "workspace": {
+      "id": "5f3b6c8e-e3a9-4e39-b608-7719154d98e8",
+      "name": "venezposible-max's Projects"
+    },
+    "id": "8bf3fe90-23ae-43c5-8412-5dea86343d87",
+    "name": "pleasant-expression",
+    "createdAt": "2026-01-30T13:22:29.090Z",
+    "updatedAt": "2026-03-10T01:45:19.467Z",
+    "deletedAt": null,
+    "environments": {
+      "edges": [
+        {
+          "node": {
+            "id": "bc2b3e15-22b5-42e5-9ec5-057d82740a77",
+            "name": "production",
+            "canAccess": true,
+            "serviceInstances": {
+              "edges": [
+                {
+                  "node": {
+                    "serviceId": "008f54fb-250c-471c-b3a9-7cfdd1ed1c70"
+                  }
+                },
+                {
+                  "node": {
+                    "serviceId": "eccdc19c-5909-44cf-a7c9-615300aa3a80"
+                  }
+                },
+                {
+                  "node": {
+                    "serviceId": "afbf560d-066f-4a80-b5ab-064594f02b4f"
+                  }
+                },
+                {
+                  "node": {
+                    "serviceId": "00023556-cfd2-4e19-a742-fde5ec586f7b"
+                  }
+                },
+                {
+                  "node": {
+                    "serviceId": "761483e9-5bff-43da-bbe1-9bafde1b55eb"
+                  }
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "services": {
+      "edges": [
+        {
+          "node": {
+            "id": "00023556-cfd2-4e19-a742-fde5ec586f7b",
+            "name": "sonance-scraper"
+          }
+        },
+        {
+          "node": {
+            "id": "008f54fb-250c-471c-b3a9-7cfdd1ed1c70",
+            "name": "deriv-boom-sniper"
+          }
+        },
+        {
+          "node": {
+            "id": "761483e9-5bff-43da-bbe1-9bafde1b55eb",
+            "name": "binance-bot"
+          }
+        },
+        {
+          "node": {
+            "id": "afbf560d-066f-4a80-b5ab-064594f02b4f",
+            "name": "Redis"
+          }
+        },
+        {
+          "node": {
+            "id": "eccdc19c-5909-44cf-a7c9-615300aa3a80",
+            "name": "deriv-bot"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "workspace": {
+      "id": "5f3b6c8e-e3a9-4e39-b608-7719154d98e8",
+      "name": "venezposible-max's Projects"
+    },
+    "id": "e6a5f7e3-8dee-44ad-ae43-d6535ac9d988",
+    "name": "sonance-scraper",
+    "createdAt": "2026-03-04T22:33:07.295Z",
+    "updatedAt": "2026-03-04T22:33:07.295Z",
+    "deletedAt": null,
+    "environments": {
+      "edges": [
+        {
+          "node": {
+            "id": "094bea48-c9a6-4ecb-a358-8d5bf4331c6a",
+            "name": "production",
+            "canAccess": true,
+            "serviceInstances": {
+              "edges": [
+                {
+                  "node": {
+                    "serviceId": "841463a7-2e57-4beb-aaf5-593d45f8e129"
+                  }
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "services": {
+      "edges": [
+        {
+          "node": {
+            "id": "841463a7-2e57-4beb-aaf5-593d45f8e129",
+            "name": "sonance-scraper"
+          }
+        }
+      ]
+    }
+  }
+]

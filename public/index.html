@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>🥇 GOLD SNIPER PRO - XAUUSD</title>
+    <title>🥇 V100 DUAL SNIPER - CHOCH PRO</title>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;700;900&display=swap');
 
@@ -30,9 +30,9 @@
         .header h1 {
             font-size: 28px;
             font-weight: 900;
-            color: #ffd700;
+            color: #00ffa3;
             margin: 0;
-            text-shadow: 0 0 20px rgba(255, 215, 0, 0.4);
+            text-shadow: 0 0 20px rgba(0, 255, 163, 0.4);
         }
 
         .header p {
@@ -119,9 +119,9 @@
         }
 
         .btn-start {
-            background: linear-gradient(135deg, #ffd700 0%, #b8860b 100%);
+            background: linear-gradient(135deg, #00ffa3 0%, #008f5d 100%);
             color: #000;
-            box-shadow: 0 10px 20px rgba(184, 134, 11, 0.3);
+            box-shadow: 0 10px 20px rgba(0, 255, 163, 0.3);
         }
 
         .btn-stop {
@@ -237,8 +237,8 @@
 <body>
     <div class="container">
         <div class="header">
-            <h1 id="mainTitle">🥇 GOLD SNIPER PRO</h1>
-            <p id="subTitle">XAUUSD MEAN REVERSION</p>
+            <h1 id="mainTitle">🥇 V100 DUAL SNIPER</h1>
+            <p id="subTitle">CHOC BREAKOUT + TICK ACCELERATION</p>
         </div>
 
         <div class="market-selector" id="marketSelector">
@@ -265,21 +265,23 @@
             </div>
             <div class="stat-row" style="margin-top: 15px;">
                 <div class="stat-box">
-                    <div class="stat-label">RSI (14)</div>
-                    <div id="rsiValue" class="stat-value">--</div>
+                    <div class="stat-label">Breakout HH</div>
+                    <div id="hhValue" class="stat-value" style="color: #00ffa3;">--</div>
                 </div>
                 <div class="stat-box">
-                    <div class="stat-label">EMA (20)</div>
-                    <div id="emaValue" class="stat-value">--</div>
-                    <div id="emaPosition"
-                        style="font-size: 8px; font-weight: 700; margin-top: 4px; text-transform: uppercase;">--</div>
+                    <div class="stat-label">Breakout LL</div>
+                    <div id="llValue" class="stat-value" style="color: #ff4d4d;">--</div>
                 </div>
                 <div class="stat-box">
-                    <div class="stat-label">PnL Sesión</div>
-                    <div id="pnlValue" class="stat-value">$0.00</div>
+                    <div class="stat-label">Señal</div>
+                    <div id="signalValue" class="stat-value">WAIT</div>
                 </div>
             </div>
             <div class="stat-row" style="margin-top: 20px; border-top: 1px solid #222; padding-top: 15px;">
+                <div class="stat-box">
+                    <div class="stat-label">Sesión PnL</div>
+                    <div id="pnlValue" class="stat-value">$0.00</div>
+                </div>
                 <div class="stat-box">
                     <div class="stat-label">Ganados</div>
                     <div id="winsValue" class="stat-value green">0</div>
@@ -288,17 +290,15 @@
                     <div class="stat-label">Perdidos</div>
                     <div id="lossesValue" class="stat-value red">0</div>
                 </div>
-                <div class="stat-box">
-                    <div class="stat-label">Total Trades</div>
-                    <div id="totalTradesValue" class="stat-value" style="color:#888;">0</div>
-                </div>
             </div>
             <div class="indicator-bar">
-                <div id="rsiBar" class="indicator-fill"></div>
+                <div id="accelBar" class="indicator-fill"></div>
             </div>
         </div>
 
         <div id="tradeCard" class="card trade-active" style="display:none; text-align: center;">
+            <div id="tradeType"
+                style="font-weight: 900; font-size: 14px; margin-bottom: 5px; text-transform: uppercase;">TIPO</div>
             <div class="stat-label">Posición Activa</div>
             <div style="font-size: 24px; font-weight: 900; margin: 10px 0;" id="tradeProfit">$0.00</div>
             <div class="stat-label" style="margin-bottom: 15px;">Tiempo: <span id="tradeTimer"
@@ -310,10 +310,10 @@
 
         <div class="card" id="settingsForm">
             <div class="stat-row" style="margin-bottom: 20px;">
-                <button onclick="manualTrade('MULTUP')"
+                <button id="btnManualUp" onclick="manualTrade('MULTUP')"
                     style="flex:1; margin-right:5px; padding: 15px; border-radius: 12px; border: none; background: #00ffa3; color: #000; font-weight: 900; cursor: pointer;">MANUAL
                     UP 📈</button>
-                <button onclick="manualTrade('MULTDOWN')"
+                <button id="btnManualDown" onclick="manualTrade('MULTDOWN')"
                     style="flex:1; margin-left:5px; padding: 15px; border-radius: 12px; border: none; background: #ff4d4d; color: #fff; font-weight: 900; cursor: pointer;">MANUAL
                     DOWN 📉</button>
             </div>
@@ -328,21 +328,11 @@
             <div class="stat-row">
                 <div class="input-group" style="flex:1; margin-right:10px;">
                     <label>Take Profit ($)</label>
-                    <input type="number" id="tp" value="2.50">
+                    <input type="number" id="takeProfit" step="0.5" value="2.5">
                 </div>
                 <div class="input-group" style="flex:1;">
                     <label>Stop Loss ($)</label>
-                    <input type="number" id="sl" value="3.00">
-                </div>
-            </div>
-            <div class="stat-row">
-                <div class="input-group" style="flex:1; margin-right:10px;">
-                    <label>RSI Venta (Max)</label>
-                    <input type="number" id="rsiOverbought" value="70">
-                </div>
-                <div class="input-group" style="flex:1;">
-                    <label>RSI Compra (Min)</label>
-                    <input type="number" id="rsiOversold" value="30">
+                    <input type="number" id="stopLoss" step="0.5" value="3.0">
                 </div>
             </div>
             <button id="btnToggle" class="btn-main btn-start" onclick="toggleBot()">Iniciar Sniper 🥇</button>
@@ -391,8 +381,8 @@
                 document.getElementById('symbolName').innerText = isGold ? "⚡ MERCADO: ORO (XAUUSD)" : "⚡ MERCADO: VOLATILITY 100";
                 document.getElementById('symbolName').style.color = isGold ? "#ffd700" : "#00ffa3";
 
-                document.getElementById('mainTitle').innerText = isGold ? "🥇 GOLD SNIPER PRO" : "⚡ V100 SNIPER PRO";
-                document.getElementById('subTitle').innerText = isGold ? "XAUUSD MEAN REVERSION" : "R_100 VOLATILITY SCALPER";
+                document.getElementById('mainTitle').innerText = isGold ? "🥇 GOLD SNIPER PRO" : "⚡ V100 DUAL SNIPER";
+                document.getElementById('subTitle').innerText = isGold ? "XAUUSD MEAN REVERSION" : "CHOCH + TICK ACCELERATION";
 
                 document.getElementById('btnGold').className = "market-btn " + (isGold ? "active" : "");
                 document.getElementById('btnV100').className = "market-btn " + (!isGold ? "active" : "");
@@ -415,22 +405,25 @@
                     mStatus.style.color = "#ffd700";
                 }
 
-                // Bloquear inputs si el bot está corriendo para evitar cambios accidentales
-                const inputIds = ['stake', 'multiplier', 'tp', 'sl', 'rsiOverbought', 'rsiOversold'];
+                // Bloquear inputs y botones si el bot está corriendo
+                const inputIds = ['stake', 'multiplier', 'takeProfit', 'stopLoss'];
                 inputIds.forEach(id => {
                     const el = document.getElementById(id);
                     if (el) el.disabled = isRunning;
                 });
 
-                // Cargar valores del servidor SOLO la primera vez para no molestar al usuario
+                document.getElementById('btnManualUp').disabled = isRunning;
+                document.getElementById('btnManualDown').disabled = isRunning;
+                document.getElementById('btnManualUp').style.opacity = isRunning ? "0.3" : "1";
+                document.getElementById('btnManualDown').style.opacity = isRunning ? "0.3" : "1";
+
+                // Cargar valores del servidor SOLO la primera vez
                 if (config && !inputsLoaded) {
                     const mapping = {
                         stake: 'stake',
                         multiplier: 'multiplier',
-                        tp: 'takeProfit',
-                        sl: 'stopLoss',
-                        rsiOverbought: 'rsiOverbought',
-                        rsiOversold: 'rsiOversold'
+                        takeProfit: 'takeProfit',
+                        stopLoss: 'stopLoss'
                     };
                     Object.keys(mapping).forEach(id => {
                         const el = document.getElementById(id);
@@ -442,48 +435,53 @@
                     inputsLoaded = true;
                 }
 
-                const rsi = data.currentRSI || 50;
-                document.getElementById('rsiValue').innerText = rsi.toFixed(1);
+                const struct = data.lastV100Structure || { hh: 0, ll: 0, lastSignal: 'WAIT' };
+                document.getElementById('hhValue').innerText = struct.hh.toFixed(2);
+                document.getElementById('llValue').innerText = struct.ll.toFixed(2);
 
-                const ema = data.currentEMA || 0;
-                document.getElementById('emaValue').innerText = ema.toFixed(2);
+                const sig = document.getElementById('signalValue');
+                sig.innerText = struct.lastSignal;
+                if (struct.lastSignal === 'UP') sig.style.color = "#00ffa3";
+                else if (struct.lastSignal === 'DOWN') sig.style.color = "#ff4d4d";
+                else sig.style.color = "#888";
 
-                const emaPos = document.getElementById('emaPosition');
-                if (price > 0 && ema > 0) {
-                    if (price > ema) {
-                        emaPos.innerText = "ENCIMA ↑";
-                        emaPos.style.color = "#00ffa3";
-                    } else {
-                        emaPos.innerText = "DEBAJO ↓";
-                        emaPos.style.color = "#ff4d4d";
-                    }
-                } else {
-                    emaPos.innerText = "--";
-                }
-
-                const rsiBar = document.getElementById('rsiBar');
-                rsiBar.style.width = rsi + "%";
-                rsiBar.style.backgroundColor = rsi < 30 ? "#00ffa3" : (rsi > 70 ? "#ff4d4d" : "#ffd700");
+                const accelBar = document.getElementById('accelBar');
+                const accelVal = Math.min(100, (data.tickAcceleration || 0) * 1000);
+                accelBar.style.width = accelVal + "%";
+                accelBar.style.backgroundColor = accelVal > 50 ? "#00ffa3" : "#ffd700";
 
                 document.getElementById('pnlValue').innerText = "$" + data.pnlSession.toFixed(2);
                 document.getElementById('pnlValue').className = "stat-value " + (data.pnlSession >= 0 ? "green" : "red");
 
                 document.getElementById('winsValue').innerText = data.winsSession;
                 document.getElementById('lossesValue').innerText = data.lossesSession;
-                document.getElementById('totalTradesValue').innerText = data.totalTradesSession;
 
                 const tradeCard = document.getElementById('tradeCard');
-                if (data.currentContractId) {
+                if (data.activeContracts && data.activeContracts.length > 0) {
                     tradeCard.style.display = 'block';
-                    document.getElementById('tradeProfit').innerText = (data.tradeProfit >= 0 ? "+" : "") + "$" + data.tradeProfit.toFixed(2);
-                    document.getElementById('tradeProfit').className = data.tradeProfit >= 0 ? "green" : "red";
-                    document.getElementById('tradeTimer').innerText = data.tradeSeconds;
+                    // Si hay varios, mostramos un resumen o el primero, pero el contenedor estará visible
+                    // Mejor aún, inyectamos todos los activos
+                    tradeCard.innerHTML = data.activeContracts.map(c => `
+                        <div style="margin-bottom: 15px; border-bottom: 1px solid rgba(255,215,0,0.2); padding-bottom: 15px;">
+                            <div style="font-weight: 900; font-size: 14px; color: ${c.type === 'MULTUP' ? '#00ffa3' : '#ff4d4d'};">
+                                ${c.type === 'MULTUP' ? 'COMPRA 🔼' : 'VENTA 🔽'}
+                            </div>
+                            <div style="font-size: 24px; font-weight: 900; margin: 5px 0;" class="${c.profit >= 0 ? 'green' : 'red'}">
+                                ${c.profit >= 0 ? "+" : ""}$${c.profit.toFixed(2)}
+                            </div>
+                            <div class="stat-label">Tiempo: ${c.seconds}s</div>
+                        </div>
+                    `).join('') + `
+                        <button onclick="sellContract()" 
+                        style="width: 100%; padding: 10px; border-radius: 8px; border: 1px solid #ff4d4d; background: rgba(255, 77, 77, 0.1); color: #ff4d4d; font-weight: 700; cursor: pointer;">
+                        CERRAR POSICIÓN ACTIVA 🛑</button>
+                    `;
                 } else {
                     tradeCard.style.display = 'none';
                 }
 
                 const btn = document.getElementById('btnToggle');
-                btn.innerText = isRunning ? "Detener Robot ⏸️" : "Iniciar Sniper 🥇";
+                btn.innerText = isRunning ? "Detener Sniper ⏸️" : "Iniciar Sniper 🥇";
                 btn.className = "btn-main " + (isRunning ? "btn-stop" : "btn-start");
 
                 const hist = document.getElementById('history');
@@ -501,11 +499,9 @@
             const body = action === 'START' ? {
                 action,
                 stake: document.getElementById('stake').value,
-                takeProfit: document.getElementById('tp').value,
-                stopLoss: document.getElementById('sl').value,
                 multiplier: document.getElementById('multiplier').value,
-                rsiOverbought: document.getElementById('rsiOverbought').value,
-                rsiOversold: document.getElementById('rsiOversold').value
+                takeProfit: document.getElementById('takeProfit').value,
+                stopLoss: document.getElementById('stopLoss').value
             } : { action };
 
             await fetch('/api/control', {

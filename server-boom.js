@@ -13,8 +13,8 @@ const STATE_FILE = path.join(__dirname, 'gold-state.json');
 let MARKET_CONFIGS = {
     'frxXAUUSD': {
         stake: 10,
-        takeProfit: 2.50,
-        stopLoss: 3.00,
+        takeProfit: 5.0,
+        stopLoss: 5.0,
         multiplier: 200,
         rsiPeriod: 14,
         emaPeriod: 20,
@@ -49,6 +49,7 @@ let botState = {
     currentRSI: 50,
     currentEMA: 0,
     lastTickPrice: 0,
+    tickBuffer: [], // For acceleration
     tradeStartTime: null,
     tradeProfit: 0,
     tradeSeconds: 0,
@@ -56,24 +57,38 @@ let botState = {
     rsiOversold: 30,
     lastRSI: 50,
     symbol: 'frxXAUUSD',
-    marketStatus: 'OPEN' // OPEN, CLOSED, or SEARCHING
+    marketStatus: 'OPEN',
+    lastV100Structure: { hh: 0, ll: 0, lastSignal: 'WAIT' },
+    activeContracts: [] // Nueva lista para manejar múltiples operaciones
 };
 
 // --- CARGAR ESTADO PREVIO ---
-if (fs.existsSync(STATE_FILE)) {
-    try {
-        const data = JSON.parse(fs.readFileSync(STATE_FILE));
-        if (data.botState) botState = { ...botState, ...data.botState, isRunning: false };
-        if (data.botState) botState = { ...botState, ...data.botState, isRunning: false };
-        if (data.marketConfigs) {
-            MARKET_CONFIGS = { ...MARKET_CONFIGS, ...data.marketConfigs };
-            GOLD_CONFIG = MARKET_CONFIGS[botState.symbol];
-            // Sincronizar botState con la config cargada
-            botState.rsiOverbought = GOLD_CONFIG.rsiOverbought;
-            botState.rsiOversold = GOLD_CONFIG.rsiOversold;
-        }
-        console.log("📂 Estado y configuración cargados con éxito.");
-    } catch (e) { console.log("⚠️ No se pudo cargar el estado previo."); }
+// Intentar cargar desde gold-state.json o persistent-state-boom.json para compatibilidad
+const STATE_FILES = [
+    path.join(__dirname, 'gold-state.json'),
+    path.join(__dirname, 'persistent-state-boom.json')
+];
+
+let stateLoaded = false;
+for (const file of STATE_FILES) {
+    if (fs.existsSync(file)) {
+        try {
+            const data = JSON.parse(fs.readFileSync(file));
+            if (data.botState) {
+                botState = { ...botState, ...data.botState };
+                // Garantizar que cargamos el historial
+                if (data.botState.tradeHistory) botState.tradeHistory = data.botState.tradeHistory;
+                if (data.botState.activeContracts) botState.activeContracts = data.botState.activeContracts;
+            }
+            if (data.marketConfigs) {
+                MARKET_CONFIGS = { ...MARKET_CONFIGS, ...data.marketConfigs };
+                GOLD_CONFIG = MARKET_CONFIGS[botState.symbol];
+            }
+            console.log(`📂 Estado recuperado desde ${path.basename(file)}. Historial: ${botState.tradeHistory.length} trades.`);
+            stateLoaded = true;
+            break;
+        } catch (e) { console.log(`⚠️ Error cargando ${path.basename(file)}`); }
+    }
 }
 
 let candleHistory = [];
@@ -105,8 +120,8 @@ app.post('/api/control', (req, res) => {
         MARKET_CONFIGS[botState.symbol] = { ...GOLD_CONFIG };
         saveState();
         const marketName = botState.symbol === 'frxXAUUSD' ? 'ORO' : 'V100';
-        console.log(`▶️ SNIPER INICIADO | ${marketName} (${botState.symbol}) | Stake: ${GOLD_CONFIG.stake} | RSI: ${GOLD_CONFIG.rsiOversold}/${GOLD_CONFIG.rsiOverbought}`);
-        return res.json({ success: true, message: `Sniper en ${marketName} Activado` });
+        console.log(`▶️ V100 DUAL SNIPER INICIADO | ${marketName} (${botState.symbol}) | Stake: ${GOLD_CONFIG.stake}`);
+        return res.json({ success: true, message: `V100 DUAL SNIPER en ${marketName} Activado` });
     }
     if (action === 'STOP') {
         botState.isRunning = false;
@@ -211,11 +226,28 @@ function connectDeriv() {
                 subscribe: 1
             }));
             ws.send(JSON.stringify({ balance: 1, subscribe: 1 }));
+
+            // --- RECUPERACIÓN DE TRADES ---
+            // 1. Si ya teníamos un ID guardado, intentamos retomarlo
+            if (botState.currentContractId) {
+                console.log(`🔍 Intentando recuperar contrato guardado: ${botState.currentContractId}`);
+                ws.send(JSON.stringify({ proposal_open_contract: 1, contract_id: botState.currentContractId, subscribe: 1 }));
+            }
+            // 2. Pedimos el portafolio para ver si hay trades "huérfanos" (que se abrieron pero perdimos el ID)
+            ws.send(JSON.stringify({ portfolio: 1 }));
+
             console.log(`📡 Suscripciones enviadas para ${botState.symbol}`);
         }
 
         if (msg.error) {
-            console.error(`⚠️ Error de Deriv [${msg.msg_type || 'N/A'}]: ${msg.error.message}`);
+            const errMsg = (msg.error.message || '').toLowerCase();
+            // Ignorar errores benignos que ensucian los logs
+            const isBenign = errMsg.includes('already subscribed') ||
+                errMsg.includes('unrecognised request');
+
+            if (!isBenign) {
+                console.error(`⚠️ Error de Deriv [${msg.msg_type || 'N/A'}]: ${msg.error.message}`);
+            }
 
             // Detectar mercado cerrado
             if (msg.error.code === 'MarketIsClosed') {
@@ -280,6 +312,18 @@ function connectDeriv() {
             const quote = parseFloat(msg.tick.quote);
             if (!isNaN(quote)) {
                 botState.lastTickPrice = quote;
+
+                // Acceleration Calculation
+                let accel = 0;
+                if (botState.tickBuffer.length >= 5) {
+                    accel = Math.abs(botState.tickBuffer[botState.tickBuffer.length - 1] - botState.tickBuffer[botState.tickBuffer.length - 5]);
+                }
+                botState.tickAcceleration = accel;
+
+                // Acceleration Buffer
+                botState.tickBuffer.push(quote);
+                if (botState.tickBuffer.length > 10) botState.tickBuffer.shift();
+
                 if (botState.currentContractId && botState.tradeStartTime) {
                     botState.tradeSeconds = Math.floor((Date.now() - botState.tradeStartTime) / 1000);
                 }
@@ -304,8 +348,38 @@ function connectDeriv() {
         if (msg.msg_type === 'proposal_open_contract') {
             const c = msg.proposal_open_contract;
             if (!c) return;
+
+            // Actualizar contrato en la lista de activos
+            const idx = botState.activeContracts.findIndex(x => x.id === c.contract_id);
+            if (idx !== -1) {
+                botState.activeContracts[idx].profit = c.profit;
+                botState.activeContracts[idx].seconds = Math.floor((Date.now() - (c.purchase_time * 1000)) / 1000);
+            } else if (!c.is_sold) {
+                // Si es un contrato nuevo que no teníamos registrado por alguna razón
+                botState.activeContracts.push({
+                    id: c.contract_id,
+                    type: c.contract_type,
+                    profit: c.profit,
+                    seconds: 0
+                });
+            }
+
+            // Atajo para UI (último contrato activo)
             botState.tradeProfit = c.profit;
+            botState.currentContractType = c.contract_type;
+
             if (c.is_sold) finalizeTrade(c);
+        }
+
+        if (msg.msg_type === 'portfolio') {
+            const contracts = msg.portfolio.contracts;
+            const activeOnSymbol = contracts.find(c => c.symbol === botState.symbol);
+            if (activeOnSymbol && !botState.currentContractId) {
+                console.log(`🎯 ¡Contrato huérfano detectado! Recuperando ID: ${activeOnSymbol.contract_id}`);
+                botState.currentContractId = activeOnSymbol.contract_id;
+                botState.tradeStartTime = activeOnSymbol.purchase_time * 1000;
+                ws.send(JSON.stringify({ proposal_open_contract: 1, contract_id: activeOnSymbol.contract_id, subscribe: 1 }));
+            }
         }
     });
 
@@ -313,31 +387,110 @@ function connectDeriv() {
 }
 
 function processStrategy() {
-    if (candleHistory.length < GOLD_CONFIG.emaPeriod) return;
+    if (candleHistory.length < 30) return;
 
-    const closes = candleHistory.map(c => c.close);
-    const rsi = calculateRSI(closes, GOLD_CONFIG.rsiPeriod);
-    const ema = calculateEMA(closes, GOLD_CONFIG.emaPeriod);
-    const currentPrice = closes[closes.length - 1];
+    const currentPrice = botState.lastTickPrice || candleHistory[candleHistory.length - 1].close;
 
-    const lastRSI = botState.lastRSI;
-    botState.currentRSI = rsi;
-    botState.currentEMA = ema;
-    botState.lastRSI = rsi; // Actualizar para el siguiente tick
+    // --- PIVOT DETECTION (ChoCh Logic) ---
+    // Buscar el último Swing High (SH) y Swing Low (SL)
+    let lastSH = 0; // Last structural high
+    let lastSL = 0; // Last structural low
 
-    if (!botState.isRunning || botState.currentContractId || isBuying) return;
+    for (let i = candleHistory.length - 3; i > 10; i--) {
+        const prev = candleHistory[i - 1];
+        const cur = candleHistory[i];
+        const next = candleHistory[i + 1];
 
-    // LÓGICA DE CRUCE (Anti-ametralladora)
-    // Buy: RSI cruza hacia arriba el nivel de sobreventa (venía de < 30 y ahora > 30)
-    if (lastRSI <= GOLD_CONFIG.rsiOversold && rsi > GOLD_CONFIG.rsiOversold && currentPrice < ema) {
-        executeTrade('MULTUP');
-        console.log(`📡 SEÑAL COMPRA: RSI cruzó ${GOLD_CONFIG.rsiOversold} hacia arriba.`);
+        if (!lastSH && cur.high > prev.high && cur.high > next.high) lastSH = cur.high;
+        if (!lastSL && cur.low < prev.low && cur.low < next.low) lastSL = cur.low;
+        if (lastSH && lastSL) break;
     }
-    // Sell: RSI cruza hacia abajo el nivel de sobrecompra (venía de > 70 y ahora < 70)
-    else if (lastRSI >= GOLD_CONFIG.rsiOverbought && rsi < GOLD_CONFIG.rsiOverbought && currentPrice > ema) {
-        executeTrade('MULTDOWN');
-        console.log(`📡 SEÑAL VENTA: RSI cruzó ${GOLD_CONFIG.rsiOverbought} hacia abajo.`);
+
+    if (!lastSH || lastSL === 0) return;
+
+    // Detectar si el precio rompe la estructura (ChoCh)
+    const isBreakUp = currentPrice > lastSH;
+    const isBreakDown = currentPrice < lastSL;
+
+    // Tick Acceleration Check
+    const ticks = botState.tickBuffer;
+    let acceleration = 0;
+    if (ticks.length >= 5) {
+        acceleration = Math.abs(ticks[ticks.length - 1] - ticks[ticks.length - 5]);
     }
+
+    const minForce = botState.symbol === 'frxXAUUSD' ? 0.05 : 0.1; // Ajuste según mercado
+
+    if (!botState.isRunning || botState.currentContractId || isBuying) {
+        // Guardar para UI
+        botState.lastV100Structure = { hh: lastSH, ll: lastSL, lastSignal: 'WAIT' };
+        return;
+    }
+
+    // 1. COMPRA (ChoCh alcista)
+    if (isBreakUp && acceleration > minForce) {
+        console.log(`🔥 [CHOCH UP] Breakout High: ${lastSH} | Price: ${currentPrice} | Accel: ${acceleration}`);
+        executeDynamicTrade('MULTUP', lastSL, currentPrice);
+    }
+    // 2. VENTA (ChoCh bajista)
+    else if (isBreakDown && acceleration > minForce) {
+        console.log(`🔥 [CHOCH DOWN] Breakout Low: ${lastSL} | Price: ${currentPrice} | Accel: ${acceleration}`);
+        executeDynamicTrade('MULTDOWN', lastSH, currentPrice);
+    }
+
+    botState.lastV100Structure = {
+        hh: lastSH,
+        ll: lastSL,
+        lastSignal: isBreakUp ? 'UP' : (isBreakDown ? 'DOWN' : 'WAIT')
+    };
+}
+
+function executeDynamicTrade(type, slPrice, entryPrice) {
+    if (isBuying) return;
+
+    // Calcular SL y TP dinámicos basados en estructura (2x Riesgo)
+    const stake = GOLD_CONFIG.stake;
+    const mult = GOLD_CONFIG.multiplier;
+
+    // Distancia en porcentaje
+    const distPct = Math.abs(entryPrice - slPrice) / entryPrice;
+
+    // SL Amount = Stake * Mult * DistPct
+    // Agregamos un pequeño margen para no cerrar justo en el nivel
+    // SL Amount = Priorizar valor configurado manual, si no usar estructura
+    let slAmount = GOLD_CONFIG.stopLoss > 0 ? GOLD_CONFIG.stopLoss : stake * mult * (distPct + 0.0001);
+    let tpAmount = GOLD_CONFIG.takeProfit > 0 ? GOLD_CONFIG.takeProfit : slAmount * 2;
+
+    // Limites de seguridad para Deriv
+    // IMPORTANTE: El SL no puede ser mayor al Stake en muchas cuentas de Deriv
+    let finalSL = Math.max(0.5, parseFloat(slAmount.toFixed(2)));
+    if (finalSL >= stake) finalSL = parseFloat((stake * 0.95).toFixed(2)); // Cap al 95% del stake
+
+    let finalTP = Math.max(0.5, parseFloat(tpAmount.toFixed(2)));
+    // Si el SL se capó, el TP debería ser al menos el doble del nuevo SL si es posible
+    if (finalTP >= (stake * 2)) finalTP = parseFloat((stake * 1.9).toFixed(2));
+
+
+    isBuying = true;
+    const req = {
+        buy: 1,
+        price: stake,
+        parameters: {
+            amount: stake,
+            basis: 'stake',
+            contract_type: type,
+            currency: 'USD',
+            symbol: botState.symbol,
+            multiplier: mult,
+            limit_order: {
+                take_profit: finalTP,
+                stop_loss: finalSL
+            }
+        }
+    };
+
+    console.log(`📡 V100 DUAL SNIPER SHOOT: ${type} | SL: $${finalSL} | TP: $${finalTP}`);
+    ws.send(JSON.stringify(req));
 }
 
 function executeTrade(type) {
@@ -371,19 +524,39 @@ function executeTrade(type) {
 
 function finalizeTrade(c) {
     const profit = parseFloat(c.profit);
+    if (isNaN(profit)) return; // Seguridad
+
     botState.pnlSession += profit;
     botState.totalTradesSession++;
     if (profit > 0) botState.winsSession++; else botState.lossesSession++;
 
+    // Guardar en historial con hora de Venezuela (aprox GMT-4)
+    const timeVE = new Date().toLocaleString('es-VE', { timeZone: 'America/Caracas' });
+
     botState.tradeHistory.unshift({
         type: c.contract_type === 'MULTUP' ? 'BUY 📈' : 'SELL 📉',
         profit: profit,
-        time: new Date().toLocaleTimeString()
+        time: timeVE
     });
     if (botState.tradeHistory.length > 50) botState.tradeHistory.pop();
 
-    botState.currentContractId = null;
-    botState.tradeStartTime = null;
+    // Remover de contratos activos
+    botState.activeContracts = botState.activeContracts.filter(x => x.id !== c.contract_id);
+
+    // Si no quedan contratos, limpiar trackers globales
+    if (botState.activeContracts.length === 0) {
+        botState.currentContractId = null;
+        botState.tradeStartTime = null;
+    }
+
+    // --- PERSISTENCIA EXTRA SEGURA ---
+    try {
+        const logEntry = `${timeVE} | ${c.contract_type} | ${profit.toFixed(2)} USD\n`;
+        fs.appendFileSync(path.join(__dirname, 'TRADE_HISTORY_LOG.txt'), logEntry);
+    } catch (e) {
+        console.error("❌ Fallo appendFileSync:", e.message);
+    }
+
     console.log(`✅ OPERACIÓN CERRADA: Beneficio ${profit.toFixed(2)} USD`);
     saveState();
 }
@@ -424,6 +597,6 @@ function saveState() {
 
 const PORT = process.env.PORT || 8080;
 app.listen(PORT, () => {
-    console.log(`🚀 SERVIDOR ORO SNIPER LISTO EN PUERTO ${PORT}`);
+    console.log('🚀 V100 DUAL SNIPER ENGINE READY - V_0_0_5_FIX (Multi-Trade + Time-Fix)');
     connectDeriv();
 });
