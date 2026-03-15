@@ -66,8 +66,8 @@ let botState = {
 // --- CARGAR ESTADO PREVIO ---
 // Intentar cargar desde gold-state.json o persistent-state-boom.json para compatibilidad
 const STATE_FILES = [
-    path.join(__dirname, 'gold-state.json'),
-    path.join(__dirname, 'persistent-state-boom.json')
+    path.join(__dirname, 'persistent-state-boom.json'),
+    path.join(__dirname, 'gold-state.json')
 ];
 
 let stateLoaded = false;
@@ -466,14 +466,17 @@ function processStrategy() {
     const cooldownPeriod = 60; // 60 segundos de enfriamiento
 
     if (!botState.isRunning || botState.currentContractId || isBuying || secondsSinceLastTrade < cooldownPeriod) {
-        // Guardar para UI pero no disparar
-        botState.lastV100Structure = { hh: lastSH, ll: lastSL, lastSignal: 'WAIT' };
-        if (secondsSinceLastTrade < cooldownPeriod && botState.isRunning && !botState.currentContractId && !isBuying) {
-            // Log opcional para saber que está en enfriamiento (solo cada 10 seg para no saturar)
-            if (Math.floor(secondsSinceLastTrade) % 10 === 0) {
-                // console.log(`❄️ Enfriamiento activo: ${Math.floor(cooldownPeriod - secondsSinceLastTrade)}s restantes`);
-            }
+        let sig = 'WAIT';
+        if (botState.isRunning) {
+            const remaining = Math.max(0, Math.ceil(cooldownPeriod - secondsSinceLastTrade));
+            if (botState.currentContractId) sig = 'OPERANDO...';
+            else if (isBuying) sig = 'COMPRANDO...';
+            else if (remaining > 0) sig = `ENFRIAMIENTO ${remaining}s`;
+        } else {
+            sig = 'APAGADO';
         }
+
+        botState.lastV100Structure = { hh: lastSH, ll: lastSL, lastSignal: sig };
         return;
     }
 
@@ -497,6 +500,9 @@ function processStrategy() {
 
 function executeDynamicTrade(type, slPrice, entryPrice) {
     if (isBuying) return;
+
+    isBuying = true;
+    setTimeout(() => { isBuying = false; }, 10000); // 10s auto-reset failsafe
 
     // Calcular SL y TP dinámicos basados en estructura (2x Riesgo)
     const stake = GOLD_CONFIG.stake;
@@ -545,7 +551,9 @@ function executeDynamicTrade(type, slPrice, entryPrice) {
 
 function executeTrade(type) {
     if (isBuying) return;
+
     isBuying = true;
+    setTimeout(() => { isBuying = false; }, 10000); // 10s auto-reset failsafe
     const roundedStake = parseFloat(Number(GOLD_CONFIG.stake).toFixed(2));
     // Asegurar un mínimo de 1.50 USD para TP y SL para evitar rechazos de Deriv en Oro
     const roundedTP = Math.max(1.50, parseFloat(Number(GOLD_CONFIG.takeProfit).toFixed(2)));
