@@ -59,7 +59,8 @@ let botState = {
     symbol: 'frxXAUUSD',
     marketStatus: 'OPEN',
     lastV100Structure: { hh: 0, ll: 0, lastSignal: 'WAIT' },
-    activeContracts: [] // Nueva lista para manejar múltiples operaciones
+    activeContracts: [], // Nueva lista para manejar múltiples operaciones
+    lastTradeTime: 0 // Para gestionar el enfriamiento de 60 segundos
 };
 
 // --- CARGAR ESTADO PREVIO ---
@@ -421,9 +422,20 @@ function processStrategy() {
 
     const minForce = botState.symbol === 'frxXAUUSD' ? 0.05 : 0.1; // Ajuste según mercado
 
-    if (!botState.isRunning || botState.currentContractId || isBuying) {
-        // Guardar para UI
+    // --- COOLDOWN CHECK ---
+    const now = Date.now();
+    const secondsSinceLastTrade = (now - (botState.lastTradeTime || 0)) / 1000;
+    const cooldownPeriod = 60; // 60 segundos de enfriamiento
+
+    if (!botState.isRunning || botState.currentContractId || isBuying || secondsSinceLastTrade < cooldownPeriod) {
+        // Guardar para UI pero no disparar
         botState.lastV100Structure = { hh: lastSH, ll: lastSL, lastSignal: 'WAIT' };
+        if (secondsSinceLastTrade < cooldownPeriod && botState.isRunning && !botState.currentContractId && !isBuying) {
+            // Log opcional para saber que está en enfriamiento (solo cada 10 seg para no saturar)
+            if (Math.floor(secondsSinceLastTrade) % 10 === 0) {
+                // console.log(`❄️ Enfriamiento activo: ${Math.floor(cooldownPeriod - secondsSinceLastTrade)}s restantes`);
+            }
+        }
         return;
     }
 
@@ -542,6 +554,9 @@ function finalizeTrade(c) {
 
     // Remover de contratos activos
     botState.activeContracts = botState.activeContracts.filter(x => x.id !== c.contract_id);
+
+    // Al cerrar una operación, actualizamos el tiempo para el enfriamiento
+    botState.lastTradeTime = Date.now();
 
     // Si no quedan contratos, limpiar trackers globales
     if (botState.activeContracts.length === 0) {
