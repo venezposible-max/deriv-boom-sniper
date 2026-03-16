@@ -20,7 +20,8 @@ let MARKET_CONFIGS = {
         emaPeriod: 20,
         rsiOverbought: 70,
         rsiOversold: 30,
-        granularity: 300
+        granularity: 300,
+        useTrailing: true
     },
     'R_100': {
         stake: 10,
@@ -31,7 +32,8 @@ let MARKET_CONFIGS = {
         emaPeriod: 20,
         rsiOverbought: 70,
         rsiOversold: 30,
-        granularity: 300
+        granularity: 300,
+        useTrailing: true
     }
 };
 
@@ -120,6 +122,7 @@ app.post('/api/control', (req, res) => {
         if (multiplier) GOLD_CONFIG.multiplier = Number(multiplier);
         if (rsiOverbought) { GOLD_CONFIG.rsiOverbought = Number(rsiOverbought); botState.rsiOverbought = Number(rsiOverbought); }
         if (rsiOversold) { GOLD_CONFIG.rsiOversold = Number(rsiOversold); botState.rsiOversold = Number(rsiOversold); }
+        if (req.body.useTrailing !== undefined) GOLD_CONFIG.useTrailing = !!req.body.useTrailing;
 
         // Actualizar el almacenamiento maestro
         MARKET_CONFIGS[botState.symbol] = { ...GOLD_CONFIG };
@@ -248,8 +251,10 @@ function connectDeriv() {
                 if (ws && ws.readyState === WebSocket.OPEN) {
                     ws.send(JSON.stringify({ ping: 1 }));
                     ws.send(JSON.stringify({ portfolio: 1 }));
+                } else {
+                    console.log("⚠️ Keep-alive falló: Socket no abierto.");
                 }
-            }, 15000);
+            }, 10000);
 
             console.log(`📡 Suscripciones enviadas para ${botState.symbol}`);
         }
@@ -341,7 +346,7 @@ function connectDeriv() {
 
                 // ─── MASTER TRAILING (TICK-BY-TICK) ───
                 // Monitoreo ultra-rápido para asegurar ganancias
-                if (botState.currentContractId && botState.isRunning) {
+                if (botState.currentContractId && botState.isRunning && GOLD_CONFIG.useTrailing) {
                     const contract = botState.activeContracts.find(c => c.id === botState.currentContractId);
                     if (contract && contract.entryPrice) {
                         // Calcular ganancia real-time corregida (Fórmula Multiplicadores)
