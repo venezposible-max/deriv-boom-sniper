@@ -354,9 +354,9 @@ function connectDeriv() {
                             contract.maxProfit = liveProfit;
                         }
 
-                        // Lógica Franklin: A $1.50 asegura $1.00, a $2.00 asegura $1.50
-                        if (contract.maxProfit >= 1.50) {
-                            // Escalón de $0.50. Ejemplo: $1.50 -> piso $1.00 | $2.00 -> piso $1.50
+                        // Lógica Franklin: A $1.00 asegura $0.50, a $1.50 asegura $1.00
+                        if (contract.maxProfit >= 1.00) {
+                            // Escalón de $0.50. Ejemplo: $1.00 -> piso $0.50 | $1.50 -> piso $1.00
                             const currentStep = Math.floor(contract.maxProfit / 0.50) * 0.50;
                             const newFloor = currentStep - 0.50;
 
