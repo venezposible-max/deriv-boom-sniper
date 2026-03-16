@@ -242,17 +242,19 @@ function connectDeriv() {
             // 2. Pedimos el portafolio para ver si hay trades "huérfanos" (que se abrieron pero perdimos el ID)
             ws.send(JSON.stringify({ portfolio: 1 }));
 
-            // --- SINCRONIZACIÓN PERIÓDICA ---
-            // Revisar cada 15 segundos para asegurar que no perdemos trades
+            // --- SINCRONIZACIÓN PERIÓDICA Y PING KEEP-ALIVE ---
             if (global.syncInterval) clearInterval(global.syncInterval);
             global.syncInterval = setInterval(() => {
                 if (ws && ws.readyState === WebSocket.OPEN) {
+                    ws.send(JSON.stringify({ ping: 1 }));
                     ws.send(JSON.stringify({ portfolio: 1 }));
                 }
             }, 15000);
 
             console.log(`📡 Suscripciones enviadas para ${botState.symbol}`);
         }
+
+        if (msg.msg_type === 'ping') return; // Heartbeat silencioso
 
         if (msg.error) {
             const errMsg = (msg.error.message || '').toLowerCase();
@@ -467,7 +469,17 @@ function connectDeriv() {
         }
     });
 
-    ws.on('close', () => setTimeout(connectDeriv, 5000));
+    ws.on('error', (e) => {
+        console.error(`❌ ERROR DE CONEXIÓN (GOLD): ${e.message}`);
+        botState.isConnectedToDeriv = false;
+    });
+
+    ws.on('close', () => {
+        console.log(`⚠️ CONEXIÓN PERDIDA (GOLD): Reintentando en 5s...`);
+        botState.isConnectedToDeriv = false;
+        isBuying = false;
+        setTimeout(connectDeriv, 5000);
+    });
 }
 
 function processStrategy() {
