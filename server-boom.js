@@ -354,15 +354,15 @@ function connectDeriv() {
                             contract.maxProfit = liveProfit;
                         }
 
-                        // Lógica Refinada: Pasos de $0.50 para proteger más rápido
+                        // Lógica Franklin: A $1.50 asegura $1.00, a $2.00 asegura $1.50
                         if (contract.maxProfit >= 1.50) {
-                            // Escalón de $0.50. Ejemplo: $1.50 -> piso $0.75 | $2.00 -> piso $1.25
+                            // Escalón de $0.50. Ejemplo: $1.50 -> piso $1.00 | $2.00 -> piso $1.50
                             const currentStep = Math.floor(contract.maxProfit / 0.50) * 0.50;
-                            const newFloor = currentStep - 0.75;
+                            const newFloor = currentStep - 0.50;
 
                             if (!contract.trailingFloor || newFloor > contract.trailingFloor) {
                                 contract.trailingFloor = newFloor;
-                                console.log(`🛡️ [ELITE TRAILING] Escalón $${currentStep.toFixed(2)} -> Piso: $${newFloor.toFixed(2)} (Máx: $${contract.maxProfit.toFixed(2)})`);
+                                console.log(`🛡️ [FRANKLIN TRAILING] Escalón $${currentStep.toFixed(2)} -> Piso: $${newFloor.toFixed(2)} (Máx: $${contract.maxProfit.toFixed(2)})`);
                             }
                         }
 
