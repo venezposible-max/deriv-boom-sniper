@@ -271,42 +271,49 @@ function connectDeriv() {
 
         if (msg.error) {
             const errMsg = (msg.error.message || '').toLowerCase();
-            // Ignorar errores benignos que ensucian los logs
-            const isBenign = errMsg.includes('already subscribed') ||
-                errMsg.includes('unrecognised request');
+            const isBenign = errMsg.includes('already subscribed') || errMsg.includes('unrecognised request');
+            const isMarketClosed = msg.error.code === 'MarketIsClosed' || errMsg.includes('market is closed');
+            const isInvalidSymbol = msg.error.code === 'InvalidSymbol' || errMsg.includes('invalid symbol');
 
             if (!isBenign) {
-                console.error(`⚠️ Error de Deriv [${msg.msg_type || 'N/A'}]: ${msg.error.message}`);
+                console.error(`⚠️ Error de Deriv [${msg.error.code || 'N/A'}]: ${msg.error.message}`);
             }
 
-            // Detectar mercado cerrado SOLAMENTE si es del símbolo activo
-            const errorSymbol = msg.echo_req ? (msg.echo_req.ticks || msg.echo_req.ticks_history || msg.echo_req.subscribe) : null;
+            // --- INTELIGENCIA DE MERCADO ---
+            if (isMarketClosed || isInvalidSymbol) {
+                botState.marketStatus = 'CLOSED';
+                botState.lastTickPrice = 0;
+                botState.tickBuffer = [];
 
-            if (msg.error.code === 'MarketIsClosed') {
-                if (!errorSymbol || errorSymbol === botState.symbol) {
-                    botState.marketStatus = 'CLOSED';
-                    botState.lastTickPrice = 0;
-                    console.log(`🚫 MERCADO CERRADO confirmado para ${botState.symbol}`);
-                } else {
-                    console.log(`ℹ️ Ignorando mensaje de mercado cerrado para símbolo secundario: ${errorSymbol}`);
+                if (botState.symbol === 'frxXAUUSD' || botState.symbol === 'XAUUSD') {
+                    console.log(`💡 [SMART AI]: El mercado de Oro está cerrado (Fin de semana) o el símbolo es inválido. Redirigiendo fuego al mercado 24/7 (V100)...`);
+                    
+                    // Auto-Switch a Volatility 100 (R_100)
+                    botState.symbol = 'R_100';
+                    botState.marketStatus = 'SEARCHING';
+                    GOLD_CONFIG = MARKET_CONFIGS['R_100'];
+                    candleHistory = [];
+                    saveState();
+
+                    // Limpiar y solicitar el nuevo stream
+                    ws.send(JSON.stringify({ forget_all: 'ticks' }));
+                    ws.send(JSON.stringify({ forget_all: 'candles' }));
+                    setTimeout(() => {
+                        if (ws.readyState === WebSocket.OPEN) {
+                            ws.send(JSON.stringify({ subscribe: 1, ticks: botState.symbol }));
+                            ws.send(JSON.stringify({
+                                ticks_history: botState.symbol,
+                                end: 'latest',
+                                count: 100,
+                                style: 'candles',
+                                granularity: GOLD_CONFIG.granularity,
+                                subscribe: 1
+                            }));
+                        }
+                    }, 500);
                 }
             }
-
-            if (msg.msg_type === 'ticks' || msg.msg_type === 'tick') {
-                if (botState.symbol === 'frxXAUUSD') {
-                    console.log(`⚠️ Re-intentando con símbolo alternativo: XAUUSD`);
-                    botState.symbol = 'XAUUSD';
-                    ws.send(JSON.stringify({ subscribe: 1, ticks: 'XAUUSD' }));
-                    ws.send(JSON.stringify({
-                        ticks_history: 'XAUUSD',
-                        end: 'latest',
-                        count: 100,
-                        style: 'candles',
-                        granularity: GOLD_CONFIG.granularity,
-                        subscribe: 1
-                    }));
-                }
-            }
+            return; // Salir de la evaluación si hubo un error para no colapsar la app
         }
 
         if (msg.msg_type === 'balance' && !msg.error && msg.balance) botState.balance = msg.balance.balance;
