@@ -458,8 +458,8 @@
                 }
 
                 const struct = data.lastV100Structure || { hh: 0, ll: 0, lastSignal: 'WAIT' };
-                document.getElementById('hhValue').innerText = struct.hh.toFixed(2);
-                document.getElementById('llValue').innerText = struct.ll.toFixed(2);
+                document.getElementById('hhValue').innerText = parseFloat(struct.hh).toFixed(2);
+                document.getElementById('llValue').innerText = parseFloat(struct.ll).toFixed(2);
 
                 const sig = document.getElementById('signalValue');
                 sig.innerText = struct.lastSignal;
