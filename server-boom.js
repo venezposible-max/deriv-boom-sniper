@@ -474,16 +474,14 @@ function connectDeriv() {
                         contract.maxProfit = liveProfit;
                     }
 
-                    if (liveProfit >= 0.30 && (!contract.trailingFloor || contract.trailingFloor < 0.05)) {
-                        contract.trailingFloor = 0.05; // Asegura el break-even tolerando el spread
-                        console.log(`🛡️ [ASALTO TRAILING] Profit $${liveProfit.toFixed(2)} -> Bloqueado Candado en $0.05`);
-                    }
-                    
-                    // Cálculo de un piso verdaderamente dinámico, manteniendo una distancia de $0.50 (Respiración del multiplicador x400)
-                    const newDynamicFloor = Math.floor((liveProfit - 0.50) * 10) / 10;
-                    if (liveProfit >= 0.80 && (!contract.trailingFloor || contract.trailingFloor < newDynamicFloor)) {
-                        contract.trailingFloor = newDynamicFloor;
-                        console.log(`🛡️ [ASALTO TRAILING] Profit $${liveProfit.toFixed(2)} -> Bloqueado Dinámico en $${contract.trailingFloor.toFixed(2)}`);
+                    // Solo activamos el escude protector (trailing) cuando superamos $1.00 de ganancia
+                    if (liveProfit >= 1.00) {
+                        // Dejamos $0.70 de "respiración" para el x400, asegurando ganancias pero absorbiendo el slippage
+                        const newDynamicFloor = Math.floor((liveProfit - 0.70) * 10) / 10;
+                        if (!contract.trailingFloor || contract.trailingFloor < newDynamicFloor) {
+                            contract.trailingFloor = newDynamicFloor;
+                            console.log(`🛡️ [ASALTO TRAILING] Profit $${liveProfit.toFixed(2)} -> Piso dinámico fijado en $${contract.trailingFloor.toFixed(2)}`);
+                        }
                     }
 
                     if (contract.trailingFloor !== undefined && liveProfit <= contract.trailingFloor && !contract.isSelling) {
