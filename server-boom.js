@@ -473,12 +473,12 @@ function connectDeriv() {
                         contract.maxProfit = liveProfit;
                     }
 
-                    if (liveProfit >= 0.50 && (!contract.trailingFloor || contract.trailingFloor < 0.10)) {
-                        contract.trailingFloor = 0.10;
-                        console.log(`🛡️ [ASALTO TRAILING] Profit $${liveProfit.toFixed(2)} -> Bloqueado Candado en $0.10`);
+                    if (liveProfit >= 0.20 && (!contract.trailingFloor || contract.trailingFloor < 0.05)) {
+                        contract.trailingFloor = 0.05; // Asegura el break-even rápido
+                        console.log(`🛡️ [ASALTO TRAILING] Profit $${liveProfit.toFixed(2)} -> Bloqueado Candado en $0.05`);
                     }
-                    if (liveProfit >= 1.20 && (!contract.trailingFloor || contract.trailingFloor < 0.80)) {
-                        contract.trailingFloor = Math.floor(liveProfit - 0.40);
+                    if (liveProfit >= 0.60 && (!contract.trailingFloor || contract.trailingFloor < 0.30)) {
+                        contract.trailingFloor = Math.floor((liveProfit - 0.20) * 10) / 10;
                         console.log(`🛡️ [ASALTO TRAILING] Profit $${liveProfit.toFixed(2)} -> Bloqueado Dinámico en $${contract.trailingFloor.toFixed(2)}`);
                     }
 
@@ -646,18 +646,19 @@ function processStrategy() {
         return;
     }
 
-    // --- EL GATILLO: RUPTURA VIOLENTA A LA BANDA DE BOLLINGER (x800 SNIPER) ---
+    // --- EL GATILLO: MEAN REVERSION SOBRE BANDAS DE BOLLINGER (x400 CONTRARIAN) ---
     if (stdDev > 0 && isCompressed) {
-        // Rompe agresivamente hacia arriba -> FUERZA COMPRADORA DESTRUYE LA COMPRESIÓN
+        // Rompe agresivamente hacia arriba -> Techo tocado. El mercado es un resorte que tenderá a regresar a la media.
         if (currentPrice > upperBand) {
-            console.log(`🚀 [ASALTO ALCISTA x800] Compresión Rota! (Banda: ${bandwidthPct.toFixed(4)}%) | Precio: ${currentPrice} > Techo: ${upperBand.toFixed(2)}`);
-            // SL lo anclamos a la media móvil (porque si vuelve ahí, el tiro salió mal y cortamos rápido)
-            executeDynamicTrade('MULTUP', sma, currentPrice);
+            console.log(`💥 [ASALTO BAJISTA x400] Banda Superior Perforada (Reversión a la media) | Precio: ${currentPrice} > Techo: ${upperBand.toFixed(2)}`);
+            // Disparamos hacia ABAJO (MULTDOWN) en contra del mini-pico falso
+            executeDynamicTrade('MULTDOWN', currentPrice + (stdDev * 5), currentPrice);
         }
-        // Rompe agresivamente hacia abajo -> FUERZA VENDEDORA DESTRUYE LA COMPRESIÓN
+        // Rompe agresivamente hacia abajo -> Piso tocado. Rebotará hacia arriba.
         else if (currentPrice < lowerBand) {
-            console.log(`💥 [ASALTO BAJISTA x800] Compresión Rota! (Banda: ${bandwidthPct.toFixed(4)}%) | Precio: ${currentPrice} < Piso: ${lowerBand.toFixed(2)}`);
-            executeDynamicTrade('MULTDOWN', sma, currentPrice);
+            console.log(`🚀 [ASALTO ALCISTA x400] Banda Inferior Perforada (Reversión a la media) | Precio: ${currentPrice} < Piso: ${lowerBand.toFixed(2)}`);
+            // Disparamos hacia ARRIBA (MULTUP) en contra del mini-hueco falso
+            executeDynamicTrade('MULTUP', currentPrice - (stdDev * 5), currentPrice);
         }
     }
 
