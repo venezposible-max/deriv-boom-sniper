@@ -599,7 +599,8 @@ function processStrategy() {
     const bandwidthPct = ((upperBand - lowerBand) / sma) * 100;
 
     // Detectar si estamos en compresión extrema (baja volatilidad esperando una explosión)
-    const isCompressed = bandwidthPct < 0.05;
+    // El Backtest de 5000 ticks demostró que la compresión mínima es 0.0622. Ajustamos a 0.08.
+    const isCompressed = bandwidthPct < 0.08;
 
     // --- ENFRIAMIENTO RELÁMPAGO (SPEED COOLDOWN) ---
     const now = Date.now();
