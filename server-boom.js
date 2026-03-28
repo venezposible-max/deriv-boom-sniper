@@ -482,7 +482,8 @@ function connectDeriv() {
                         console.log(`🛡️ [ASALTO TRAILING] Profit $${liveProfit.toFixed(2)} -> Bloqueado Dinámico en $${contract.trailingFloor.toFixed(2)}`);
                     }
 
-                    if (contract.trailingFloor && liveProfit <= contract.trailingFloor) {
+                    if (contract.trailingFloor && liveProfit <= contract.trailingFloor && !contract.isSelling) {
+                        contract.isSelling = true; // Prevenir múltiples llamadas mientras Deriv responde
                         console.log(`⚡ [TRAIL HIT] Cerrando en $${liveProfit.toFixed(2)} para asegurar $${contract.trailingFloor.toFixed(2)}`);
                         sellContract(contract.id);
                     }
@@ -752,7 +753,7 @@ function executeTrade(type) {
 
 function sellContract(contractId) {
     if (ws && ws.readyState === WebSocket.OPEN) {
-        ws.send(JSON.stringify({ sell: contractId, price: 0 }));
+        ws.send(JSON.stringify({ sell: contractId }));
     }
 }
 
