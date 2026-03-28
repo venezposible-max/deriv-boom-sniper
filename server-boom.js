@@ -483,9 +483,13 @@ function connectDeriv() {
                         console.log(`🛡️ [ASALTO TRAILING] Profit $${liveProfit.toFixed(2)} -> Bloqueado Dinámico en $${contract.trailingFloor.toFixed(2)}`);
                     }
 
-                    if (contract.trailingFloor && liveProfit <= contract.trailingFloor && !contract.isSelling) {
+                    if (contract.trailingFloor !== undefined && liveProfit <= contract.trailingFloor && !contract.isSelling) {
                         contract.isSelling = true; // Prevenir múltiples llamadas mientras Deriv responde
-                        console.log(`⚡ [TRAIL HIT] Cerrando en $${liveProfit.toFixed(2)} para asegurar $${contract.trailingFloor.toFixed(2)}`);
+                        if (liveProfit < contract.trailingFloor - 0.05) {
+                            console.log(`⚡ [GAP DE MERCADO] El V100 saltó violentamente perforando el refugio de $${contract.trailingFloor.toFixed(2)}. Abortando de emergencia en $${liveProfit.toFixed(2)}`);
+                        } else {
+                            console.log(`⚡ [TRAIL HIT] Cerrando operación en $${liveProfit.toFixed(2)} respaldando el piso de $${contract.trailingFloor.toFixed(2)}`);
+                        }
                         sellContract(contract.id);
                     }
                 }
