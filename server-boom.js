@@ -4,6 +4,18 @@ const cors = require('cors');
 const path = require('path');
 const fs = require('fs');
 
+// --- OVERRIDE CONSOLE FOR REMOTE LOGGING ---
+let remoteLogs = [];
+const originalLog = console.log;
+const originalErr = console.error;
+function interceptLog(type, args) {
+    const msg = `[${new Date().toISOString()}] [${type}] ` + Array.from(args).map(a => typeof a === 'object' ? JSON.stringify(a) : a).join(' ');
+    remoteLogs.unshift(msg);
+    if(remoteLogs.length > 100) remoteLogs.pop();
+}
+console.log = function() { interceptLog('INFO', arguments); originalLog.apply(console, arguments); };
+console.error = function() { interceptLog('ERROR', arguments); originalErr.apply(console, arguments); };
+
 // ==========================================
 // 🥇 GOLD SNIPER PRO (XAU/USD) - 2026
 // ==========================================
@@ -157,6 +169,10 @@ app.post('/api/sell-contract', (req, res) => {
         return res.json({ success: true, message: 'Orden de cierre enviada' });
     }
     res.status(400).json({ success: false, error: 'No hay contrato activo' });
+});
+
+app.get('/api/logs', (req, res) => {
+    res.send(`<pre style="background:#000;color:#0f0;padding:20px;font-family:monospace;line-height:1.5;">${remoteLogs.join('\n')}</pre>`);
 });
 
 app.get('/api/run-backtest', (req, res) => {
