@@ -196,7 +196,15 @@ app.post('/api/switch-market', (req, res) => {
         ws.send(JSON.stringify({ forget_all: 'candles' }));
         setTimeout(() => {
             if (ws.readyState === WebSocket.OPEN) {
-                ws.send(JSON.stringify({ authorize: process.env.DERIV_TOKEN || 'TSuD37g6G593Uis' }));
+                ws.send(JSON.stringify({ subscribe: 1, ticks: botState.symbol }));
+                ws.send(JSON.stringify({
+                    ticks_history: botState.symbol,
+                    end: 'latest',
+                    count: 100,
+                    style: 'candles',
+                    granularity: GOLD_CONFIG.granularity,
+                    subscribe: 1
+                }));
             }
         }, 500);
     } else {
