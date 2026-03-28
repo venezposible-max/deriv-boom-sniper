@@ -474,12 +474,15 @@ function connectDeriv() {
                         contract.maxProfit = liveProfit;
                     }
 
-                    if (liveProfit >= 0.20 && (!contract.trailingFloor || contract.trailingFloor < 0.05)) {
-                        contract.trailingFloor = 0.05; // Asegura el break-even rápido
+                    if (liveProfit >= 0.30 && (!contract.trailingFloor || contract.trailingFloor < 0.05)) {
+                        contract.trailingFloor = 0.05; // Asegura el break-even tolerando el spread
                         console.log(`🛡️ [ASALTO TRAILING] Profit $${liveProfit.toFixed(2)} -> Bloqueado Candado en $0.05`);
                     }
-                    if (liveProfit >= 0.60 && (!contract.trailingFloor || contract.trailingFloor < 0.30)) {
-                        contract.trailingFloor = Math.floor((liveProfit - 0.20) * 10) / 10;
+                    
+                    // Cálculo de un piso verdaderamente dinámico, manteniendo una distancia de $0.50 (Respiración del multiplicador x400)
+                    const newDynamicFloor = Math.floor((liveProfit - 0.50) * 10) / 10;
+                    if (liveProfit >= 0.80 && (!contract.trailingFloor || contract.trailingFloor < newDynamicFloor)) {
+                        contract.trailingFloor = newDynamicFloor;
                         console.log(`🛡️ [ASALTO TRAILING] Profit $${liveProfit.toFixed(2)} -> Bloqueado Dinámico en $${contract.trailingFloor.toFixed(2)}`);
                     }
 
