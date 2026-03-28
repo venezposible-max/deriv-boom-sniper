@@ -430,6 +430,10 @@ function connectDeriv() {
             // VERIFICACIÓN DE SÍMBOLO: Ignorar velas que no sean del mercado activo
             if (ohlc.symbol !== botState.symbol) return;
 
+            // -- HOTFIX: ALGUNAS VECES DERIV SILENCIA LOS TICKS CUANDO HAY OHLC, USAMOS EL CIERRE --
+            const quote = parseFloat(ohlc.close);
+            if (!isNaN(quote)) handlePriceTick(quote);
+
             const existing = candleHistory.find(c => c.epoch === ohlc.open_time);
             if (existing) {
                 existing.close = ohlc.close;
@@ -439,69 +443,63 @@ function connectDeriv() {
                 candleHistory.push({ epoch: ohlc.open_time, open: ohlc.open, high: ohlc.high, low: ohlc.low, close: ohlc.close });
                 if (candleHistory.length > 100) candleHistory.shift();
             }
+        }
+
+        function handlePriceTick(quote) {
+            botState.marketStatus = 'OPEN';
+            botState.lastTickPrice = quote;
+
+            botState.tickBuffer.push(quote);
+            if (botState.tickBuffer.length > 20) botState.tickBuffer.shift();
+
+            // ─── MASTER TRAILING (TICK-BY-TICK / SEC-BY-SEC) ───
+            if (botState.currentContractId && botState.isRunning && GOLD_CONFIG.useTrailing) {
+                const contract = botState.activeContracts.find(c => c.id === botState.currentContractId);
+                if (contract && contract.entryPrice) {
+                    let priceChangePct = (quote - contract.entryPrice) / contract.entryPrice;
+                    if (contract.type === 'MULTDOWN') priceChangePct = -priceChangePct;
+                    const liveProfit = priceChangePct * contract.multiplier * contract.stake;
+
+                    botState.tradeProfit = liveProfit;
+
+                    if (!contract.maxProfit || liveProfit > contract.maxProfit) {
+                        contract.maxProfit = liveProfit;
+                    }
+
+                    if (liveProfit >= 0.50 && (!contract.trailingFloor || contract.trailingFloor < 0.10)) {
+                        contract.trailingFloor = 0.10;
+                        console.log(`🛡️ [ASALTO TRAILING] Profit $${liveProfit.toFixed(2)} -> Bloqueado Candado en $0.10`);
+                    }
+                    if (liveProfit >= 1.20 && (!contract.trailingFloor || contract.trailingFloor < 0.80)) {
+                        contract.trailingFloor = Math.floor(liveProfit - 0.40);
+                        console.log(`🛡️ [ASALTO TRAILING] Profit $${liveProfit.toFixed(2)} -> Bloqueado Dinámico en $${contract.trailingFloor.toFixed(2)}`);
+                    }
+
+                    if (contract.trailingFloor && liveProfit <= contract.trailingFloor) {
+                        console.log(`⚡ [TRAIL HIT] Cerrando en $${liveProfit.toFixed(2)} para asegurar $${contract.trailingFloor.toFixed(2)}`);
+                        sellContract(contract.id);
+                    }
+                }
+            }
+
+            // Calcular Momentum
+            let accel = 0;
+            if (botState.tickBuffer.length >= 5) {
+                accel = botState.tickBuffer[botState.tickBuffer.length - 1] - botState.tickBuffer[botState.tickBuffer.length - 5];
+            }
+            botState.tickAcceleration = accel;
+
+            if (botState.currentContractId && botState.tradeStartTime) {
+                botState.tradeSeconds = Math.floor((Date.now() - botState.tradeStartTime) / 1000);
+            }
+
             processStrategy();
         }
 
         if (msg.msg_type === 'tick' && msg.tick) {
-            // VERIFICACIÓN DE SÍMBOLO: Ignorar ticks que no sean del mercado activo
             if (msg.tick.symbol !== botState.symbol) return;
-
-            botState.marketStatus = 'OPEN';
             const quote = parseFloat(msg.tick.quote);
-            if (!isNaN(quote)) {
-                botState.lastTickPrice = quote;
-
-                botState.tickBuffer.push(quote);
-                if (botState.tickBuffer.length > 20) botState.tickBuffer.shift();
-
-                // ─── MASTER TRAILING (TICK-BY-TICK) ───
-                // Monitoreo ultra-rápido para asegurar ganancias
-                if (botState.currentContractId && botState.isRunning && GOLD_CONFIG.useTrailing) {
-                    const contract = botState.activeContracts.find(c => c.id === botState.currentContractId);
-                    if (contract && contract.entryPrice) {
-                        // Calcular ganancia real-time corregida (Fórmula Multiplicadores)
-                        let priceChangePct = (quote - contract.entryPrice) / contract.entryPrice;
-                        if (contract.type === 'MULTDOWN') priceChangePct = -priceChangePct;
-                        const liveProfit = priceChangePct * contract.multiplier * contract.stake;
-
-                        botState.tradeProfit = liveProfit; // Actualizar UI
-
-                        // Actualizar Profit Máximo Alcanzado
-                        if (!contract.maxProfit || liveProfit > contract.maxProfit) {
-                            contract.maxProfit = liveProfit;
-                        }
-
-                        // Lógica Asalto Relámpago: A $0.50 asegura $0.10, a $1.20 asegura $0.80
-                        if (liveProfit >= 0.50 && (!contract.trailingFloor || contract.trailingFloor < 0.10)) {
-                            contract.trailingFloor = 0.10;
-                            console.log(`🛡️ [ASALTO TRAILING] Profit $${liveProfit.toFixed(2)} -> Bloqueado Candado en $0.10`);
-                        }
-                        if (liveProfit >= 1.20 && (!contract.trailingFloor || contract.trailingFloor < 0.80)) {
-                            contract.trailingFloor = Math.floor(liveProfit - 0.40); // Sube apretado dejando solo 40ctv de respiro
-                            console.log(`🛡️ [ASALTO TRAILING] Profit $${liveProfit.toFixed(2)} -> Bloqueado Dinámico en $${contract.trailingFloor.toFixed(2)}`);
-                        }
-
-                        // Disparar Cierre de Emergencia
-                        if (contract.trailingFloor && liveProfit <= contract.trailingFloor) {
-                            console.log(`⚡ [TRAIL HIT] Cerrando en $${liveProfit.toFixed(2)} para asegurar $${contract.trailingFloor.toFixed(2)}`);
-                            sellContract(contract.id);
-                        }
-                    }
-                }
-
-                // Calcular Momentum
-                let accel = 0;
-                if (botState.tickBuffer.length >= 5) {
-                    accel = botState.tickBuffer[botState.tickBuffer.length - 1] - botState.tickBuffer[botState.tickBuffer.length - 5];
-                }
-                botState.tickAcceleration = accel;
-
-                if (botState.currentContractId && botState.tradeStartTime) {
-                    botState.tradeSeconds = Math.floor((Date.now() - botState.tradeStartTime) / 1000);
-                }
-
-                processStrategy();
-            }
+            if (!isNaN(quote)) handlePriceTick(quote);
         }
 
         if (msg.msg_type === 'buy' && msg.buy) {
