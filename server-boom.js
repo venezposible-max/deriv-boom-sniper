@@ -24,10 +24,10 @@ let MARKET_CONFIGS = {
         useTrailing: true
     },
     'R_100': {
-        stake: 10,
-        takeProfit: 5.0,
-        stopLoss: 10.0,
-        multiplier: 200,
+        stake: 5,
+        takeProfit: 2.0,
+        stopLoss: 5.0,
+        multiplier: 800,
         rsiPeriod: 14,
         emaPeriod: 20,
         rsiOverbought: 70,
@@ -357,7 +357,7 @@ function connectDeriv() {
                 botState.lastTickPrice = quote;
 
                 botState.tickBuffer.push(quote);
-                if (botState.tickBuffer.length > 10) botState.tickBuffer.shift();
+                if (botState.tickBuffer.length > 20) botState.tickBuffer.shift();
 
                 // ─── MASTER TRAILING (TICK-BY-TICK) ───
                 // Monitoreo ultra-rápido para asegurar ganancias
@@ -376,16 +376,14 @@ function connectDeriv() {
                             contract.maxProfit = liveProfit;
                         }
 
-                        // Lógica Franklin: A $1.00 asegura $0.50, a $1.50 asegura $1.00
-                        if (contract.maxProfit >= 1.00) {
-                            // Escalón de $0.50. Ejemplo: $1.00 -> piso $0.50 | $1.50 -> piso $1.00
-                            const currentStep = Math.floor(contract.maxProfit / 0.50) * 0.50;
-                            const newFloor = currentStep - 0.50;
-
-                            if (!contract.trailingFloor || newFloor > contract.trailingFloor) {
-                                contract.trailingFloor = newFloor;
-                                console.log(`🛡️ [FRANKLIN TRAILING] Escalón $${currentStep.toFixed(2)} -> Piso: $${newFloor.toFixed(2)} (Máx: $${contract.maxProfit.toFixed(2)})`);
-                            }
+                        // Lógica Asalto Relámpago: A $0.50 asegura $0.10, a $1.20 asegura $0.80
+                        if (liveProfit >= 0.50 && (!contract.trailingFloor || contract.trailingFloor < 0.10)) {
+                            contract.trailingFloor = 0.10;
+                            console.log(`🛡️ [ASALTO TRAILING] Profit $${liveProfit.toFixed(2)} -> Bloqueado Candado en $0.10`);
+                        }
+                        if (liveProfit >= 1.20 && (!contract.trailingFloor || contract.trailingFloor < 0.80)) {
+                            contract.trailingFloor = Math.floor(liveProfit - 0.40); // Sube apretado dejando solo 40ctv de respiro
+                            console.log(`🛡️ [ASALTO TRAILING] Profit $${liveProfit.toFixed(2)} -> Bloqueado Dinámico en $${contract.trailingFloor.toFixed(2)}`);
                         }
 
                         // Disparar Cierre de Emergencia
@@ -503,115 +501,70 @@ function connectDeriv() {
 }
 
 function processStrategy() {
-    if (candleHistory.length < 30) return;
-
-    const currentPrice = botState.lastTickPrice || candleHistory[candleHistory.length - 1].close;
-
-    // --- PIVOT DETECTION (ChoCh Logic) ---
-    // PASO 1: Encontrar el Swing High más reciente y guardar su índice
-    let lastSH = 0;
-    let shIndex = -1;
-    for (let i = candleHistory.length - 3; i > 5; i--) {
-        const prev = candleHistory[i - 1];
-        const cur = candleHistory[i];
-        const next = candleHistory[i + 1];
-        if (cur.high > prev.high && cur.high > next.high) {
-            lastSH = cur.high;
-            shIndex = i;
-            break;
-        }
-    }
-
-    // PASO 2: Buscar el Swing Low más reciente ANTES del SH (historia más antigua)
-    // Arrancamos desde shIndex-1 hacia atrás: garantiza que el SL es estructuralmente
-    // anterior al SH, es decir, el soporte real que precedió la ruptura alcista
-    let lastSL = 0;
-    if (lastSH > 0 && shIndex > 6) {
-        for (let i = shIndex - 1; i > 5; i--) {
-            const prev = candleHistory[i - 1];
-            const cur = candleHistory[i];
-            const next = candleHistory[i + 1];
-            if (cur.low < prev.low && cur.low < next.low && cur.low < lastSH) {
-                lastSL = cur.low;
-                break;
-            }
-        }
-    }
-
-    // Si no encontramos un par válido, no operar
-    if (!lastSH || !lastSL) return;
-
-
-    // Detectar si el precio rompe la estructura (ChoCh)
-    const isBreakUp = currentPrice > lastSH;
-    const isBreakDown = currentPrice < lastSL;
-
-    // --- MOMENTUM Y ACELERACIÓN ESTRUCTURAL ---
     const ticks = botState.tickBuffer;
-    let momentumUp = 0;
-    let momentumDown = 0;
-    let trueAcceleration = 0;
+    if (ticks.length < 20) return; // Necesitamos 20 ticks para medir la caja de compresión
 
-    if (ticks.length >= 5) {
-        // Velocidad direccional neta (Últimos 4 pasos de precio)
-        momentumUp = ticks[ticks.length - 1] - ticks[ticks.length - 5];
-        momentumDown = ticks[ticks.length - 5] - ticks[ticks.length - 1];
+    const currentPrice = ticks[ticks.length - 1];
 
-        // Aceleración Real (Rapidez actual vs Rapidez anterior)
-        const v1 = ticks[ticks.length - 1] - ticks[ticks.length - 3];
-        const v2 = ticks[ticks.length - 3] - ticks[ticks.length - 5];
-        trueAcceleration = Math.abs(v1) - Math.abs(v2);
-    }
+    // --- BOLLINGER BANDS EN TICKS (TICK COMPRESSION) ---
+    // Calcular Media Móvil Simple (SMA) de los últimos 20 ticks
+    const sum = ticks.reduce((a, b) => a + b, 0);
+    const sma = sum / ticks.length;
 
-    // Fuerza mínima exigida para confiar en la ruptura
-    // 0.25 en V100 (balance entre capturar impulsos reales y evitar ruido normal del mercado)
-    const minForce = botState.symbol === 'frxXAUUSD' ? 0.05 : 0.25;
+    // Calcular Desviación Estándar (Varianza)
+    const variance = ticks.reduce((a, b) => a + Math.pow(b - sma, 2), 0) / ticks.length;
+    const stdDev = Math.sqrt(variance);
 
+    // Bandas de Bollinger al 2.5 Desviaciones Estándar (Rechaza ruido normal, solo busca explosiones verdaderas)
+    const upperBand = sma + (stdDev * 2.5);
+    const lowerBand = sma - (stdDev * 2.5);
 
-    // --- COOLDOWN CHECK ---
+    // Medimos qué tan estrecha o apretada está la banda (% de ancho)
+    const bandwidthPct = ((upperBand - lowerBand) / sma) * 100;
+
+    // Detectar si estamos en compresión extrema (baja volatilidad esperando una explosión)
+    const isCompressed = bandwidthPct < 0.05;
+
+    // --- ENFRIAMIENTO RELÁMPAGO (SPEED COOLDOWN) ---
     const now = Date.now();
     const secondsSinceLastTrade = (now - (botState.lastTradeTime || 0)) / 1000;
-    const cooldownPeriod = 60; // 60 segundos de enfriamiento
+    const cooldownPeriod = 15; // Ya no hay que esperar 60s, en asalto x800 disparamos y enfriamos en 15s
 
     if (!botState.isRunning || botState.currentContractId || isBuying || secondsSinceLastTrade < cooldownPeriod) {
         let sig = 'WAIT';
         if (botState.isRunning) {
             const remaining = Math.max(0, Math.ceil(cooldownPeriod - secondsSinceLastTrade));
-            if (botState.currentContractId) sig = 'OPERANDO...';
-            else if (isBuying) sig = 'COMPRANDO...';
+            if (botState.currentContractId) sig = 'CERRANDO...';
+            else if (isBuying) sig = 'FUEGO...';
             else if (remaining > 0) sig = `ENFRIAMIENTO ${remaining}s`;
         } else {
             sig = 'APAGADO';
         }
 
-        botState.lastV100Structure = { hh: lastSH, ll: lastSL, lastSignal: sig };
+        botState.lastV100Structure = { hh: upperBand.toFixed(2), ll: lowerBand.toFixed(2), lastSignal: sig };
         return;
     }
 
-    // 1. COMPRA (ChoCh alcista)
-    if (isBreakUp && momentumUp > minForce) {
-        if (trueAcceleration > 0) { // Exige aceleración POSITIVA real, no solo plana
-            console.log(`🔥 [CHOCH UP] Breakout High: ${lastSH} | Price: ${currentPrice} | Momentum: +${momentumUp.toFixed(2)} | Accel Real: ${trueAcceleration.toFixed(2)}`);
-            executeDynamicTrade('MULTUP', lastSL, currentPrice);
-        } else {
-            console.log(`⚠️ [RECHAZADO UP] Momentum (+${momentumUp.toFixed(2)}) OK pero Aceleración plana/negativa (${trueAcceleration.toFixed(2)}). Trampa evitada.`);
+    // --- EL GATILLO: RUPTURA VIOLENTA A LA BANDA DE BOLLINGER (x800 SNIPER) ---
+    if (stdDev > 0 && isCompressed) {
+        // Rompe agresivamente hacia arriba -> FUERZA COMPRADORA DESTRUYE LA COMPRESIÓN
+        if (currentPrice > upperBand) {
+            console.log(`🚀 [ASALTO ALCISTA x800] Compresión Rota! (Banda: ${bandwidthPct.toFixed(4)}%) | Precio: ${currentPrice} > Techo: ${upperBand.toFixed(2)}`);
+            // SL lo anclamos a la media móvil (porque si vuelve ahí, el tiro salió mal y cortamos rápido)
+            executeDynamicTrade('MULTUP', sma, currentPrice);
         }
-    }
-    // 2. VENTA (ChoCh bajista)
-    else if (isBreakDown && momentumDown > minForce) {
-        if (trueAcceleration > 0) { // Exige aceleración POSITIVA real, no solo plana
-            console.log(`🔥 [CHOCH DOWN] Breakout Low: ${lastSL} | Price: ${currentPrice} | Momentum: -${momentumDown.toFixed(2)} | Accel Real: ${trueAcceleration.toFixed(2)}`);
-            executeDynamicTrade('MULTDOWN', lastSH, currentPrice);
-        } else {
-            console.log(`⚠️ [RECHAZADO DOWN] Momentum (-${momentumDown.toFixed(2)}) OK pero Aceleración plana/negativa (${trueAcceleration.toFixed(2)}). Trampa evitada.`);
+        // Rompe agresivamente hacia abajo -> FUERZA VENDEDORA DESTRUYE LA COMPRESIÓN
+        else if (currentPrice < lowerBand) {
+            console.log(`💥 [ASALTO BAJISTA x800] Compresión Rota! (Banda: ${bandwidthPct.toFixed(4)}%) | Precio: ${currentPrice} < Piso: ${lowerBand.toFixed(2)}`);
+            executeDynamicTrade('MULTDOWN', sma, currentPrice);
         }
     }
 
-
+    // Actualizamos variables para que se visualicen en el Frontend como "Breakout HH" y "LL"
     botState.lastV100Structure = {
-        hh: lastSH,
-        ll: lastSL,
-        lastSignal: isBreakUp ? 'UP' : (isBreakDown ? 'DOWN' : 'WAIT')
+        hh: upperBand.toFixed(2),
+        ll: lowerBand.toFixed(2),
+        lastSignal: isCompressed ? 'COMPRESIÓN ⚠️' : 'HUNTING'
     };
 }
 
