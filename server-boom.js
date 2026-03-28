@@ -753,7 +753,7 @@ function executeTrade(type) {
 
 function sellContract(contractId) {
     if (ws && ws.readyState === WebSocket.OPEN) {
-        ws.send(JSON.stringify({ sell: contractId }));
+        ws.send(JSON.stringify({ sell: contractId, price: 0 }));
     }
 }
 
