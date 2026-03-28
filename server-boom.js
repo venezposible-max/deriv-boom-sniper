@@ -231,7 +231,7 @@ function connectDeriv() {
 
     ws.on('message', (data) => {
         const msg = JSON.parse(data);
-        if (msg.msg_type === 'authorize') {
+        if (msg.msg_type === 'authorize' && msg.authorize) {
             console.log(`✅ Autenticado con éxito: ${msg.authorize.fullname || 'Usuario'}`);
             ws.send(JSON.stringify({ subscribe: 1, ticks: botState.symbol }));
             ws.send(JSON.stringify({
