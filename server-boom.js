@@ -161,13 +161,14 @@ app.post('/api/sell-contract', (req, res) => {
 
 app.get('/api/run-backtest', (req, res) => {
     // Escapa de DNS local ejecutando el simulador directo en el servidor Railway
+    const targetComp = parseFloat(req.query.compresion) || 0.05;
+    const countParam = parseInt(req.query.count) || 5000;
     let backtestWs = new WebSocket(`wss://ws.derivws.com/websockets/v3?app_id=${APP_ID}`);
     let testPrices = [];
     let testTimes = [];
-    let chunks = 0;
     
     backtestWs.on('open', () => {
-        backtestWs.send(JSON.stringify({ ticks_history: 'R_100', end: 'latest', count: 5000, style: 'ticks' }));
+        backtestWs.send(JSON.stringify({ ticks_history: 'R_100', end: 'latest', count: countParam, style: 'ticks' }));
     });
 
     backtestWs.on('message', (data) => {
@@ -177,6 +178,9 @@ app.get('/api/run-backtest', (req, res) => {
             testTimes = msg.history.times;
             backtestWs.close();
             
+            // Stats de compresion
+            let minB = 1000, maxB = 0, sumB = 0;
+
             // Simular Asalto x800
             let bal = 0, wins = 0, losses = 0, total = 0;
             let inTrade = false, type = '', entry = 0, maxP = 0, tFloor = null, cool = 0;
@@ -203,13 +207,30 @@ app.get('/api/run-backtest', (req, res) => {
                 let varc = slice.reduce((a,b)=>a+Math.pow(b-sma,2),0)/20;
                 let std = Math.sqrt(varc);
                 let up = sma + (std*2.5), low = sma - (std*2.5);
-                let isC = ((up-low)/sma)*100 < 0.05;
+                let bPct = ((up-low)/sma)*100;
+                
+                if(bPct < minB) minB = bPct;
+                if(bPct > maxB) maxB = bPct;
+                sumB += bPct;
+
+                let isC = bPct < targetComp;
                 
                 if(std > 0 && isC && p > up) { inTrade=true; type='MULTUP'; entry=p; maxP=-0.5; tFloor=null; total++; }
                 else if(std > 0 && isC && p < low) { inTrade=true; type='MULTDOWN'; entry=p; maxP=-0.5; tFloor=null; total++; }
             }
             
-            res.json({ success: true, ticks_analizados: testPrices.length, operaciones: total, ganadas: wins, perdidas: losses, pnl: bal.toFixed(2) });
+            res.json({ 
+                success: true, 
+                ticks_analizados: testPrices.length,
+                compresion_minima: minB.toFixed(4),
+                compresion_maxima: maxB.toFixed(4),
+                compresion_promedio: (sumB/(testPrices.length-20)).toFixed(4),
+                compresion_buscada: targetComp,
+                operaciones: total, 
+                ganadas: wins, 
+                perdidas: losses, 
+                pnl: bal.toFixed(2)
+            });
         }
     });
 });
