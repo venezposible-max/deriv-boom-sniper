@@ -42,7 +42,7 @@ let MARKET_CONFIGS = {
         stake: 5,
         takeProfit: 2.0,
         stopLoss: 5.0,
-        multiplier: 800,
+        multiplier: 400,
         rsiPeriod: 14,
         emaPeriod: 20,
         rsiOverbought: 70,
@@ -134,7 +134,14 @@ app.post('/api/control', (req, res) => {
         if (stake) GOLD_CONFIG.stake = Number(stake);
         if (takeProfit) GOLD_CONFIG.takeProfit = Number(takeProfit);
         if (stopLoss) GOLD_CONFIG.stopLoss = Number(stopLoss);
-        if (multiplier) GOLD_CONFIG.multiplier = Number(multiplier);
+        if (multiplier) {
+            let mValue = Number(multiplier);
+            if (botState.symbol === 'R_100' && mValue > 400) {
+                mValue = 400; // Deriv restringe V100 a un máximo de x400
+                console.log("⚠️ [ALERTA] Multiplicador ajustado a x400 (Máximo permitido por Deriv para V100)");
+            }
+            GOLD_CONFIG.multiplier = mValue;
+        }
         if (rsiOverbought) { GOLD_CONFIG.rsiOverbought = Number(rsiOverbought); botState.rsiOverbought = Number(rsiOverbought); }
         if (rsiOversold) { GOLD_CONFIG.rsiOversold = Number(rsiOversold); botState.rsiOversold = Number(rsiOversold); }
         if (req.body.useTrailing !== undefined) GOLD_CONFIG.useTrailing = !!req.body.useTrailing;
