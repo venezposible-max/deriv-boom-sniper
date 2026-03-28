@@ -216,13 +216,13 @@ app.get('/api/run-backtest', (req, res) => {
                 if(inTrade) {
                     let pct = (p - entry) / entry;
                     if(type === 'MULTDOWN') pct = -pct;
-                    let live = (pct * 800 * 5) - 0.50; // Slippage penalty spread
+                    let live = (pct * 400 * 5) - 0.50; // Asumiendo $0.50 de slippage aproximado
                     if(live > maxP) maxP = live;
                     
-                    if(live >= 0.50 && (tFloor === null || tFloor < 0.10)) tFloor = 0.10;
-                    if(live >= 1.20 && (tFloor === null || tFloor < 0.80)) tFloor = Math.floor(live - 0.40);
+                    if(live >= 0.20 && (tFloor === null || tFloor < 0.05)) tFloor = 0.05;
+                    if(live >= 0.60 && (tFloor === null || tFloor < 0.30)) tFloor = Math.floor((live - 0.20) * 10) / 10;
                     
-                    if(live <= -5.0) { bal -= 5.0; losses++; inTrade=false; cool=t+15; continue; }
+                    if(live <= -4.0) { bal -= 4.0; losses++; inTrade=false; cool=t+15; continue; } // SL Realista de -$4
                     if(tFloor !== null && live <= tFloor) { bal += tFloor; if(tFloor>0) wins++; else losses++; inTrade=false; cool=t+15; continue; }
                     continue;
                 }
@@ -241,8 +241,9 @@ app.get('/api/run-backtest', (req, res) => {
 
                 let isC = bPct < targetComp;
                 
-                if(std > 0 && isC && p > up) { inTrade=true; type='MULTUP'; entry=p; maxP=-0.5; tFloor=null; total++; }
-                else if(std > 0 && isC && p < low) { inTrade=true; type='MULTDOWN'; entry=p; maxP=-0.5; tFloor=null; total++; }
+                // MEAN REVERSION ESTRATEGIA INVERTIDA (x400)
+                if(std > 0 && isC && p > up) { inTrade=true; type='MULTDOWN'; entry=p; maxP=-0.5; tFloor=null; total++; }
+                else if(std > 0 && isC && p < low) { inTrade=true; type='MULTUP'; entry=p; maxP=-0.5; tFloor=null; total++; }
             }
             
             res.json({ 
