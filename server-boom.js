@@ -159,6 +159,61 @@ app.post('/api/sell-contract', (req, res) => {
     res.status(400).json({ success: false, error: 'No hay contrato activo' });
 });
 
+app.get('/api/run-backtest', (req, res) => {
+    // Escapa de DNS local ejecutando el simulador directo en el servidor Railway
+    let backtestWs = new WebSocket(`wss://ws.derivws.com/websockets/v3?app_id=${APP_ID}`);
+    let testPrices = [];
+    let testTimes = [];
+    let chunks = 0;
+    
+    backtestWs.on('open', () => {
+        backtestWs.send(JSON.stringify({ ticks_history: 'R_100', end: 'latest', count: 5000, style: 'ticks' }));
+    });
+
+    backtestWs.on('message', (data) => {
+        const msg = JSON.parse(data);
+        if (msg.msg_type === 'history') {
+            testPrices = msg.history.prices;
+            testTimes = msg.history.times;
+            backtestWs.close();
+            
+            // Simular Asalto x800
+            let bal = 0, wins = 0, losses = 0, total = 0;
+            let inTrade = false, type = '', entry = 0, maxP = 0, tFloor = null, cool = 0;
+            
+            for(let i=20; i<testPrices.length; i++) {
+                let p = testPrices[i], t = testTimes[i];
+                if(inTrade) {
+                    let pct = (p - entry) / entry;
+                    if(type === 'MULTDOWN') pct = -pct;
+                    let live = (pct * 800 * 5) - 0.50; // Slippage penalty spread
+                    if(live > maxP) maxP = live;
+                    
+                    if(live >= 0.50 && (tFloor === null || tFloor < 0.10)) tFloor = 0.10;
+                    if(live >= 1.20 && (tFloor === null || tFloor < 0.80)) tFloor = Math.floor(live - 0.40);
+                    
+                    if(live <= -5.0) { bal -= 5.0; losses++; inTrade=false; cool=t+15; continue; }
+                    if(tFloor !== null && live <= tFloor) { bal += tFloor; if(tFloor>0) wins++; else losses++; inTrade=false; cool=t+15; continue; }
+                    continue;
+                }
+                if(t < cool) continue;
+                
+                let slice = testPrices.slice(i-20, i);
+                let sma = slice.reduce((a,b)=>a+b,0)/20;
+                let varc = slice.reduce((a,b)=>a+Math.pow(b-sma,2),0)/20;
+                let std = Math.sqrt(varc);
+                let up = sma + (std*2.5), low = sma - (std*2.5);
+                let isC = ((up-low)/sma)*100 < 0.05;
+                
+                if(std > 0 && isC && p > up) { inTrade=true; type='MULTUP'; entry=p; maxP=-0.5; tFloor=null; total++; }
+                else if(std > 0 && isC && p < low) { inTrade=true; type='MULTDOWN'; entry=p; maxP=-0.5; tFloor=null; total++; }
+            }
+            
+            res.json({ success: true, ticks_analizados: testPrices.length, operaciones: total, ganadas: wins, perdidas: losses, pnl: bal.toFixed(2) });
+        }
+    });
+});
+
 app.post('/api/trade', (req, res) => {
     const { action } = req.body;
     if (botState.currentContractId || isBuying) return res.status(400).json({ success: false, error: 'Ya hay una operación en curso.' });
