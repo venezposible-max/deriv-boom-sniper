@@ -287,9 +287,9 @@ function connectDeriv() {
             botState.lastTickPrice = parseFloat(msg.tick.quote);
             botState.lastDigit = lastDigit;
 
-            // Guardar en historial de dígitos
+            // Guardar en historial de dígitos (Límite aumentado a 300 para soportar ventana de 200)
             botState.digitHistory.push(lastDigit);
-            if (botState.digitHistory.length > 100) botState.digitHistory.shift();
+            if (botState.digitHistory.length > 300) botState.digitHistory.shift();
 
             // Actualizar frecuencia
             botState.digitFrequency[lastDigit] = (botState.digitFrequency[lastDigit] || 0) + 1;
