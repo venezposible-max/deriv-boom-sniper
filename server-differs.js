@@ -281,6 +281,13 @@ function connectDeriv() {
         // Errores
         if (msg.error) {
             console.error(`⚠️ Deriv Error [${msg.error.code}]: ${msg.error.message}`);
+            
+            // SI recibimos WrongResponse o problemas de Auth, forzamos reconexión limpia
+            if (msg.error.code === 'WrongResponse' || msg.error.code === 'AuthorizationRequired') {
+                console.log('🔄 Error crítico de sesión. Reiniciando WebSocket...');
+                botState.isConnectedToDeriv = false;
+                if (ws) ws.close(); // Esto disparará la reconexión automática de connectDeriv()
+            }
             return;
         }
 
