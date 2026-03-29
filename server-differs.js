@@ -164,6 +164,13 @@ app.post('/differs/control', (req, res) => {
         saveState();
         return res.json({ success: true, message: 'Día reiniciado' });
     }
+    if (action === 'CONFIG') {
+        const { scanRange, cooldownMs } = req.body;
+        if (scanRange) botState.scanRange = parseInt(scanRange);
+        if (cooldownMs) botState.cooldownMs = parseInt(cooldownMs);
+        saveState();
+        return res.json({ success: true, message: 'Configuración actualizada' });
+    }
 
     res.status(400).json({ success: false, error: 'Acción inválida' });
 });

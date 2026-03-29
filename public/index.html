@@ -523,22 +523,29 @@
     }
 
     window.isAdjustingScanRange = false;
+    let scanRangeTimeout = null;
 
     async function updateScanRange(val) {
         window.isAdjustingScanRange = true;
         document.getElementById('scanRangeVal').innerText = val;
-        try {
-            await fetch('/differs/control', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ action: 'CONFIG', scanRange: val })
-            });
-            // Pequeño retardo antes de volver a escuchar al servidor
-            setTimeout(() => { window.isAdjustingScanRange = false; }, 1200);
-        } catch (e) { 
-            console.error(e); 
-            window.isAdjustingScanRange = false;
-        }
+        
+        // Debounce para no saturar el servidor mientras se arrastra
+        if (scanRangeTimeout) clearTimeout(scanRangeTimeout);
+        
+        scanRangeTimeout = setTimeout(async () => {
+            try {
+                await fetch('/differs/control', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ action: 'CONFIG', scanRange: parseInt(val) })
+                });
+                // Mantener el bloqueo un poco más para dejar que el servidor procese y responda en el siguiente poll
+                setTimeout(() => { window.isAdjustingScanRange = false; }, 2000);
+            } catch (e) { 
+                console.error(e); 
+                window.isAdjustingScanRange = false;
+            }
+        }, 300);
     }
 
     // Poll every 800ms for smooth digit updates
