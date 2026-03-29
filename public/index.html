@@ -1,601 +1,476 @@
 <!DOCTYPE html>
 <html lang="es">
-
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>🥇 V100 DUAL SNIPER - CHOCH PRO</title>
+    <title>🎲 DIFFERS SNIPER - Deriv Bot</title>
+    <link rel="manifest" href="/manifest.json">
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;700;900&display=swap');
 
+        * { box-sizing: border-box; }
         body {
-            margin: 0;
-            padding: 0;
+            margin: 0; padding: 0;
             font-family: 'Outfit', sans-serif;
-            background-color: #050505;
+            background: #050510;
             color: #fff;
+            min-height: 100vh;
         }
 
-        .container {
-            max-width: 500px;
-            margin: 0 auto;
-            padding: 20px;
-        }
+        .container { max-width: 480px; margin: 0 auto; padding: 20px 16px 40px; }
 
-        .header {
-            text-align: center;
-            margin-bottom: 30px;
-        }
-
+        /* ── HEADER ── */
+        .header { text-align: center; margin-bottom: 28px; padding-top: 10px; }
         .header h1 {
-            font-size: 28px;
-            font-weight: 900;
-            color: #00ffa3;
-            margin: 0;
-            text-shadow: 0 0 20px rgba(0, 255, 163, 0.4);
+            font-size: 26px; font-weight: 900; margin: 0;
+            background: linear-gradient(135deg, #a78bfa, #7c3aed);
+            -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+            text-shadow: none;
+            filter: drop-shadow(0 0 18px rgba(167,139,250,0.5));
         }
+        .header p { color: #666; font-size: 12px; margin: 6px 0 0; letter-spacing: 3px; text-transform: uppercase; }
 
-        .header p {
-            color: #888;
-            font-size: 14px;
-            margin-top: 5px;
-            letter-spacing: 2px;
+        /* ── CHIPS ── */
+        .chip-row { display: flex; justify-content: center; gap: 8px; margin-bottom: 20px; }
+        .chip {
+            padding: 4px 14px; border-radius: 30px; font-size: 11px; font-weight: 700;
+            text-transform: uppercase; letter-spacing: 1px;
         }
+        .chip-purple { background: rgba(167,139,250,0.15); border: 1px solid #7c3aed; color: #a78bfa; }
+        .chip-green  { background: rgba(52,211,153,0.15);  border: 1px solid #059669; color: #34d399; }
+        .chip-gold   { background: rgba(250,204,21,0.15);  border: 1px solid #b45309; color: #fbbf24; }
 
-        .card {
-            background: #111;
-            border-radius: 20px;
-            padding: 25px;
-            border: 1px solid #222;
-            margin-bottom: 20px;
-            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
-        }
-
-        .stat-row {
-            display: flex;
-            justify-content: space-between;
-            margin-bottom: 15px;
-        }
-
-        .stat-box {
-            text-align: center;
-            flex: 1;
-        }
-
-        .stat-label {
-            font-size: 10px;
-            color: #666;
-            text-transform: uppercase;
-            font-weight: 700;
-            margin-bottom: 5px;
-        }
-
-        .stat-value {
-            font-size: 20px;
-            font-weight: 900;
-        }
-
-        .balance-chip {
-            background: rgba(0, 255, 163, 0.1);
-            border: 1px solid #00ffa3;
-            color: #00ffa3;
-            padding: 4px 12px;
-            border-radius: 20px;
-            font-size: 12px;
-            font-weight: 700;
+        /* ── PRICE HERO ── */
+        .price-block { text-align: center; margin-bottom: 20px; }
+        .balance-badge {
             display: inline-block;
-            margin-bottom: 10px;
+            background: rgba(167,139,250,0.1); border: 1px solid #7c3aed;
+            color: #a78bfa; padding: 5px 16px; border-radius: 30px;
+            font-size: 12px; font-weight: 700; margin-bottom: 12px;
         }
-
         .price-hero {
-            font-size: 3.5rem;
-            font-weight: 900;
-            text-align: center;
-            margin: 10px 0;
-            color: #fff;
-            line-height: 1;
+            font-size: 3.8rem; font-weight: 900; line-height: 1;
+            color: #a78bfa;
+            text-shadow: 0 0 40px rgba(167,139,250,0.4);
+        }
+        .last-digit-badge {
+            display: inline-flex; align-items: center; justify-content: center;
+            width: 64px; height: 64px; border-radius: 50%;
+            background: rgba(167,139,250,0.1); border: 2px solid #7c3aed;
+            font-size: 2.2rem; font-weight: 900; color: #fff;
+            margin: 10px auto; text-shadow: 0 0 20px #a78bfa;
+            transition: transform 0.1s;
+        }
+        .digit-label { font-size: 11px; color: #666; letter-spacing: 2px; text-transform: uppercase; margin-bottom: 6px; }
+
+        /* ── CARDS ── */
+        .card {
+            background: rgba(255,255,255,0.03); border-radius: 20px;
+            padding: 22px; border: 1px solid rgba(255,255,255,0.07);
+            margin-bottom: 16px;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+            backdrop-filter: blur(10px);
         }
 
-        .symbol-name {
-            font-size: 14px;
-            font-weight: 700;
-            color: #ffd700;
-            text-align: center;
-            letter-spacing: 3px;
-            text-transform: uppercase;
-            margin-bottom: 20px;
+        /* ── STATS ── */
+        .stat-row { display: flex; justify-content: space-between; gap: 12px; }
+        .stat-box { flex: 1; text-align: center; }
+        .stat-label { font-size: 10px; color: #555; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 6px; }
+        .stat-value { font-size: 22px; font-weight: 900; }
+        .green { color: #34d399; }
+        .red   { color: #f87171; }
+        .purple { color: #a78bfa; }
+
+        /* ── WIN RATE BAR ── */
+        .winrate-bar {
+            height: 8px; background: #1a1a2e; border-radius: 4px;
+            margin-top: 14px; overflow: hidden; position: relative;
+        }
+        .winrate-fill {
+            height: 100%; border-radius: 4px;
+            background: linear-gradient(90deg, #7c3aed, #34d399);
+            transition: width 0.6s ease;
         }
 
-        .btn-main {
-            width: 100%;
-            padding: 18px;
-            border-radius: 15px;
-            border: none;
-            font-size: 16px;
-            font-weight: 900;
-            cursor: pointer;
-            text-transform: uppercase;
+        /* ── DIGIT HISTORY ── */
+        .digit-track {
+            display: flex; gap: 6px; flex-wrap: wrap;
+            margin-top: 8px; justify-content: flex-start;
+        }
+        .digit-pill {
+            width: 30px; height: 30px; border-radius: 8px;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 13px; font-weight: 900;
             transition: all 0.3s;
         }
+        .digit-hot  { background: rgba(167,139,250,0.3); border: 1px solid #7c3aed; color: #c4b5fd; }
+        .digit-cold { background: rgba(255,255,255,0.04); border: 1px solid #333; color: #555; }
+        .digit-barrier { background: rgba(251,191,36,0.2); border: 1px solid #b45309; color: #fbbf24; }
 
-        .btn-start {
-            background: linear-gradient(135deg, #00ffa3 0%, #008f5d 100%);
-            color: #000;
-            box-shadow: 0 10px 20px rgba(0, 255, 163, 0.3);
+        /* ── BARRIER DISPLAY ── */
+        .barrier-card {
+            text-align: center; padding: 16px;
+            background: rgba(251,191,36,0.06); border: 1px solid rgba(251,191,36,0.2);
+            border-radius: 16px; margin-bottom: 16px;
         }
+        .barrier-card .label { font-size: 10px; color: #666; text-transform: uppercase; letter-spacing: 2px; margin-bottom: 8px; }
+        .barrier-card .value { font-size: 2rem; font-weight: 900; color: #fbbf24; }
+        .barrier-card .sublabel { font-size: 11px; color: #888; margin-top: 4px; }
 
-        .btn-stop {
-            background: #ff4d4d;
-            color: #fff;
-            box-shadow: 0 10px 20px rgba(255, 77, 77, 0.3);
-        }
-
-        .input-group {
-            margin-bottom: 20px;
-        }
-
-        .input-group label {
-            display: block;
-            font-size: 11px;
-            color: #888;
-            font-weight: 700;
-            margin-bottom: 8px;
-            text-transform: uppercase;
-        }
-
-        .input-group input {
-            width: 100%;
-            background: #000;
-            border: 1px solid #333;
-            padding: 15px;
-            border-radius: 12px;
-            color: #fff;
-            font-size: 16px;
-            box-sizing: border-box;
-            font-family: inherit;
-            font-weight: 700;
-        }
-
-        .indicator-bar {
-            height: 6px;
-            background: #222;
-            border-radius: 3px;
-            margin-top: 10px;
-            overflow: hidden;
-        }
-
-        .indicator-fill {
-            height: 100%;
-            width: 50%;
-            transition: all 0.5s ease;
-        }
-
+        /* ── ACTIVE TRADE ── */
         .trade-active {
-            background: linear-gradient(135deg, #1a1a1a 0%, #000 100%);
-            border: 1px solid #ffd700;
-            animation: glow 2s infinite alternate;
+            border: 1px solid rgba(167,139,250,0.4) !important;
+            animation: pulse-border 2s infinite alternate;
+        }
+        @keyframes pulse-border {
+            from { box-shadow: 0 0 10px rgba(167,139,250,0.1); }
+            to   { box-shadow: 0 0 30px rgba(167,139,250,0.4); }
         }
 
-        @keyframes glow {
-            from {
-                box-shadow: 0 0 10px rgba(255, 215, 0, 0.2);
-            }
-
-            to {
-                box-shadow: 0 0 25px rgba(255, 215, 0, 0.5);
-            }
+        /* ── BUTTONS ── */
+        .btn-main {
+            width: 100%; padding: 18px; border-radius: 15px; border: none;
+            font-size: 16px; font-weight: 900; cursor: pointer;
+            text-transform: uppercase; transition: all 0.3s; letter-spacing: 1px;
+            font-family: inherit;
+        }
+        .btn-start {
+            background: linear-gradient(135deg, #7c3aed 0%, #4c1d95 100%);
+            color: #fff; box-shadow: 0 10px 30px rgba(124,58,237,0.4);
+        }
+        .btn-start:hover { transform: translateY(-2px); box-shadow: 0 14px 35px rgba(124,58,237,0.5); }
+        .btn-stop {
+            background: linear-gradient(135deg, #dc2626, #991b1b);
+            color: #fff; box-shadow: 0 10px 20px rgba(220,38,38,0.3);
+        }
+        .btn-danger {
+            background: none; border: 1px solid #7c3aed; color: #a78bfa;
+            padding: 10px; border-radius: 10px;
+            font-size: 12px; font-weight: 700; cursor: pointer; font-family: inherit;
         }
 
+        /* ── INPUTS ── */
+        .input-group { margin-bottom: 16px; }
+        .input-group label { display: block; font-size: 11px; color: #666; font-weight: 700; margin-bottom: 8px; text-transform: uppercase; letter-spacing: 1px; }
+        .input-group input {
+            width: 100%; background: rgba(255,255,255,0.04); border: 1px solid #2a2a3e;
+            padding: 14px; border-radius: 12px; color: #fff; font-size: 15px;
+            font-family: inherit; font-weight: 700;
+            transition: border-color 0.2s;
+        }
+        .input-group input:focus { outline: none; border-color: #7c3aed; }
+
+        /* ── HISTORY ── */
         .history-item {
-            display: flex;
-            justify-content: space-between;
-            padding: 12px 0;
-            border-bottom: 1px solid #222;
-            font-size: 13px;
-        }
-
-        .green {
-            color: #00ffa3;
-        }
-
-        .market-selector {
-            display: flex;
-            background: rgba(255, 255, 255, 0.03);
-            border-radius: 12px;
-            padding: 4px;
-            margin-bottom: 20px;
-            border: 1px solid #222;
-        }
-
-        .market-btn {
-            flex: 1;
-            padding: 10px;
-            border: none;
-            background: none;
-            color: #666;
+            display: flex; justify-content: space-between; align-items: center;
+            padding: 12px 0; border-bottom: 1px solid rgba(255,255,255,0.05);
             font-size: 12px;
-            font-weight: 700;
-            cursor: pointer;
-            border-radius: 10px;
-            transition: all 0.3s;
-            text-transform: uppercase;
         }
+        .history-item:last-child { border-bottom: none; }
+        .history-meta { color: #555; font-size: 11px; margin-top: 2px; }
 
-        .market-btn.active {
-            background: #ffd700;
-            color: #000;
-            box-shadow: 0 4px 15px rgba(255, 215, 0, 0.2);
+        /* ── FREQUENCY TABLE ── */
+        .freq-row {
+            display: flex; gap: 4px; justify-content: space-between; margin-top: 10px;
         }
+        .freq-cell {
+            flex: 1; text-align: center; padding: 8px 4px;
+            background: rgba(255,255,255,0.03); border-radius: 8px;
+            border: 1px solid #1a1a2e; transition: all 0.3s;
+        }
+        .freq-cell.hot-cell { border-color: #7c3aed; background: rgba(124,58,237,0.15); }
+        .freq-cell.barrier-cell { border-color: #b45309; background: rgba(251,191,36,0.1); }
+        .freq-digit { font-size: 14px; font-weight: 900; }
+        .freq-count { font-size: 9px; color: #555; margin-top: 2px; }
 
-        .market-btn:disabled {
-            opacity: 0.5;
-            cursor: not-allowed;
+        /* ── SECTION LABEL ── */
+        .section-label {
+            font-size: 10px; color: #555; font-weight: 700; text-transform: uppercase;
+            letter-spacing: 2px; margin-bottom: 12px;
         }
     </style>
 </head>
-
 <body>
-    <div class="container">
-        <div class="header">
-            <h1 id="mainTitle">🥇 V100 DUAL SNIPER</h1>
-            <p id="subTitle">CHOC BREAKOUT + TICK ACCELERATION</p>
-        </div>
+<div class="container">
 
-        <div class="market-selector" id="marketSelector">
-            <button id="btnGold" onclick="switchMarket('frxXAUUSD')" class="market-btn active">ORO</button>
-            <button id="btnV100" onclick="switchMarket('R_100')" class="market-btn">V100</button>
-        </div>
+    <!-- HEADER -->
+    <div class="header">
+        <h1>🎲 DIFFERS SNIPER</h1>
+        <p>Last Digit Strategy · Deriv R_10</p>
+    </div>
 
-        <div style="text-align: center;">
-            <div id="balanceDisplay" class="balance-chip">SALDO: $0.00</div>
-        </div>
-        <div class="price-hero" id="priceDisplay" style="color: #ffd700;">---</div>
-        <div class="symbol-name" id="symbolName">ESPERANDO ORO...</div>
+    <!-- CHIPS -->
+    <div class="chip-row">
+        <span class="chip chip-purple" id="chipStatus">OFFLINE</span>
+        <span class="chip chip-green" id="chipWinRate">WIN 0%</span>
+        <span class="chip chip-gold" id="chipTrades">0 TRADES</span>
+    </div>
 
-        <div class="card" id="statusCard">
-            <div class="stat-row">
-                <div class="stat-box">
-                    <div class="stat-label">Bot</div>
-                    <div id="statusText" class="stat-value">OFF</div>
-                </div>
-                <div class="stat-box">
-                    <div class="stat-label">Mercado</div>
-                    <div id="marketStatusText" class="stat-value">--</div>
-                </div>
-            </div>
-            <div class="stat-row" style="margin-top: 15px;">
-                <div class="stat-box">
-                    <div class="stat-label">Breakout HH</div>
-                    <div id="hhValue" class="stat-value" style="color: #00ffa3;">--</div>
-                </div>
-                <div class="stat-box">
-                    <div class="stat-label">Breakout LL</div>
-                    <div id="llValue" class="stat-value" style="color: #ff4d4d;">--</div>
-                </div>
-                <div class="stat-box">
-                    <div class="stat-label">Señal</div>
-                    <div id="signalValue" class="stat-value">WAIT</div>
-                </div>
-            </div>
-            <div class="stat-row" style="margin-top: 20px; border-top: 1px solid #222; padding-top: 15px;">
-                <div class="stat-box">
-                    <div class="stat-label">Sesión PnL</div>
-                    <div id="pnlValue" class="stat-value">$0.00</div>
-                </div>
-                <div class="stat-box">
-                    <div class="stat-label">Ganados</div>
-                    <div id="winsValue" class="stat-value green">0</div>
-                </div>
-                <div class="stat-box">
-                    <div class="stat-label">Perdidos</div>
-                    <div id="lossesValue" class="stat-value red">0</div>
-                </div>
-            </div>
-            <div class="indicator-bar">
-                <div id="accelBar" class="indicator-fill"></div>
-            </div>
-        </div>
+    <!-- PRICE + BALANCE -->
+    <div class="price-block">
+        <div class="balance-badge" id="balanceDisplay">SALDO: $0.00</div>
+        <div class="price-hero" id="priceDisplay">---</div>
+    </div>
 
-        <div id="tradeCard" class="card trade-active" style="display:none; text-align: center;">
-            <div id="tradeType"
-                style="font-weight: 900; font-size: 14px; margin-bottom: 5px; text-transform: uppercase;">TIPO</div>
-            <div class="stat-label">Posición Activa</div>
-            <div style="font-size: 24px; font-weight: 900; margin: 10px 0;" id="tradeProfit">$0.00</div>
-            <div class="stat-label" style="margin-bottom: 15px;">Tiempo: <span id="tradeTimer"
-                    style="color:#fff;">0</span>s</div>
-            <button onclick="sellContract()"
-                style="width: 100%; padding: 10px; border-radius: 8px; border: 1px solid #ff4d4d; background: rgba(255, 77, 77, 0.1); color: #ff4d4d; font-weight: 700; cursor: pointer;">CERRAR
-                POSICIÓN AHORA 🛑</button>
+    <!-- LAST DIGIT + BARRIER -->
+    <div style="display:flex; gap:12px; margin-bottom:16px;">
+        <div style="flex:1; text-align:center; background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.07); border-radius:16px; padding:16px;">
+            <div class="digit-label">Último Dígito</div>
+            <div class="last-digit-badge" id="lastDigitBadge">-</div>
         </div>
-
-        <div class="card" id="settingsForm">
-            <div class="stat-row" style="margin-bottom: 20px;">
-                <button id="btnManualUp" onclick="manualTrade('MULTUP')"
-                    style="flex:1; margin-right:5px; padding: 15px; border-radius: 12px; border: none; background: #00ffa3; color: #000; font-weight: 900; cursor: pointer;">MANUAL
-                    UP 📈</button>
-                <button id="btnManualDown" onclick="manualTrade('MULTDOWN')"
-                    style="flex:1; margin-left:5px; padding: 15px; border-radius: 12px; border: none; background: #ff4d4d; color: #fff; font-weight: 900; cursor: pointer;">MANUAL
-                    DOWN 📉</button>
-            </div>
-            <div class="input-group">
-                <label>Inversión (Stake USD)</label>
-                <input type="number" id="stake" value="10">
-            </div>
-            <div class="input-group">
-                <label>Multiplicador (x100 a x800)</label>
-                <input type="number" id="multiplier" value="200" step="100">
-            </div>
-            <div class="stat-row">
-                <div class="input-group" style="flex:1; margin-right:10px;">
-                    <label>Take Profit ($)</label>
-                    <input type="number" id="takeProfit" step="0.5" value="5.0">
-                </div>
-                <div class="input-group" style="flex:1;">
-                    <label>Stop Loss ($)</label>
-                    <input type="number" id="stopLoss" step="0.5" value="10.0">
-                </div>
-            </div>
-            <div class="input-group" style="display: flex; align-items: center; justify-content: space-between; background: rgba(0, 255, 163, 0.05); padding: 15px; border-radius: 12px; border: 1px solid rgba(0, 255, 163, 0.2); margin-top: 10px;">
-                <label style="margin-bottom: 0; color: #00ffa3;">Trailing Stop (Franklin)</label>
-                <label class="switch">
-                    <input type="checkbox" id="useTrailing" checked>
-                    <span class="slider round"></span>
-                </label>
-            </div>
-            <style>
-                .switch { position: relative; display: inline-block; width: 44px; height: 22px; }
-                .switch input { opacity: 0; width: 0; height: 0; }
-                .slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: #333; transition: .4s; border-radius: 34px; }
-                .slider:before { position: absolute; content: ""; height: 16px; width: 16px; left: 3px; bottom: 3px; background-color: white; transition: .4s; border-radius: 50%; }
-                input:checked + .slider { background-color: #00ffa3; }
-                input:checked + .slider:before { transform: translateX(22px); }
-            </style>
-            <button id="btnToggle" class="btn-main btn-start" onclick="toggleBot()" style="margin-top: 20px;">Iniciar Sniper 🥇</button>
-        </div>
-
-        <div class="card">
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
-                <div class="stat-label" style="margin: 0;">Historial Reciente</div>
-                <button onclick="clearHistory()"
-                    style="background: none; border: 1px solid #444; color: #888; padding: 5px 10px; border-radius: 8px; font-size: 10px; cursor: pointer; text-transform: uppercase; font-weight: 700;">Borrar
-                    Historial</button>
-            </div>
-            <div id="history"></div>
+        <div class="barrier-card" style="flex:1; margin-bottom:0;">
+            <div class="label">Diferir De</div>
+            <div class="value" id="barrierDisplay">-</div>
+            <div class="sublabel">El último dígito NO será este</div>
         </div>
     </div>
 
-    <script>
-        let isRunning = false;
-        let inputsLoaded = false;
-        let isFetching = false;
+    <!-- STATS -->
+    <div class="card">
+        <div class="stat-row">
+            <div class="stat-box">
+                <div class="stat-label">PnL Sesión</div>
+                <div class="stat-value" id="pnlValue">$0.00</div>
+            </div>
+            <div class="stat-box">
+                <div class="stat-label">Ganados ✅</div>
+                <div class="stat-value green" id="winsValue">0</div>
+            </div>
+            <div class="stat-box">
+                <div class="stat-label">Perdidos ❌</div>
+                <div class="stat-value red" id="lossesValue">0</div>
+            </div>
+        </div>
+        <div class="winrate-bar">
+            <div class="winrate-fill" id="winrateFill" style="width:0%"></div>
+        </div>
+        <div style="display:flex; justify-content:space-between; margin-top:6px;">
+            <span style="font-size:10px; color:#555;">Win Rate</span>
+            <span style="font-size:11px; color:#a78bfa; font-weight:700;" id="winrateText">0%</span>
+        </div>
+    </div>
 
-        async function fetchStatus() {
-            if (isFetching) return;
-            isFetching = true;
+    <!-- DIGIT FREQUENCY -->
+    <div class="card">
+        <div class="section-label">Frecuencia de Dígitos (últimos 20 ticks)</div>
+        <div class="freq-row" id="freqTable">
+            <!-- Generated by JS -->
+        </div>
+    </div>
 
-            try {
-                const res = await fetch('/api/status');
-                const { data, config } = await res.json();
+    <!-- ACTIVE TRADE -->
+    <div class="card trade-active" id="tradeCard" style="display:none; text-align:center;">
+        <div class="stat-label">⚡ CONTRATO ACTIVO</div>
+        <div style="font-size:14px; font-weight:900; color:#a78bfa; margin:6px 0;" id="activeBarrierLabel">NO-?</div>
+        <div style="font-size:2rem; font-weight:900; margin:8px 0;" id="tradeProfit">$0.00</div>
+        <div class="stat-label">Esperando resultado del tick...</div>
+    </div>
 
-                isRunning = data.isRunning;
-                const price = parseFloat(data.lastTickPrice);
-                const priceDisplay = document.getElementById('priceDisplay');
+    <!-- CONTROL -->
+    <div class="card">
+        <div class="section-label">Configuración</div>
+        <div style="display:flex; gap:10px; margin-bottom:14px;">
+            <div class="input-group" style="flex:1; margin-bottom:0;">
+                <label>Stake por Trade ($)</label>
+                <input type="number" id="stake" value="1" step="0.5" min="0.35">
+            </div>
+            <div class="input-group" style="flex:1; margin-bottom:0;">
+                <label>Pérdida Diaria Máx ($)</label>
+                <input type="number" id="maxDailyLoss" value="20" step="5">
+            </div>
+        </div>
 
-                if (data.marketStatus === 'CLOSED') {
-                    priceDisplay.innerText = "MERCADO CERRADO";
-                    priceDisplay.style.fontSize = "1.8rem";
-                    priceDisplay.style.color = "#ff4d4d";
-                } else if (price > 0) {
-                    priceDisplay.innerText = price.toFixed(2);
-                    priceDisplay.style.fontSize = "3.5rem";
-                    priceDisplay.style.color = "#ffd700";
-                } else {
-                    priceDisplay.innerText = "Cargando...";
-                    priceDisplay.style.fontSize = "2.0rem";
-                    priceDisplay.style.color = "#ffd700";
-                }
+        <!-- Daily P&L info -->
+        <div style="display:flex; justify-content:space-between; padding:10px 14px; background:rgba(255,255,255,0.03); border-radius:10px; margin-bottom:16px; border:1px solid rgba(255,255,255,0.06);">
+            <div style="text-align:center;">
+                <div class="stat-label">Ganancia Hoy</div>
+                <div style="font-size:15px; font-weight:900;" class="green" id="dailyProfit">$0.00</div>
+            </div>
+            <div style="text-align:center;">
+                <div class="stat-label">Pérdida Hoy</div>
+                <div style="font-size:15px; font-weight:900;" class="red" id="dailyLoss">$0.00</div>
+            </div>
+            <div style="text-align:center;">
+                <div class="stat-label">Balance Hoy</div>
+                <div style="font-size:15px; font-weight:900;" id="dailyNet">$0.00</div>
+            </div>
+        </div>
 
-                document.getElementById('balanceDisplay').innerText = "SALDO: $" + (data.balance || 0).toFixed(2);
+        <button id="btnToggle" class="btn-main btn-start" onclick="toggleBot()">
+            🎲 Iniciar Differs Sniper
+        </button>
+    </div>
 
-                const isGold = data.symbol === 'frxXAUUSD';
-                document.getElementById('symbolName').innerText = isGold ? "⚡ MERCADO: ORO (XAUUSD)" : "⚡ MERCADO: VOLATILITY 100";
-                document.getElementById('symbolName').style.color = isGold ? "#ffd700" : "#00ffa3";
+    <!-- HISTORY -->
+    <div class="card">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px;">
+            <div class="section-label" style="margin:0;">Historial Reciente</div>
+            <button class="btn-danger" onclick="resetDay()">Resetear Día</button>
+        </div>
+        <div id="history"></div>
+    </div>
+</div>
 
-                document.getElementById('mainTitle').innerText = isGold ? "🥇 GOLD SNIPER PRO" : "⚡ V100 DUAL SNIPER";
-                document.getElementById('subTitle').innerText = isGold ? "XAUUSD MEAN REVERSION" : "CHOCH + TICK ACCELERATION";
+<script>
+    let isRunning = false;
+    let isFetching = false;
+    let lastDigitHistory = [];
 
-                document.getElementById('btnGold').className = "market-btn " + (isGold ? "active" : "");
-                document.getElementById('btnV100').className = "market-btn " + (!isGold ? "active" : "");
+    // Build frequency table
+    function buildFreqTable(digitHistory, barrier) {
+        const freq = {};
+        for (let d = 0; d <= 9; d++) freq[d] = 0;
+        const slice = digitHistory.slice(-20);
+        slice.forEach(d => freq[d]++);
 
-                document.getElementById('btnGold').disabled = isRunning;
-                document.getElementById('btnV100').disabled = isRunning;
+        const maxFreq = Math.max(...Object.values(freq));
+        let html = '';
+        for (let d = 0; d <= 9; d++) {
+            const isBarrier = String(d) === String(barrier);
+            const isHot = freq[d] === maxFreq && maxFreq > 0;
+            let cls = 'freq-cell';
+            if (isBarrier) cls += ' barrier-cell';
+            else if (isHot) cls += ' hot-cell';
 
-                document.getElementById('statusText').innerText = isRunning ? "ON" : "OFF";
-                document.getElementById('statusText').className = "stat-value " + (isRunning ? "green" : "");
+            const color = isBarrier ? '#fbbf24' : (isHot ? '#a78bfa' : '#555');
+            html += `<div class="${cls}">
+                <div class="freq-digit" style="color:${color}">${d}</div>
+                <div class="freq-count">${freq[d]}x</div>
+            </div>`;
+        }
+        document.getElementById('freqTable').innerHTML = html;
+    }
 
-                const mStatus = document.getElementById('marketStatusText');
-                if (data.marketStatus === 'CLOSED') {
-                    mStatus.innerText = "CERRADO";
-                    mStatus.style.color = "#ff4d4d";
-                } else if (data.marketStatus === 'OPEN') {
-                    mStatus.innerText = "ABIERTO";
-                    mStatus.style.color = "#00ffa3";
-                } else {
-                    mStatus.innerText = "BUSCANDO...";
-                    mStatus.style.color = "#ffd700";
-                }
+    async function fetchStatus() {
+        if (isFetching) return;
+        isFetching = true;
+        try {
+            const res = await fetch('/differs/status');
+            const { data } = await res.json();
 
-                // Bloquear inputs y botones si el bot está corriendo
-                const inputIds = ['stake', 'multiplier', 'takeProfit', 'stopLoss', 'useTrailing'];
-                inputIds.forEach(id => {
-                    const el = document.getElementById(id);
-                    if (el) el.disabled = isRunning;
-                });
+            isRunning = data.isRunning;
 
-                document.getElementById('btnManualUp').disabled = isRunning;
-                document.getElementById('btnManualDown').disabled = isRunning;
-                document.getElementById('btnManualUp').style.opacity = isRunning ? "0.3" : "1";
-                document.getElementById('btnManualDown').style.opacity = isRunning ? "0.3" : "1";
+            // Balance
+            document.getElementById('balanceDisplay').innerText = `SALDO: $${parseFloat(data.balance || 0).toFixed(2)}`;
 
-                // Cargar valores del servidor SOLO la primera vez
-                if (config && !inputsLoaded) {
-                    const mapping = {
-                        stake: 'stake',
-                        multiplier: 'multiplier',
-                        takeProfit: 'takeProfit',
-                        stopLoss: 'stopLoss',
-                        useTrailing: 'useTrailing'
-                    };
-                    Object.keys(mapping).forEach(id => {
-                        const el = document.getElementById(id);
-                        const serverKey = mapping[id];
-                        if (el && config[serverKey] !== undefined) {
-                            if (el.type === 'checkbox') el.checked = !!config[serverKey];
-                            else el.value = config[serverKey];
-                        }
-                    });
-                    inputsLoaded = true;
-                }
+            // Price
+            const price = parseFloat(data.lastTickPrice || 0);
+            document.getElementById('priceDisplay').innerText = price > 0 ? price.toFixed(3) : '---';
 
-                const struct = data.lastV100Structure || { hh: 0, ll: 0, lastSignal: 'WAIT' };
-                document.getElementById('hhValue').innerText = parseFloat(struct.hh).toFixed(2);
-                document.getElementById('llValue').innerText = parseFloat(struct.ll).toFixed(2);
+            // Last digit
+            const ld = document.getElementById('lastDigitBadge');
+            if (data.lastDigit !== null && data.lastDigit !== undefined) {
+                ld.innerText = data.lastDigit;
+                ld.style.transform = 'scale(1.15)';
+                setTimeout(() => { ld.style.transform = 'scale(1)'; }, 150);
+            }
 
-                const sig = document.getElementById('signalValue');
-                sig.innerText = struct.lastSignal;
-                if (struct.lastSignal === 'UP') sig.style.color = "#00ffa3";
-                else if (struct.lastSignal === 'DOWN') sig.style.color = "#ff4d4d";
-                else sig.style.color = "#888";
+            // Barrier
+            const barrier = data.currentBarrier;
+            document.getElementById('barrierDisplay').innerText = barrier !== null ? `NO-${barrier}` : '-';
 
-                const accelBar = document.getElementById('accelBar');
-                const rawAccel = data.tickAcceleration || 0;
-                const accelVal = Math.min(100, Math.abs(rawAccel) * 1000); // Math.abs para evitar CSS negativo
-                accelBar.style.width = accelVal + "%";
-                // Color verde para UP, rojo para DOWN, amarillo para neutro
-                if (Math.abs(rawAccel) * 1000 > 50) {
-                    accelBar.style.backgroundColor = rawAccel > 0 ? "#00ffa3" : "#ff4d4d";
-                } else {
-                    accelBar.style.backgroundColor = "#ffd700";
-                }
+            // Chips
+            document.getElementById('chipStatus').innerText = data.isRunning ? '🟢 ACTIVO' : '⚫ OFFLINE';
+            document.getElementById('chipStatus').className = `chip ${data.isRunning ? 'chip-green' : 'chip-purple'}`;
+            document.getElementById('chipWinRate').innerText = `WIN ${data.winRate || '0.0'}%`;
+            document.getElementById('chipTrades').innerText = `${data.totalTradesSession || 0} TRADES`;
 
-                document.getElementById('pnlValue').innerText = "$" + data.pnlSession.toFixed(2);
-                document.getElementById('pnlValue').className = "stat-value " + (data.pnlSession >= 0 ? "green" : "red");
+            // Stats
+            const pnl = parseFloat(data.pnlSession || 0);
+            const pnlEl = document.getElementById('pnlValue');
+            pnlEl.innerText = `${pnl >= 0 ? '+' : ''}$${pnl.toFixed(2)}`;
+            pnlEl.className = `stat-value ${pnl >= 0 ? 'green' : 'red'}`;
 
-                document.getElementById('winsValue').innerText = data.winsSession;
-                document.getElementById('lossesValue').innerText = data.lossesSession;
+            document.getElementById('winsValue').innerText = data.winsSession || 0;
+            document.getElementById('lossesValue').innerText = data.lossesSession || 0;
 
-                const tradeCard = document.getElementById('tradeCard');
-                if (data.activeContracts && data.activeContracts.length > 0) {
-                    tradeCard.style.display = 'block';
-                    // Si hay varios, mostramos un resumen o el primero, pero el contenedor estará visible
-                    // Mejor aún, inyectamos todos los activos
-                    tradeCard.innerHTML = data.activeContracts.map(c => `
-                        <div style="margin-bottom: 15px; border-bottom: 1px solid rgba(255,215,0,0.2); padding-bottom: 15px;">
-                            <div style="font-weight: 900; font-size: 14px; color: ${c.type === 'MULTUP' ? '#00ffa3' : '#ff4d4d'};">
-                                ${c.type === 'MULTUP' ? 'COMPRA 🔼' : 'VENTA 🔽'}
-                            </div>
-                            <div style="font-size: 24px; font-weight: 900; margin: 5px 0;" class="${c.profit >= 0 ? 'green' : 'red'}">
-                                ${c.profit >= 0 ? "+" : ""}$${c.profit.toFixed(2)}
-                            </div>
-                            <div class="stat-label">Tiempo: ${c.seconds}s ${config.useTrailing ? ' | 🛡️ Trailing ON' : ' | ⚠️ Trailing OFF'}</div>
-                        </div>
-                    `).join('') + `
-                        <button onclick="sellContract()" 
-                        style="width: 100%; padding: 10px; border-radius: 8px; border: 1px solid #ff4d4d; background: rgba(255, 77, 77, 0.1); color: #ff4d4d; font-weight: 700; cursor: pointer;">
-                        CERRAR POSICIÓN ACTIVA 🛑</button>
-                    `;
-                } else {
-                    tradeCard.style.display = 'none';
-                }
+            // Win rate bar
+            const wr = parseFloat(data.winRate || 0);
+            document.getElementById('winrateFill').style.width = `${wr}%`;
+            document.getElementById('winrateText').innerText = `${wr}%`;
 
-                const btn = document.getElementById('btnToggle');
-                btn.innerText = isRunning ? "Detener Sniper ⏸️" : "Iniciar Sniper 🥇";
-                btn.className = "btn-main " + (isRunning ? "btn-stop" : "btn-start");
+            // Daily
+            const dp = parseFloat(data.dailyProfit || 0);
+            const dl = parseFloat(data.dailyLoss || 0);
+            document.getElementById('dailyProfit').innerText = `+$${dp.toFixed(2)}`;
+            document.getElementById('dailyLoss').innerText = `-$${dl.toFixed(2)}`;
+            const net = dp - dl;
+            const netEl = document.getElementById('dailyNet');
+            netEl.innerText = `${net >= 0 ? '+' : ''}$${net.toFixed(2)}`;
+            netEl.className = `stat-value ${net >= 0 ? 'green' : 'red'}`;
+            netEl.style.fontSize = '15px';
 
-                const hist = document.getElementById('history');
-                hist.innerHTML = data.tradeHistory.map(t => `
-                    <div class="history-item">
-                        <span>${t.time} - ${t.type}</span>
-                        <span class="${t.profit >= 0 ? 'green' : 'red'}">${t.profit >= 0 ? '+' : ''}$${t.profit.toFixed(2)}</span>
+            // Digit history freq table
+            if (data.digitHistory) {
+                buildFreqTable(data.digitHistory, barrier);
+            }
+
+            // Active trade card
+            const tradeCard = document.getElementById('tradeCard');
+            if (data.activeContractId) {
+                tradeCard.style.display = 'block';
+                document.getElementById('activeBarrierLabel').innerText = `Diferir de dígito: NO-${barrier}`;
+            } else {
+                tradeCard.style.display = 'none';
+            }
+
+            // Toggle button
+            const btn = document.getElementById('btnToggle');
+            btn.innerText = isRunning ? '⏸️ Detener Sniper' : '🎲 Iniciar Differs Sniper';
+            btn.className = `btn-main ${isRunning ? 'btn-stop' : 'btn-start'}`;
+
+            // History
+            const hist = data.tradeHistory || [];
+            document.getElementById('history').innerHTML = hist.slice(0, 25).map(t => {
+                const isWin = t.profit >= 0;
+                return `<div class="history-item">
+                    <div>
+                        <div style="font-weight:700;">${t.type}</div>
+                        <div class="history-meta">${t.time}</div>
                     </div>
-                `).join('');
-            } catch (e) {
-                // Si hay un error (ej. caída de internet o servidor reiniciando)
-                // Mantener los últimos datos en pantalla silenciosamente como caché visual.
-                console.warn('Conexión inestable: manteniendo caché visual en pantalla.', e);
-            } finally {
-                isFetching = false;
-            }
+                    <div class="${isWin ? 'green' : 'red'}" style="font-weight:900; font-size:14px;">
+                        ${isWin ? '+' : ''}$${parseFloat(t.profit).toFixed(2)}
+                    </div>
+                </div>`;
+            }).join('') || '<div style="color:#444; text-align:center; padding:20px;">Sin trades aún...</div>';
+
+        } catch (e) {
+            console.warn('Error fetching status:', e.message);
+        } finally {
+            isFetching = false;
         }
+    }
 
-        async function toggleBot() {
-            const action = isRunning ? 'STOP' : 'START';
-            const body = action === 'START' ? {
-                action,
-                stake: document.getElementById('stake').value,
-                multiplier: document.getElementById('multiplier').value,
-                takeProfit: document.getElementById('takeProfit').value,
-                stopLoss: document.getElementById('stopLoss').value,
-                useTrailing: document.getElementById('useTrailing').checked
-            } : { action };
-
-            try {
-                await fetch('/api/control', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(body)
-                });
-                fetchStatus();
-            } catch (e) {
-                console.error("Error contactando al servidor:", e);
-                // Si falla, fetchStatus forzará el estado OFFLINE en breve
-            }
+    async function toggleBot() {
+        const action = isRunning ? 'STOP' : 'START';
+        const body = { action };
+        if (action === 'START') {
+            body.stake = parseFloat(document.getElementById('stake').value);
+            body.maxDailyLoss = parseFloat(document.getElementById('maxDailyLoss').value);
         }
-
-        async function clearHistory() {
-            if (!confirm("¿Seguro que quieres borrar todo el historial y las estadísticas?")) return;
-            await fetch('/api/clear-history', { method: 'POST' });
-            fetchStatus();
-        }
-
-        async function sellContract() {
-            if (!confirm("¿Quieres cerrar la operación actual manualmente?")) return;
-            try {
-                await fetch('/api/sell-contract', { method: 'POST' });
-                fetchStatus();
-            } catch (e) { console.error(e); }
-        }
-
-        async function manualTrade(action) {
-            try {
-                await fetch('/api/trade', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ action })
-                });
-                fetchStatus();
-            } catch (e) { console.error(e); }
-        }
-
-        async function switchMarket(symbol) {
-            if (isRunning) return;
-            // Reset visual
-            document.getElementById('priceDisplay').innerText = "Sincronizando...";
-            document.getElementById('priceDisplay').style.color = "#ffd700";
-
-            const res = await fetch('/api/switch-market', {
+        try {
+            await fetch('/differs/control', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ symbol })
+                body: JSON.stringify(body)
             });
-            if (res.ok) {
-                inputsLoaded = false; // Forzar recarga de valores específicos del mercado
-                fetchStatus();
-            }
-        }
+            fetchStatus();
+        } catch (e) { console.error(e); }
+    }
 
-        setInterval(fetchStatus, 1000);
-    </script>
+    async function resetDay() {
+        if (!confirm('¿Resetear las estadísticas del día?')) return;
+        await fetch('/differs/control', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'RESET_DAY' })
+        });
+        fetchStatus();
+    }
+
+    // Poll every 800ms for smooth digit updates
+    setInterval(fetchStatus, 800);
+    fetchStatus();
+</script>
 </body>
-
 </html>
