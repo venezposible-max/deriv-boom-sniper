@@ -196,7 +196,15 @@
     <!-- HEADER -->
     <div class="header">
         <h1>🎲 DIFFERS SNIPER</h1>
-        <p>Last Digit Strategy · Deriv R_10</p>
+        <p id="subTitle">Last Digit Strategy · Deriv R_25</p>
+    </div>
+
+    <!-- MARKET SELECTOR -->
+    <div style="display: flex; gap: 8px; margin-bottom: 20px; justify-content: center;">
+        <button id="btnV10" onclick="switchMarket('R_10')" class="chip chip-purple" style="cursor:pointer; border:none;">V10</button>
+        <button id="btnV25" onclick="switchMarket('R_25')" class="chip chip-purple" style="cursor:pointer; border:none; background: #7c3aed; color:white;">V25</button>
+        <button id="btnV50" onclick="switchMarket('R_50')" class="chip chip-purple" style="cursor:pointer; border:none;">V50</button>
+        <button id="btnV100" onclick="switchMarket('R_100')" class="chip chip-purple" style="cursor:pointer; border:none;">V100</button>
     </div>
 
     <!-- CHIPS -->
@@ -349,6 +357,22 @@
             const { data } = await res.json();
 
             isRunning = data.isRunning;
+            document.getElementById('subTitle').innerText = `Last Digit Strategy · Deriv ${data.symbol}`;
+
+            // Actualizar estilo botones mercado
+            ['R_10', 'R_25', 'R_50', 'R_100'].forEach(s => {
+                const btn = document.getElementById('btn' + s.replace('R_', 'V'));
+                if (btn) {
+                    if (data.symbol === s) {
+                        btn.style.background = '#7c3aed';
+                        btn.style.color = 'white';
+                    } else {
+                        btn.style.background = 'rgba(167,139,250,0.15)';
+                        btn.style.color = '#a78bfa';
+                    }
+                    btn.disabled = isRunning;
+                }
+            });
 
             // Balance
             document.getElementById('balanceDisplay').innerText = `SALDO: $${parseFloat(data.balance || 0).toFixed(2)}`;
@@ -466,6 +490,18 @@
             body: JSON.stringify({ action: 'RESET_DAY' })
         });
         fetchStatus();
+    }
+
+    async function switchMarket(symbol) {
+        if (isRunning) return;
+        try {
+            await fetch('/differs/switch-market', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ symbol })
+            });
+            fetchStatus();
+        } catch (e) { console.error(e); }
     }
 
     // Poll every 800ms for smooth digit updates

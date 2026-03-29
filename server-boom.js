@@ -22,8 +22,8 @@ const APP_ID = process.env.DERIV_APP_ID || '1089';
 const DERIV_TOKEN = process.env.DERIV_TOKEN || 'TSuD37g6G593Uis';
 const STATE_FILE = path.join(__dirname, 'persistent-state-differs.json');
 
-// Símbolo R_10 (Volatility 10) — sus últimos dígitos son más predecibles estadísticamente
-const SYMBOL = 'R_10';
+// Símbolo actual (por defecto V25)
+let SYMBOL = 'R_25';
 
 // ─── ESTADO GLOBAL ────────────────────────────────────────────
 let botState = {
@@ -164,6 +164,28 @@ app.post('/differs/control', (req, res) => {
     }
 
     res.status(400).json({ success: false, error: 'Acción inválida' });
+});
+
+// API: Cambiar Mercado
+app.post('/differs/switch-market', (req, res) => {
+    const { symbol } = req.body;
+    if (botState.isRunning) return res.status(400).json({ success: false, error: 'Detén el bot antes de cambiar de mercado' });
+    
+    if (['R_10', 'R_25', 'R_50', 'R_100'].includes(symbol)) {
+        SYMBOL = symbol;
+        botState.digitHistory = []; // Reset historial para el nuevo mercado
+        botState.digitFrequency = {};
+        
+        // Re-suscribir si está conectado
+        if (ws && ws.readyState === WebSocket.OPEN) {
+            ws.send(JSON.stringify({ forget_all: "ticks" }));
+            ws.send(JSON.stringify({ subscribe: 1, ticks: SYMBOL }));
+        }
+        
+        console.log(`🔄 MERCADO CAMBIADO A: ${SYMBOL}`);
+        return res.json({ success: true, symbol: SYMBOL });
+    }
+    res.status(400).json({ success: false, error: 'Símbolo no soportado' });
 });
 
 // API: Historial
