@@ -70,25 +70,13 @@ if (fs.existsSync(STATE_FILE)) {
     }
 }
 
-// ─── LÓGICA CENTRAL: ELEGIR EL BARRERA (DÍGITO A DIFERIR) ────
-/**
- * Analiza el historial de dígitos y escoge el que apareció MÁS recientemente
- * como barrera. La lógica es que un dígito que acaba de aparecer tiene
- * estadísticamente la misma probabilidad que otro, pero psicológicamente
- * el "dígito frío" (que no ha aparecido) tiende a aparecer pronto.
- * 
- * ESTRATEGIA CIENTÍFICA: 
- * - Cogemos el dígito que NO ha aparecido en los últimos 10 ticks.
- * - Si todos han aparecido, cogemos el que menos veces salió en los últimos 20 ticks.
- * - Differimos DE ESE DÍGITO → Porque si está "caliente", es menos probable que vuelva.
- */
 function chooseBestBarrier() {
     const hist = botState.digitHistory;
-    const range = botState.scanRange || 20;
+    const range = 100; // Análisis fijo de 100 ticks
 
     if (hist.length < 10) return '5'; 
 
-    // Tomar solo los últimos X dígitos según el rango elegido por el usuario
+    // Tomar los últimos 100 dígitos (o los que haya disponibles)
     const subHistory = hist.slice(-range);
 
     const freq = {};
