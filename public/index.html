@@ -230,6 +230,28 @@
         <div class="price-hero" id="priceDisplay">---</div>
     </div>
 
+    <!-- CRYPTO AUDIT DASHBOARD -->
+    <div class="card" style="background:rgba(0,0,0,0.4); border:1px solid #7c3aed; margin-bottom:16px; font-family:'Courier New', monospace; font-size: 0.75em; color: #10b981;">
+        <div style="display:flex; justify-content:space-between; border-bottom:1px solid rgba(124,58,237,0.3); padding:5px; margin-bottom:5px; color:#a78bfa;">
+            <span>🛡️ SHA-256 CRYPTO ENGINE</span>
+            <span id="cryptoStatusLabel">ACTIVE</span>
+        </div>
+        <div style="padding:5px;">
+            <div style="display:flex; justify-content:space-between; margin-bottom:3px;">
+                <span style="color:rgba(255,255,255,0.4)">PRICE SEED:</span>
+                <span id="cryptoPriceSeed" style="color:#fff">0.000</span>
+            </div>
+            <div style="display:flex; justify-content:space-between; margin-bottom:3px;">
+                <span style="color:rgba(255,255,255,0.4)">HEX HASH:</span>
+                <span id="cryptoHashDisplay" style="color:rgba(16,185,129,0.8)">-</span>
+            </div>
+            <div style="display:flex; justify-content:space-between; margin-top:5px; border-top: 1px dotted rgba(124,58,237,0.2); padding-top:5px;">
+                <span style="color:rgba(255,255,255,0.4)">BARRERA EXTRACTED:</span>
+                <span id="cryptoBarrierVal" style="color:#7c3aed; font-weight:bold; font-size:1.1em;">-</span>
+            </div>
+        </div>
+    </div>
+
     <!-- LAST DIGIT + BARRIER -->
     <div style="display:flex; gap:12px; margin-bottom:16px;">
         <div style="flex:1; text-align:center; background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.07); border-radius:16px; padding:16px;">
@@ -368,6 +390,18 @@
 
             isRunning = data.isRunning;
             document.getElementById('subTitle').innerText = `Last Digit Strategy · Deriv ${data.symbol}`;
+
+            // Actualizar Audit Criptográfico
+            if (data.lastCryptoHash) {
+                document.getElementById('cryptoPriceSeed').innerText = data.lastTickPrice;
+                document.getElementById('cryptoHashDisplay').innerText = data.lastCryptoHash.substring(0, 20) + '...';
+                
+                // Extraer el dígito del hash tal como lo hace el servidor para mostrarlo en vivo
+                const nums = data.lastCryptoHash.match(/\d/g);
+                if (nums) {
+                    document.getElementById('cryptoBarrierVal').innerText = nums[nums.length-1];
+                }
+            }
 
             // Actualización visual de precisión fija
             document.getElementById('scanRangeVal').innerText = 100;

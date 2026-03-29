@@ -147,6 +147,7 @@ app.get('/differs/status', (req, res) => {
         success: true,
         data: {
             ...botState,
+            lastCryptoHash: botState.lastTickPrice ? crypto.createHash('sha256').update(String(botState.lastTickPrice)).digest('hex') : null,
             symbol: SYMBOL,
             strategy: 'DIFFERS',
             winRate: botState.totalTradesSession > 0
