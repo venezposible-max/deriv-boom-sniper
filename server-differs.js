@@ -172,9 +172,20 @@ app.get('/differs/history', (req, res) => {
 });
 
 // ─── CONEXIÓN A DERIV ─────────────────────────────────────────
-let ws;
+let ws = null;
+let reconnectTimeout = null;
 
 function connectDeriv() {
+    // Si ya existe una conexión activa o conectándose, no duplicar
+    if (ws && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING)) {
+        return;
+    }
+    
+    if (reconnectTimeout) {
+        clearTimeout(reconnectTimeout);
+        reconnectTimeout = null;
+    }
+
     ws = new WebSocket(`wss://ws.derivws.com/websockets/v3?app_id=${APP_ID}`);
 
     ws.on('open', () => {
@@ -262,15 +273,20 @@ function connectDeriv() {
         botState.isConnectedToDeriv = false;
     });
 
-    ws.on('close', () => {
-        console.log('⚠️ Conexión perdida. Reconectando en 3s...');
+    ws.on('close', (code, reason) => {
+        console.log(`⚠️ Conexión cerrada (${code}). Reconectando en 6s...`);
         botState.isConnectedToDeriv = false;
         botState.isBuying = false;
+        
         if (ws) {
             ws.removeAllListeners();
-            ws.terminate();
+            try { ws.terminate(); } catch(e) {}
+            ws = null;
         }
-        setTimeout(connectDeriv, 3000);
+
+        if (!reconnectTimeout) {
+            reconnectTimeout = setTimeout(connectDeriv, 6000);
+        }
     });
 }
 
