@@ -76,14 +76,12 @@ function chooseBestBarrier() {
 
     if (hist.length < 10) return '5'; 
 
-    // Tomar los últimos 100 dígitos (o los que haya disponibles)
+    // 1. Encontrar el dígito más frecuente en 100 ticks (Tendencia)
     const subHistory = hist.slice(-range);
-
     const freq = {};
     for (let d = 0; d <= 9; d++) freq[d] = 0;
     subHistory.forEach(d => freq[d]++);
 
-    // Elegir el que MÁS veces salió en ese rango (para diferir de él)
     let hotDigit = 0;
     let maxCount = -1;
     for (let d = 0; d <= 9; d++) {
@@ -91,6 +89,15 @@ function chooseBestBarrier() {
             maxCount = freq[d];
             hotDigit = d;
         }
+    }
+
+    // 2. Filtro de Seguridad: ¿Apareció este dígito en los últimos 5 ticks?
+    const last5 = hist.slice(-5);
+    const isRecent = last5.includes(hotDigit);
+
+    if (isRecent) {
+        // Si el dígito caliente acaba de salir, NO disparamos
+        return null; 
     }
 
     return String(hotDigit);
@@ -345,6 +352,10 @@ function tryFireTrade() {
 
     // Elegir el mejor dígito barrera
     const barrier = chooseBestBarrier();
+    
+    // Si la técnica de Doble Barrera no da señal, esperamos al siguiente tick
+    if (!barrier) return;
+
     botState.currentBarrier = barrier;
 
     // Construir la orden Differs
