@@ -153,7 +153,7 @@ app.post('/differs/control', (req, res) => {
         botState.activeContractId = null;
         botState.currentContractId = null;
         saveState();
-        console.log('⏸️ DIFFERS SNIPER DETENIDO Y LIMPIADO.');
+        console.log('🛑 STOP RECIBIDO: Bot pausado y estados limpiados.');
         return res.json({ success: true, message: 'Bot Pausado y trades cancelados' });
     }
     if (action === 'RESET_DAY') {
