@@ -214,7 +214,7 @@ function connectDeriv() {
 
     ws.on('open', () => {
         console.log('🔌 Conectado a Deriv. Esperando 5s para identificar...');
-        botState.isConnectedToDeriv = true;
+        // NO activamos isConnectedToDeriv aquí, esperamos al Auth
         
         // Retraso inicial de 5s antes de mandar el Token
         setTimeout(() => {
@@ -237,6 +237,7 @@ function connectDeriv() {
         // Auth OK -> Limpieza y carga secuencial ultra-lenta para evitar 1008
         if (msg.msg_type === 'authorize' && msg.authorize) {
             console.log(`✅ Autenticado: ${msg.authorize.fullname}`);
+            botState.isConnectedToDeriv = true; // AHORA SÍ estamos listos
             
             // Limpieza inicial de cualquier rastro previo
             ws.send(JSON.stringify({ forget_all: "ticks" }));
