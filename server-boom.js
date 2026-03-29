@@ -284,7 +284,7 @@ function connectDeriv() {
     });
 
     ws.on('close', (code, reason) => {
-        let waitTime = code === 1008 ? 10000 : 6000;
+        let waitTime = code === 1008 ? 15000 : 5000;
         console.log(`⚠️ Conexión cerrada (${code}). Reconectando en ${waitTime/1000}s...`);
         botState.isConnectedToDeriv = false;
         botState.isBuying = false;
@@ -419,4 +419,15 @@ process.on('uncaughtException', (err) => {
 process.on('unhandledRejection', (reason) => {
     console.error('🔥 Promesa rechazada:', reason);
     saveState();
+});
+
+// Limpieza al apagar (para Railway)
+process.on('SIGTERM', () => {
+    console.log('🛑 Recibida señal SIGTERM. Cerrando bot...');
+    if (ws) {
+        ws.send(JSON.stringify({ forget_all: "ticks" }));
+        ws.terminate();
+    }
+    saveState();
+    process.exit(0);
 });
