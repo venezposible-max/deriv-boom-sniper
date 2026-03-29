@@ -72,40 +72,50 @@ if (fs.existsSync(STATE_FILE)) {
 
 // ─── LÓGICA CENTRAL: ELEGIR EL BARRERA (DÍGITO A DIFERIR) ────
 /**
- * Analiza el historial de dígitos y escoge el que apareció MÁS recientemente
- * como barrera. La lógica es que un dígito que acaba de aparecer tiene
- * estadísticamente la misma probabilidad que otro, pero psicológicamente
- * el "dígito frío" (que no ha aparecido) tiende a aparecer pronto.
- * 
- * ESTRATEGIA CIENTÍFICA: 
- * - Cogemos el dígito que NO ha aparecido en los últimos 10 ticks.
- * - Si todos han aparecido, cogemos el que menos veces salió en los últimos 20 ticks.
- * - Differimos DE ESE DÍGITO → Porque si está "caliente", es menos probable que vuelva.
+ * ESTRATEGIA SNIPER TRIPLE FILTRO (Ultra-Segura):
+ * 1. Frecuencia Extrema: El dígito debe haber salido al menos un 15% de veces en el rango.
+ * 2. Aparición Reciente: El dígito debe haber aparecido en los últimos 5 ticks (está caliente).
+ * 3. Protección de Repetición: El dígito NO puede ser el último tick (evita doble aparición).
  */
 function chooseBestBarrier() {
     const hist = botState.digitHistory;
-    const range = botState.scanRange || 20;
+    const range = botState.scanRange || 100;
 
-    if (hist.length < 10) return '5'; 
+    if (hist.length < 50) return null; // Esperar a tener suficiente data
 
-    // Tomar solo los últimos X dígitos según el rango elegido por el usuario
     const subHistory = hist.slice(-range);
-
     const freq = {};
     for (let d = 0; d <= 9; d++) freq[d] = 0;
     subHistory.forEach(d => freq[d]++);
 
-    // Elegir el que MÁS veces salió en ese rango (para diferir de él)
-    let hotDigit = 0;
-    let maxCount = -1;
+    // Encontrar el dígito más caliente que salió en los últimos 5 ticks
+    const recent5 = hist.slice(-5);
+    const lastDigit = hist[hist.length - 1];
+
+    let bestDigit = null;
+    let maxFreq = -1;
+
     for (let d = 0; d <= 9; d++) {
-        if (freq[d] > maxCount) {
-            maxCount = freq[d];
-            hotDigit = d;
+        // Filtro 1: No puede ser el último (protección de repetición)
+        if (d === lastDigit) continue;
+
+        // Filtro 2: Debe haber salido en los últimos 5 ticks
+        if (!recent5.includes(d)) continue;
+
+        // Filtro 3: Debe ser el que más frecuencia tiene en la ventana larga
+        if (freq[d] > maxFreq) {
+            maxFreq = freq[d];
+            bestDigit = d;
         }
     }
 
-    return String(hotDigit);
+    // Filtro final: Umbral de seguridad (Al menos 12% de aparición)
+    const threshold = Math.floor(range * 0.12);
+    if (bestDigit !== null && freq[bestDigit] >= threshold) {
+        return String(bestDigit);
+    }
+
+    return null; // No disparar si no es ultra seguro
 }
 
 // ─── GUARDAR ESTADO ───────────────────────────────────────────
@@ -367,6 +377,8 @@ function tryFireTrade() {
 
     // Elegir el mejor dígito barrera
     const barrier = chooseBestBarrier();
+    if (!barrier) return; // SNIPER MODE: No dispara si no hay oportunidad clara
+    
     botState.currentBarrier = barrier;
 
     // Construir la orden Differs
