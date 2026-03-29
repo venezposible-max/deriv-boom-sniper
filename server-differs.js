@@ -300,7 +300,7 @@ function tryFireTrade() {
         parameters: {
             amount: botState.stake,
             basis: 'stake',
-            contract_type: 'DIFFERS',
+            contract_type: 'DIGITDIFF',
             currency: 'USD',
             symbol: SYMBOL,
             duration: 1,
