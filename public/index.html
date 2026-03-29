@@ -371,8 +371,9 @@
             isRunning = data.isRunning;
             document.getElementById('subTitle').innerText = `Last Digit Strategy · Deriv ${data.symbol}`;
 
-            // Actualizar Slider SOLO si el usuario no lo está tocando
-            if (!window.isAdjustingScanRange) {
+            // Actualizar Slider SOLO si no se ha tocado en los últimos 3 segundos
+            const now = Date.now();
+            if (!window.lastScanRangeAdjust || (now - window.lastScanRangeAdjust > 3000)) {
                 document.getElementById('scanRangeVal').innerText = data.scanRange;
                 document.getElementById('scanRangeSlider').value = data.scanRange;
             }
@@ -522,14 +523,13 @@
         } catch (e) { console.error(e); }
     }
 
-    window.isAdjustingScanRange = false;
+    window.lastScanRangeAdjust = 0;
     let scanRangeTimeout = null;
 
     async function updateScanRange(val) {
-        window.isAdjustingScanRange = true;
+        window.lastScanRangeAdjust = Date.now();
         document.getElementById('scanRangeVal').innerText = val;
         
-        // Debounce para no saturar el servidor mientras se arrastra
         if (scanRangeTimeout) clearTimeout(scanRangeTimeout);
         
         scanRangeTimeout = setTimeout(async () => {
@@ -539,11 +539,8 @@
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ action: 'CONFIG', scanRange: parseInt(val) })
                 });
-                // Mantener el bloqueo un poco más para dejar que el servidor procese y responda en el siguiente poll
-                setTimeout(() => { window.isAdjustingScanRange = false; }, 2000);
             } catch (e) { 
                 console.error(e); 
-                window.isAdjustingScanRange = false;
             }
         }, 300);
     }
