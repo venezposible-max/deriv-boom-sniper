@@ -13,6 +13,7 @@ import { fileURLToPath } from 'url';
 import express from 'express';
 import cors from 'cors';
 import WebSocket from 'ws';
+import crypto from 'crypto';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -72,50 +73,59 @@ if (fs.existsSync(STATE_FILE)) {
 
 // ─── LÓGICA CENTRAL: ELEGIR EL BARRERA (DÍGITO A DIFERIR) ────
 /**
- * ESTRATEGIA SNIPER TRIPLE FILTRO (Ultra-Segura):
- * 1. Frecuencia Extrema: El dígito debe haber salido al menos un 15% de veces en el rango.
- * 2. Aparición Reciente: El dígito debe haber aparecido en los últimos 5 ticks (está caliente).
- * 3. Protección de Repetición: El dígito NO puede ser el último tick (evita doble aparición).
+ * ESTRATEGIA SNIPER CRIPTOGRÁFICA SHA-256 (Edición Ilimitada):
+ * 1. Filtro Sniper: Identifica si hay un dígito sobrecalentado.
+ * 2. Entropía el Precio: Toma el último precio recibido.
+ * 3. Hashing SHA-256: Genera un hash único del precio.
+ * 4. Barrera Dinámica: Si hay un Sniper disponible, usa el último dígito numérico 
+ *    del hash como barrera final para máxima impredecibilidad.
  */
 function chooseBestBarrier() {
     const hist = botState.digitHistory;
     const range = botState.scanRange || 100;
+    const lastPrice = botState.lastTickPrice;
 
-    if (hist.length < 50) return null; // Esperar a tener suficiente data
+    if (hist.length < 50 || !lastPrice) return null;
 
+    // A. ¿Hay una oportunidad Sniper por estadística?
     const subHistory = hist.slice(-range);
     const freq = {};
     for (let d = 0; d <= 9; d++) freq[d] = 0;
     subHistory.forEach(d => freq[d]++);
 
-    // Encontrar el dígito más caliente que salió en los últimos 5 ticks
     const recent5 = hist.slice(-5);
     const lastDigit = hist[hist.length - 1];
 
-    let bestDigit = null;
+    let hotDigit = null;
     let maxFreq = -1;
 
     for (let d = 0; d <= 9; d++) {
-        // Filtro 1: No puede ser el último (protección de repetición)
         if (d === lastDigit) continue;
-
-        // Filtro 2: Debe haber salido en los últimos 5 ticks
         if (!recent5.includes(d)) continue;
-
-        // Filtro 3: Debe ser el que más frecuencia tiene en la ventana larga
         if (freq[d] > maxFreq) {
             maxFreq = freq[d];
-            bestDigit = d;
+            hotDigit = d;
         }
     }
 
-    // Filtro final: Umbral de seguridad (Al menos 12% de aparición)
+    // Si no hay un dígito lo suficientemente caliente, no hacemos nada
     const threshold = Math.floor(range * 0.12);
-    if (bestDigit !== null && freq[bestDigit] >= threshold) {
-        return String(bestDigit);
-    }
+    if (hotDigit === null || freq[hotDigit] < threshold) return null;
 
-    return null; // No disparar si no es ultra seguro
+    // B. GENERACIÓN DE BARRERA CRIPTOGRÁFICA (SHA-256)
+    // El precio actual se convierte en nuestra semilla de caos
+    const hash = crypto.createHash('sha256').update(String(lastPrice)).digest('hex');
+    
+    // Extraemos todos los números del hash hexadecimal
+    const numbersInHash = hash.match(/\d/g);
+    if (!numbersInHash || numbersInHash.length === 0) return String(hotDigit);
+
+    // Tomamos el último dígito numérico del hash como nuestra barrera "mágica"
+    const cryptoDigit = numbersInHash[numbersInHash.length - 1];
+
+    console.log(`🔐 [CRYPTO ENGINE] Precio: ${lastPrice} -> Hash: ${hash.substring(0,10)}... -> Barrera: ${cryptoDigit}`);
+    
+    return String(cryptoDigit);
 }
 
 // ─── GUARDAR ESTADO ───────────────────────────────────────────
