@@ -204,13 +204,23 @@ function connectDeriv() {
             return;
         }
 
-        // Auth OK
+        // Auth OK -> Carga secuencial para evitar error 1008
         if (msg.msg_type === 'authorize' && msg.authorize) {
             console.log(`✅ Autenticado: ${msg.authorize.fullname}`);
-            // Subscribir a ticks del R_10
-            ws.send(JSON.stringify({ subscribe: 1, ticks: SYMBOL }));
-            // Subscrir al balance
-            ws.send(JSON.stringify({ balance: 1, subscribe: 1 }));
+            
+            // Paso 1: Ticks después de 1.5s
+            setTimeout(() => {
+                if (ws && ws.readyState === WebSocket.OPEN) {
+                    ws.send(JSON.stringify({ subscribe: 1, ticks: SYMBOL }));
+                }
+            }, 1500);
+
+            // Paso 2: Balance después de 3s
+            setTimeout(() => {
+                if (ws && ws.readyState === WebSocket.OPEN) {
+                    ws.send(JSON.stringify({ balance: 1, subscribe: 1 }));
+                }
+            }, 3000);
         }
 
         // Errores
@@ -274,7 +284,8 @@ function connectDeriv() {
     });
 
     ws.on('close', (code, reason) => {
-        console.log(`⚠️ Conexión cerrada (${code}). Reconectando en 6s...`);
+        let waitTime = code === 1008 ? 10000 : 6000;
+        console.log(`⚠️ Conexión cerrada (${code}). Reconectando en ${waitTime/1000}s...`);
         botState.isConnectedToDeriv = false;
         botState.isBuying = false;
         
@@ -285,7 +296,7 @@ function connectDeriv() {
         }
 
         if (!reconnectTimeout) {
-            reconnectTimeout = setTimeout(connectDeriv, 6000);
+            reconnectTimeout = setTimeout(connectDeriv, waitTime);
         }
     });
 }
