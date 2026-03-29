@@ -96,7 +96,10 @@ function chooseBestBarrier() {
     const isRecent = last5.includes(hotDigit);
 
     if (isRecent) {
-        // Si el dígito caliente acaba de salir, NO disparamos
+        // Log discreto para saber que el bot está analizando pero pausado por seguridad
+        if (botState.isRunning && (Date.now() % 5000 < 1000)) { // Log cada ~5s para no saturar
+            console.log(`⏳ Esperando enfriamiento del dígito ${hotDigit} (Visto en últimos 5 ticks)`);
+        }
         return null; 
     }
 
@@ -241,6 +244,7 @@ function connectDeriv() {
             // Paso 1: Ticks después de 3s
             setTimeout(() => {
                 if (ws && ws.readyState === WebSocket.OPEN) {
+                    console.log(`📡 Suscribiendo a Ticks: ${SYMBOL}...`);
                     ws.send(JSON.stringify({ subscribe: 1, ticks: SYMBOL }));
                 }
             }, 3000);
