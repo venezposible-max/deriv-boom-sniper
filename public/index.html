@@ -371,9 +371,11 @@
             isRunning = data.isRunning;
             document.getElementById('subTitle').innerText = `Last Digit Strategy · Deriv ${data.symbol}`;
 
-            // Actualizar Slider
-            document.getElementById('scanRangeVal').innerText = data.scanRange;
-            document.getElementById('scanRangeSlider').value = data.scanRange;
+            // Actualizar Slider SOLO si el usuario no lo está tocando
+            if (!window.isAdjustingScanRange) {
+                document.getElementById('scanRangeVal').innerText = data.scanRange;
+                document.getElementById('scanRangeSlider').value = data.scanRange;
+            }
 
             // Actualizar estilo botones mercado
             ['R_10', 'R_25', 'R_50', 'R_100'].forEach(s => {
@@ -520,7 +522,10 @@
         } catch (e) { console.error(e); }
     }
 
+    window.isAdjustingScanRange = false;
+
     async function updateScanRange(val) {
+        window.isAdjustingScanRange = true;
         document.getElementById('scanRangeVal').innerText = val;
         try {
             await fetch('/differs/control', {
@@ -528,7 +533,12 @@
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ action: 'CONFIG', scanRange: val })
             });
-        } catch (e) { console.error(e); }
+            // Pequeño retardo antes de volver a escuchar al servidor
+            setTimeout(() => { window.isAdjustingScanRange = false; }, 1200);
+        } catch (e) { 
+            console.error(e); 
+            window.isAdjustingScanRange = false;
+        }
     }
 
     // Poll every 800ms for smooth digit updates
