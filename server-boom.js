@@ -18,7 +18,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 // ─── CONFIGURACIÓN CENTRAL ───────────────────────────────────
-const APP_ID = process.env.DERIV_APP_ID || '1089';
+const APP_ID = process.env.DERIV_APP_ID || '36544';
 const DERIV_TOKEN = process.env.DERIV_TOKEN || 'PMIt2RhEjEDbcLD';
 const STATE_FILE = path.join(__dirname, 'persistent-state-differs.json');
 
@@ -211,9 +211,15 @@ function connectDeriv() {
     ws = new WebSocket(`wss://ws.derivws.com/websockets/v3?app_id=${APP_ID}`);
 
     ws.on('open', () => {
-        console.log('🔌 Conectado a Deriv WebSocket (Differs Engine)');
+        console.log('🔌 Conectado a Deriv. Esperando 5s para identificar...');
         botState.isConnectedToDeriv = true;
-        ws.send(JSON.stringify({ authorize: DERIV_TOKEN }));
+        
+        // Retraso inicial de 5s antes de mandar el Token
+        setTimeout(() => {
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                ws.send(JSON.stringify({ authorize: DERIV_TOKEN }));
+            }
+        }, 5000);
     });
 
     ws.on('message', (raw) => {
@@ -412,12 +418,14 @@ function finalizeTrade(c) {
     saveState();
 }
 
-// ─── KEEP-ALIVE PING ─────────────────────────────────────────
+// ─── KEEP-ALIVE PING (Desactivado para reducir ruidos) ────────
+/*
 setInterval(() => {
     if (ws && ws.readyState === WebSocket.OPEN) {
         ws.send(JSON.stringify({ ping: 1 }));
     }
-}, 10000); // Latido cada 10s para mantener la conexión ultra-estable
+}, 10000);
+*/
 
 // ─── ESTADÍSTICAS PERIÓDICAS ─────────────────────────────────
 setInterval(() => {
