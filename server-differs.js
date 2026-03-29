@@ -41,7 +41,7 @@ let botState = {
     digitHistory: [],         // Historial de últimos 50 dígitos vistos
     digitFrequency: {},        // Frecuencia de aparición de cada dígito
     currentBarrier: null,      // El dígito que actualmente "differimos"
-    scanRange: 20,             // Rango de análisis dinámico (dígitos a mirar)
+    scanRange: 100,            // PRECISIÓN FIJA: 100 Ticks (Más estable)
     stake: 1,                  // Apuesta base en USD
     maxDailyLoss: 20,          // Máximo de pérdida diaria permitida
     dailyLoss: 0,

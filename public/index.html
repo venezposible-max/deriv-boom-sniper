@@ -207,19 +207,13 @@
         <button id="btnV100" onclick="switchMarket('R_100')" class="chip chip-purple" style="cursor:pointer; border:none;">V100</button>
     </div>
 
-    <!-- PRECISIÓN POR VENTANA -->
+    <!-- PRECISIÓN FIJA -->
     <div class="card" style="margin-bottom:20px; padding:15px; text-align:center;">
-        <h4 style="margin:0 0 10px 0; color:#a78bfa; font-size: 0.9em;">
-            🎯 PRECISIÓN DE ANÁLISIS: <span id="scanRangeVal">20</span> TICKS
+        <h4 style="margin:0 0 5px 0; color:#a78bfa; font-size: 0.9em;">
+            🎯 PRECISIÓN DE ANÁLISIS: <span id="scanRangeVal">100</span> TICKS
         </h4>
-        <div id="scanRangeButtons" style="display:flex; gap:8px; justify-content:center; margin-top:10px;">
-            <button onclick="updateScanRange(20)" class="chip" style="cursor:pointer; flex:1; border:1px solid #7c3aed;">20</button>
-            <button onclick="updateScanRange(50)" class="chip" style="cursor:pointer; flex:1; border:1px solid #7c3aed;">50</button>
-            <button onclick="updateScanRange(100)" class="chip" style="cursor:pointer; flex:1; border:1px solid #7c3aed;">100</button>
-            <button onclick="updateScanRange(200)" class="chip" style="cursor:pointer; flex:1; border:1px solid #7c3aed;">200</button>
-        </div>
-        <p style="font-size:0.75em; color:rgba(255,255,255,0.5); margin-top:8px;">
-            (Click para elegir la ventana de análisis)
+        <p style="font-size:0.75em; color:rgba(255,255,255,0.4);">
+            (Modo Alta Estabilidad Activado)
         </p>
     </div>
 
@@ -375,24 +369,8 @@
             isRunning = data.isRunning;
             document.getElementById('subTitle').innerText = `Last Digit Strategy · Deriv ${data.symbol}`;
 
-            // Actualizar Botones de Precisión
-            const now = Date.now();
-            if (!window.lastScanRangeAdjust || (now - window.lastScanRangeAdjust > 3000)) {
-                const currentRange = parseInt(data.scanRange);
-                document.getElementById('scanRangeVal').innerText = currentRange;
-                
-                // Resaltar botón activo
-                const btns = document.querySelectorAll('#scanRangeButtons button');
-                btns.forEach(btn => {
-                    if (parseInt(btn.innerText) === currentRange) {
-                        btn.style.background = '#7c3aed';
-                        btn.style.color = 'white';
-                    } else {
-                        btn.style.background = 'rgba(167,139,250,0.15)';
-                        btn.style.color = '#a78bfa';
-                    }
-                });
-            }
+            // Actualización visual de precisión fija
+            document.getElementById('scanRangeVal').innerText = 100;
 
             // Actualizar estilo botones mercado
             ['R_10', 'R_25', 'R_50', 'R_100'].forEach(s => {
