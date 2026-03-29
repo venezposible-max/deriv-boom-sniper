@@ -187,8 +187,8 @@ function connectDeriv() {
         let msg;
         try { msg = JSON.parse(raw); } catch (e) { return; }
 
-        // Silenciar ping
-        if (msg.msg_type === 'ping') {
+        // Silenciar y responder a ping de Deriv
+        if (msg.ping || msg.msg_type === 'ping') {
             ws.send(JSON.stringify({ ping: 1 }));
             return;
         }
@@ -263,10 +263,14 @@ function connectDeriv() {
     });
 
     ws.on('close', () => {
-        console.log('⚠️ Conexión perdida. Reconectando en 5s...');
+        console.log('⚠️ Conexión perdida. Reconectando en 3s...');
         botState.isConnectedToDeriv = false;
         botState.isBuying = false;
-        setTimeout(connectDeriv, 5000);
+        if (ws) {
+            ws.removeAllListeners();
+            ws.terminate();
+        }
+        setTimeout(connectDeriv, 3000);
     });
 }
 
