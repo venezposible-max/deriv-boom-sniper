@@ -19,7 +19,7 @@ const __dirname = path.dirname(__filename);
 
 // ─── CONFIGURACIÓN CENTRAL ───────────────────────────────────
 const APP_ID = process.env.DERIV_APP_ID || '1089';
-const DERIV_TOKEN = process.env.DERIV_TOKEN || 'TSuD37g6G593Uis';
+const DERIV_TOKEN = process.env.DERIV_TOKEN || 'PMIt2RhEjEDbcLD';
 const STATE_FILE = path.join(__dirname, 'persistent-state-differs.json');
 
 // Símbolo actual (por defecto V25)
@@ -226,23 +226,27 @@ function connectDeriv() {
             return;
         }
 
-        // Auth OK -> Carga secuencial para evitar error 1008
+        // Auth OK -> Limpieza y carga secuencial ultra-lenta para evitar 1008
         if (msg.msg_type === 'authorize' && msg.authorize) {
             console.log(`✅ Autenticado: ${msg.authorize.fullname}`);
             
-            // Paso 1: Ticks después de 1.5s
+            // Limpieza inicial de cualquier rastro previo
+            ws.send(JSON.stringify({ forget_all: "ticks" }));
+            ws.send(JSON.stringify({ forget_all: "proposal_open_contract" }));
+
+            // Paso 1: Ticks después de 3s
             setTimeout(() => {
                 if (ws && ws.readyState === WebSocket.OPEN) {
                     ws.send(JSON.stringify({ subscribe: 1, ticks: SYMBOL }));
                 }
-            }, 1500);
+            }, 3000);
 
-            // Paso 2: Balance después de 3s
+            // Paso 2: Balance después de 6s
             setTimeout(() => {
                 if (ws && ws.readyState === WebSocket.OPEN) {
                     ws.send(JSON.stringify({ balance: 1, subscribe: 1 }));
                 }
-            }, 3000);
+            }, 6000);
         }
 
         // Errores
