@@ -207,6 +207,18 @@
         <button id="btnV100" onclick="switchMarket('R_100')" class="chip chip-purple" style="cursor:pointer; border:none;">V100</button>
     </div>
 
+    <!-- PRECISIÓN SLIDER -->
+    <div class="card" style="margin-bottom:20px; padding:15px; text-align:center;">
+        <h4 style="margin:0 0 10px 0; color:#a78bfa; font-size: 0.9em;">
+            🎯 PRECISIÓN DE ANÁLISIS: <span id="scanRangeVal">20</span> TICKS
+        </h4>
+        <input type="range" id="scanRangeSlider" min="10" max="100" step="5" value="20" 
+               style="width:100%; accent-color:#7c3aed;" oninput="updateScanRange(this.value)">
+        <p style="font-size:0.75em; color:rgba(255,255,255,0.5); margin-top:5px;">
+            (Menos = Más rápido | Más = Más estable)
+        </p>
+    </div>
+
     <!-- CHIPS -->
     <div class="chip-row">
         <span class="chip chip-purple" id="chipStatus">OFFLINE</span>
@@ -359,6 +371,10 @@
             isRunning = data.isRunning;
             document.getElementById('subTitle').innerText = `Last Digit Strategy · Deriv ${data.symbol}`;
 
+            // Actualizar Slider
+            document.getElementById('scanRangeVal').innerText = data.scanRange;
+            document.getElementById('scanRangeSlider').value = data.scanRange;
+
             // Actualizar estilo botones mercado
             ['R_10', 'R_25', 'R_50', 'R_100'].forEach(s => {
                 const btn = document.getElementById('btn' + s.replace('R_', 'V'));
@@ -501,6 +517,17 @@
                 body: JSON.stringify({ symbol })
             });
             fetchStatus();
+        } catch (e) { console.error(e); }
+    }
+
+    async function updateScanRange(val) {
+        document.getElementById('scanRangeVal').innerText = val;
+        try {
+            await fetch('/differs/control', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action: 'CONFIG', scanRange: val })
+            });
         } catch (e) { console.error(e); }
     }
 

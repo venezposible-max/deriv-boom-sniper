@@ -41,6 +41,7 @@ let botState = {
     digitHistory: [],         // Historial de últimos 50 dígitos vistos
     digitFrequency: {},        // Frecuencia de aparición de cada dígito
     currentBarrier: null,      // El dígito que actualmente "differimos"
+    scanRange: 20,             // Rango de análisis dinámico (dígitos a mirar)
     stake: 1,                  // Apuesta base en USD
     maxDailyLoss: 20,          // Máximo de pérdida diaria permitida
     dailyLoss: 0,
@@ -83,22 +84,23 @@ if (fs.existsSync(STATE_FILE)) {
  */
 function chooseBestBarrier() {
     const hist = botState.digitHistory;
-    if (hist.length < 10) return '5'; // Default seguro hasta tener datos
+    const range = botState.scanRange || 20;
 
-    const last10 = hist.slice(-10);
-    const last20 = hist.slice(-20);
+    if (hist.length < 10) return '5'; 
 
-    // Frecuencia en los últimos 10 ticks
-    const freq10 = {};
-    for (let d = 0; d <= 9; d++) freq10[d] = 0;
-    last10.forEach(d => freq10[d]++);
+    // Tomar solo los últimos X dígitos según el rango elegido por el usuario
+    const subHistory = hist.slice(-range);
 
-    // Dígito que MÁS apareció en los últimos 10 → differimos de él
+    const freq = {};
+    for (let d = 0; d <= 9; d++) freq[d] = 0;
+    subHistory.forEach(d => freq[d]++);
+
+    // Elegir el que MÁS veces salió en ese rango (para diferir de él)
     let hotDigit = 0;
     let maxCount = -1;
     for (let d = 0; d <= 9; d++) {
-        if (freq10[d] > maxCount) {
-            maxCount = freq10[d];
+        if (freq[d] > maxCount) {
+            maxCount = freq[d];
             hotDigit = d;
         }
     }
