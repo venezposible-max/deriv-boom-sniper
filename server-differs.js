@@ -360,7 +360,7 @@ setInterval(() => {
     if (ws && ws.readyState === WebSocket.OPEN) {
         ws.send(JSON.stringify({ ping: 1 }));
     }
-}, 25000);
+}, 10000); // Latido cada 10s para mantener la conexión ultra-estable
 
 // ─── ESTADÍSTICAS PERIÓDICAS ─────────────────────────────────
 setInterval(() => {
