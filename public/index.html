@@ -178,6 +178,35 @@
             font-family: inherit; font-weight: 700;
             transition: border-color 0.2s;
         }
+
+        /* ── RECOVERY SWITCH ── */
+        .recovery-box {
+            display: flex; align-items: center; justify-content: space-between;
+            background: rgba(167,139,250,0.05); border: 1px solid rgba(167,139,250,0.1);
+            padding: 14px 18px; border-radius: 12px; margin-bottom: 24px;
+            transition: all 0.3s;
+        }
+        .recovery-box.active {
+            background: rgba(52,211,153,0.08); border-color: rgba(52,211,153,0.3);
+            box-shadow: 0 0 15px rgba(52,211,153,0.1);
+        }
+        .rec-label { font-size: 13px; font-weight: 700; color: #a78bfa; display: flex; align-items: center; gap: 8px; }
+        .recovery-box.active .rec-label { color: #34d399; }
+        
+        .switch {
+            position: relative; display: inline-block; width: 44px; height: 24px;
+        }
+        .switch input { opacity: 0; width: 0; height: 0; }
+        .slider {
+            position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0;
+            background-color: #2a2a3e; transition: .4s; border-radius: 24px;
+        }
+        .slider:before {
+            position: absolute; content: ""; height: 18px; width: 18px; left: 3px; bottom: 3px;
+            background-color: white; transition: .4s; border-radius: 50%;
+        }
+        input:checked + .slider { background-color: #059669; }
+        input:checked + .slider:before { transform: translateX(20px); }
         .input-group input:focus { outline: none; border-color: #7c3aed; }
 
         /* ── HISTORY ── */
@@ -349,8 +378,20 @@
             </div>
         </div>
 
+        <!-- RECOVERY SWITCH -->
+        <div class="recovery-box" id="recoveryBox">
+            <div class="rec-label">
+                🛡️ Recuperar Tras Pérdida
+                <span style="font-size: 9px; opacity: 0.6; font-weight: 400; display: block;">Escudo One-Shot Activado</span>
+            </div>
+            <label class="switch">
+                <input type="checkbox" id="isRecoveryEnabled" onchange="document.getElementById('recoveryBox').className = 'recovery-box' + (this.checked ? ' active' : '')">
+                <span class="slider"></span>
+            </label>
+        </div>
+
         <button id="btnToggle" class="btn-main btn-start" onclick="toggleBot()">
-            🎲 Iniciar Differs Sniper
+             🎲 Iniciar Differs Sniper
         </button>
     </div>
 
@@ -471,6 +512,12 @@
             netEl.innerText = `${net >= 0 ? '+' : ''}$${net.toFixed(2)}`;
             netEl.className = net >= 0 ? 'green' : 'red';
 
+            // Sync UI inputs if they changed on server
+            if (!isRunning) {
+                document.getElementById('isRecoveryEnabled').checked = !!data.isRecoveryEnabled;
+                document.getElementById('recoveryBox').className = 'recovery-box' + (data.isRecoveryEnabled ? ' active' : '');
+            }
+
             // ACCOUNT THEME UPDATE
             const headerElement = document.getElementById('mainHeader');
             const accDemo = document.getElementById('btnAccDemo');
@@ -538,6 +585,7 @@
             body.stake = parseFloat(document.getElementById('stake').value);
             body.maxDailyLoss = parseFloat(document.getElementById('maxDailyLoss').value);
             body.takeProfit = parseFloat(document.getElementById('takeProfit').value);
+            body.isRecoveryEnabled = document.getElementById('isRecoveryEnabled').checked;
         }
         try {
             await fetch('/differs/control', {

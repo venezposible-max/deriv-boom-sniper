@@ -56,7 +56,9 @@ let botState = {
     strategyName: 'HOT-SNIPER',
     blacklist: {},             // Registro de dígitos en 'enfriamiento'
     lastLosingDigit: null,     // Último dígito que nos hizo perder
-    isRealAccount: false       // true: Cuenta Real, false: Demo (por defecto)
+    isRealAccount: false,      // true: Cuenta Real, false: Demo (por defecto)
+    isRecoveryEnabled: false,   // true: Intentar recuperar tras pérdida
+    recoveryActive: false      // Internal: si el próximo trade es de recuperación
 };
 
 // ─── CARGAR ESTADO PREVIO ──────────────────────────────────────
@@ -187,6 +189,7 @@ app.post('/differs/control', (req, res) => {
         if (stake) botState.stake = Math.max(0.35, parseFloat(stake));
         if (maxDailyLoss) botState.maxDailyLoss = parseFloat(maxDailyLoss);
         if (req.body.takeProfit) botState.takeProfit = parseFloat(req.body.takeProfit);
+        if (req.body.isRecoveryEnabled !== undefined) botState.isRecoveryEnabled = !!req.body.isRecoveryEnabled;
         botState.isRunning = true;
         console.log(`▶️ DIFFERS SNIPER INICIADO | Stake: $${botState.stake} | Símbolo: ${SYMBOL} | TP: $${botState.takeProfit}`);
         return res.json({ success: true, message: 'Differs Sniper Activado ✅' });
@@ -463,12 +466,20 @@ function tryFireTrade() {
 
     botState.currentBarrier = barrier;
 
+    // DETERMINAR STAKE (NORMAL O RECUPERACIÓN)
+    let finalStake = botState.stake;
+    if (botState.recoveryActive) {
+        // Para DIFFERS, se necesita ~11x el stake perdido para recuperar + mínima ganancia
+        finalStake = botState.stake * 11; 
+        console.log(`🛡️ USANDO STAKE DE RECUPERACIÓN: $${finalStake.toFixed(2)}`);
+    }
+
     // Construir la orden Differs
     const req = {
         buy: 1,
-        price: botState.stake,
+        price: finalStake,
         parameters: {
-            amount: botState.stake,
+            amount: finalStake,
             basis: 'stake',
             contract_type: 'DIGITDIFF',
             currency: 'USD',
@@ -499,6 +510,13 @@ function finalizeTrade(c) {
         botState.winsSession++;
         botState.dailyProfit += profit;
         console.log(`✅ WIN [${botState.strategyName}] +$${profit.toFixed(2)}`);
+        
+        // Si estábamos en modo recuperación y ganamos, desactivamos el estado interno
+        if (botState.recoveryActive) {
+            console.log("💎 RECUPERACIÓN EXITOSA. Volviendo al Stake normal.");
+            botState.recoveryActive = false;
+        }
+
         // Rotar estrategia solo después de un WIN
         botState.strategyIndex++;
     } else {
@@ -510,6 +528,14 @@ function finalizeTrade(c) {
         const badDigit = botState.currentBarrier;
         botState.blacklist[badDigit] = Date.now() + (120 * 1000); 
         console.log(`🛡️ Dígito ${badDigit} en Lista Negra por 2 min.`);
+
+        // ACTIVAR RECUPERACIÓN SI ESTÁ PERMITIDO
+        if (botState.isRecoveryEnabled) {
+            botState.recoveryActive = true;
+            console.log("🛡️ MODO RECUPERACIÓN ACTIVADO PARA EL SIGUIENTE DISPARO.");
+        } else {
+            botState.recoveryActive = false;
+        }
 
         botState.strategyIndex++;
     }
