@@ -265,21 +265,21 @@ function connectDeriv() {
     ws = new WebSocket(`wss://ws.derivws.com/websockets/v3?app_id=${APP_ID}`);
 
     ws.on('open', () => {
-        console.log('🔌 Conectado a Deriv. Esperando 5s para identificar...');
-        // NO activamos isConnectedToDeriv aquí, esperamos al Auth
+        const isReal = botState.isRealAccount;
+        const waitTime = isReal ? 100 : 5000; // Real: Rápido | Demo: Seguro 5s
         
-        // Retraso inicial de 5s antes de mandar el Token
+        console.log(`🔌 Conexión abierta. Autenticando en ${waitTime/1000}s...`);
+
         setTimeout(() => {
             if (ws && ws.readyState === WebSocket.OPEN) {
-                // ELEGIR TOKEN SEGÚN ESTADO
-                const token = botState.isRealAccount 
+                const token = isReal 
                     ? (process.env.DERIV_TOKEN_REAL || 'NhzzhoRqdOluzAs') 
                     : (process.env.DERIV_TOKEN_DEMO || 'PMIt2RhEjEDbcLD');
                 
-                console.log(`🔑 Autenticando en modo: ${botState.isRealAccount ? 'REAL 🔴' : 'DEMO 🔵'}`);
+                console.log(`🔑 Mandando Token del modo: ${isReal ? 'REAL 🔴' : 'DEMO 🔵'}`);
                 ws.send(JSON.stringify({ authorize: token }));
             }
-        }, 5000);
+        }, waitTime);
     });
 
     ws.on('message', (raw) => {
@@ -292,29 +292,36 @@ function connectDeriv() {
             return;
         }
 
-        // Auth OK -> Limpieza y carga secuencial ultra-lenta para evitar 1008
+        // Auth OK -> Limpieza y carga secuencial
         if (msg.msg_type === 'authorize' && msg.authorize) {
-            console.log(`✅ Autenticado: ${msg.authorize.fullname}`);
-            botState.isConnectedToDeriv = true; // AHORA SÍ estamos listos
-            
-            // Limpieza inicial de cualquier rastro previo
-            ws.send(JSON.stringify({ forget_all: "ticks" }));
-            ws.send(JSON.stringify({ forget_all: "proposal_open_contract" }));
+             const isReal = botState.isRealAccount;
+             console.log(`✅ Autenticado: ${msg.authorize.fullname} [${isReal ? 'REAL 🔴' : 'DEMO 🔵'}]`);
+             botState.isConnectedToDeriv = true;
+             
+             // Limpieza inicial
+             ws.send(JSON.stringify({ forget_all: "ticks" }));
+             ws.send(JSON.stringify({ forget_all: "proposal_open_contract" }));
 
-            // Paso 1: Ticks después de 3s
-            setTimeout(() => {
-                if (ws && ws.readyState === WebSocket.OPEN) {
-                    console.log(`📡 Suscribiendo a Ticks: ${SYMBOL}...`);
-                    ws.send(JSON.stringify({ subscribe: 1, ticks: SYMBOL }));
-                }
-            }, 3000);
+             // Paso 1: Ticks (Más rápido en Real)
+             setTimeout(() => {
+                 if (ws && ws.readyState === WebSocket.OPEN) {
+                     console.log(`📡 Suscribiendo a Ticks: ${SYMBOL}...`);
+                     ws.send(JSON.stringify({ subscribe: 1, ticks: SYMBOL }));
+                 }
+             }, isReal ? 1000 : 3000);
 
-            // Paso 2: Balance después de 6s
-            setTimeout(() => {
-                if (ws && ws.readyState === WebSocket.OPEN) {
-                    ws.send(JSON.stringify({ balance: 1, subscribe: 1 }));
-                }
-            }, 6000);
+             // Paso 2: Balance (Para ver los $1.64 rápido)
+             setTimeout(() => {
+                 if (ws && ws.readyState === WebSocket.OPEN) {
+                     ws.send(JSON.stringify({ balance: 1, subscribe: 1 }));
+                 }
+             }, isReal ? 2000 : 6000);
+        }
+
+        // Errores de Auth
+        if (msg.error && msg.msg_type === 'authorize') {
+            console.error(`❌ ERROR DE TOKEN: ${msg.error.message} (${msg.error.code})`);
+            botState.isConnectedToDeriv = false;
         }
 
         // Errores
