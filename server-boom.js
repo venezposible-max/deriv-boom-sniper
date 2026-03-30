@@ -44,6 +44,7 @@ let botState = {
     scanRange: 20,             // Rango de análisis dinámico (dígitos a mirar)
     stake: 1,                  // Apuesta base en USD
     maxDailyLoss: 20,          // Máximo de pérdida diaria permitida
+    takeProfit: 10,            // Objetivo de ganancia diaria
     dailyLoss: 0,
     dailyProfit: 0,
     lastTradeTime: 0,
@@ -184,8 +185,9 @@ app.post('/differs/control', (req, res) => {
     if (action === 'START') {
         if (stake) botState.stake = Math.max(0.35, parseFloat(stake));
         if (maxDailyLoss) botState.maxDailyLoss = parseFloat(maxDailyLoss);
+        if (req.body.takeProfit) botState.takeProfit = parseFloat(req.body.takeProfit);
         botState.isRunning = true;
-        console.log(`▶️ DIFFERS SNIPER INICIADO | Stake: $${botState.stake} | Símbolo: ${SYMBOL}`);
+        console.log(`▶️ DIFFERS SNIPER INICIADO | Stake: $${botState.stake} | Símbolo: ${SYMBOL} | TP: $${botState.takeProfit}`);
         return res.json({ success: true, message: 'Differs Sniper Activado ✅' });
     }
     if (action === 'STOP') {
@@ -389,7 +391,14 @@ function tryFireTrade() {
 
     // Protección de pérdida diaria
     if (botState.dailyLoss >= botState.maxDailyLoss) {
-        console.log(`🚫 LÍMITE DIARIO ALCANZADO ($${botState.dailyLoss.toFixed(2)}). Bot pausado hasta mañana.`);
+        console.log(`🚫 LÍMITE DE PÉRDIDA ALCANZADO ($${botState.dailyLoss.toFixed(2)}). Bot pausado.`);
+        botState.isRunning = false;
+        return;
+    }
+
+    // Objetivo de ganancia (Take Profit)
+    if (botState.dailyProfit >= botState.takeProfit) {
+        console.log(`🎯 OBJETIVO DE GANANCIA ALCANZADO ($${botState.dailyProfit.toFixed(2)}). Misión cumplida ✅`);
         botState.isRunning = false;
         return;
     }
