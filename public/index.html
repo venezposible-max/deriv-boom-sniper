@@ -435,7 +435,7 @@
         document.getElementById('freqTable').innerHTML = html;
     }
 
-    async function fetchStatus() {
+    async function fetchStatus(forceSync = false) {
         if (isFetching) return;
         isFetching = true;
         try {
@@ -443,6 +443,16 @@
             const { data } = await res.json();
 
             isRunning = data.isRunning;
+            
+            // SINCRONIZACIÓN DE INTERFAZ (Inputs)
+            // Solo sincronizamos los inputs si el bot NO está corriendo o si es la carga inicial
+            if (!isRunning || forceSync) {
+                const recoverySwitch = document.getElementById('isRecoveryEnabled');
+                if (recoverySwitch) {
+                    recoverySwitch.checked = !!data.isRecoveryEnabled;
+                    document.getElementById('recoveryBox').className = 'recovery-box' + (data.isRecoveryEnabled ? ' active' : '');
+                }
+            }
             document.getElementById('subTitle').innerText = `Last Digit Strategy · Deriv ${data.symbol}`;
 
             // Actualización visual de precisión fija
@@ -669,9 +679,15 @@
         }, 300);
     }
 
-    // Poll every 800ms for smooth digit updates
-    setInterval(fetchStatus, 800);
-    fetchStatus();
+    // Sincronización inicial Forzada
+    async function init() {
+        console.log("🚀 Iniciando Sincronización Base...");
+        await fetchStatus(true); // Pasar flag de forzar sync
+    }
+
+    // Poll status para actualizaciones fluidas
+    setInterval(() => fetchStatus(false), 1000);
+    init();
 </script>
 </body>
 </html>
