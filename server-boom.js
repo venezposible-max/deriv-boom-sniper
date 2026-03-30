@@ -327,7 +327,11 @@ function connectDeriv() {
 
         if (msg.msg_type === 'buy' && msg.error) {
             botState.isBuying = false;
-            console.error(`❌ Error al comprar: ${msg.error.message}`);
+            if (msg.error.code === 'WrongResponse') {
+                console.log(`⚠️ Servidor Deriv Ocupado (WrongResponse). Re-intentando en el próximo tick...`);
+            } else {
+                console.error(`❌ Error al comprar: ${msg.error.message}`);
+            }
         }
 
         // Resultado del contrato
