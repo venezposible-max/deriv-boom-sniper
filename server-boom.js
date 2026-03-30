@@ -519,7 +519,7 @@ function finalizeTrade(c) {
         botState.dailyProfit += profit;
         console.log(`✅ WIN [${botState.strategyName}] +$${profit.toFixed(2)}`);
         
-        // Si estábamos en modo recuperación y ganamos, desactivamos el estado interno
+        // Si ganamos, desactivamos recuperación si estaba activa
         if (botState.recoveryActive) {
             console.log("💎 RECUPERACIÓN EXITOSA. Volviendo al Stake normal.");
             botState.recoveryActive = false;
@@ -537,11 +537,16 @@ function finalizeTrade(c) {
         botState.blacklist[badDigit] = Date.now() + (120 * 1000); 
         console.log(`🛡️ Dígito ${badDigit} en Lista Negra por 2 min.`);
 
-        // ACTIVAR RECUPERACIÓN SI ESTÁ PERMITIDO
-        if (botState.isRecoveryEnabled) {
+        // LÓGICA ONE-SHOT:
+        if (botState.isRecoveryEnabled && !botState.recoveryActive) {
+            // SI venimos de un trade NORMAL y perdemos, activamos recuperación
             botState.recoveryActive = true;
-            console.log("🛡️ MODO RECUPERACIÓN ACTIVADO PARA EL SIGUIENTE DISPARO.");
+            console.log("🛡️ MODO RECUPERACIÓN ACTIVADO PARA EL SIGUIENTE DISPARO (One-Shot).");
         } else {
+            // SI YA ESTÁBAMOS EN RECUPERACIÓN y perdemos (o si el modo está OFF), volvemos a stake normal
+            if (botState.recoveryActive) {
+                console.log("⚠️ RECUPERACIÓN FALLIDA. Abortando martingala para proteger cuenta.");
+            }
             botState.recoveryActive = false;
         }
 
