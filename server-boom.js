@@ -219,15 +219,26 @@ app.post('/differs/switch-account', (req, res) => {
 
     botState.isRealAccount = !!isReal;
     
+    // HARD RESET DE SESIÓN PARA LA NUEVA CUENTA
+    botState.balance = 0;
+    botState.pnlSession = 0;
+    botState.winsSession = 0;
+    botState.lossesSession = 0;
+    botState.totalTradesSession = 0;
+    botState.tradeHistory = [];
+    botState.dailyProfit = 0;
+    botState.dailyLoss = 0;
+    
     // Forzar reconexión inmediata
     if (ws) {
-        ws.send(JSON.stringify({ forget_all: "ticks" }));
-        ws.terminate(); // Esto disparará el cierre y la reconexión con el nuevo token
+        console.log('🔌 Cerrando conexión anterior para cambio de cuenta...');
+        try { ws.send(JSON.stringify({ forget_all: "ticks" })); } catch(e) {}
+        ws.terminate(); 
     } else {
         connectDeriv();
     }
 
-    console.log(`👤 CUENTA CAMBIADA A: ${botState.isRealAccount ? 'REAL 🔴' : 'DEMO 🔵'}`);
+    console.log(`👤 CUENTA CAMBIADA A: ${botState.isRealAccount ? 'REAL 🔴' : 'DEMO 🔵'} (Sesión Reiniciada)`);
     res.json({ success: true, isReal: botState.isRealAccount });
 });
 
