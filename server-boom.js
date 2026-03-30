@@ -52,7 +52,9 @@ let botState = {
     activeContractId: null,
     tradeCount: 0,
     strategyIndex: 0,          // 0: HOT, 1: COLD, 2: REPEAT
-    strategyName: 'HOT-SNIPER'
+    strategyName: 'HOT-SNIPER',
+    blacklist: {},             // Registro de dígitos en 'enfriamiento'
+    lastLosingDigit: null      // Último dígito que nos hizo perder
 };
 
 // ─── CARGAR ESTADO PREVIO ──────────────────────────────────────
@@ -76,10 +78,16 @@ function chooseBestBarrier() {
     const hist = botState.digitHistory;
     const range = 100;
     const lastDigit = hist[hist.length - 1];
+    const now = Date.now();
 
-    if (hist.length < 10) return '5';
+    if (hist.length < 15) return '5';
 
-    // 1. Obtener frecuencia de 100 ticks
+    // 1. Limpiar Blacklist (Dígitos bloqueados por 2 minutos tras racha o pérdida)
+    for (const d in botState.blacklist) {
+        if (now > botState.blacklist[d]) delete botState.blacklist[d];
+    }
+
+    // 2. Obtener frecuencia de 100 ticks
     const subHistory = hist.slice(-range);
     const freq = {};
     for (let d = 0; d <= 9; d++) freq[d] = 0;
@@ -88,11 +96,10 @@ function chooseBestBarrier() {
     let chosenDigit = null;
     let strategyLabel = '';
 
-    // ELEGIR SEGÚN EL ÍNDICE DE ROTACIÓN (Híbrido de Confirmación Instantánea)
+    // ELEGIR SEGÚN EL ÍNDICE DE ROTACIÓN
     const mode = botState.strategyIndex % 3;
 
     if (mode === 0) {
-        // TÉCNICA 1: HOT REACTION (El más frecuente, pero solo si acaba de salir para confirmar)
         strategyLabel = '🎯 HOT-REACTION';
         let hotDigit = 0;
         let maxCount = -1;
@@ -102,12 +109,11 @@ function chooseBestBarrier() {
                 hotDigit = d;
             }
         }
-        // Esperamos a que el Hot Digit aparezca para apostar CONTRA él en el tick siguiente
+        // Solo si el caliente acaba de salir
         if (lastDigit !== hotDigit) return null; 
         chosenDigit = hotDigit;
 
     } else if (mode === 1) {
-        // TÉCNICA 2: COLD (Tendencia pura de ausencia)
         strategyLabel = '❄️ COLD-STABILITY';
         let coldDigit = 0;
         let minCount = 999;
@@ -117,16 +123,27 @@ function chooseBestBarrier() {
                 coldDigit = d;
             }
         }
-        // No operamos si el frío salió muy recientemente (últimos 3 ticks)
-        if (hist.slice(-3).includes(coldDigit)) return null;
+        if (hist.slice(-5).includes(coldDigit)) return null;
         chosenDigit = coldDigit;
 
     } else {
-        // TÉCNICA 3: ECO-SYNC (Inmediata: Apostamos contra el último que salió)
-        // La más certera para evitar duplicidades aleatorias
+        // ECO-SYNC (Inmediata: Contra el último que salió)
         strategyLabel = '⚡ ECO-SYNC';
         chosenDigit = lastDigit;
     }
+
+    // ─── FILTRO ANTI-TRIPLE (NUEVO) ───────────────────────────
+    // Si el dígito elegido aparece 2 veces en los últimos 10 ticks, es "Inestable"
+    const last10 = hist.slice(-10);
+    const countIn10 = last10.filter(d => d === parseInt(chosenDigit)).length;
+    
+    if (countIn10 >= 2) {
+        if (botState.isRunning && (now % 5000 < 500)) console.log(`🛡️ Bloqueando ${chosenDigit} por inestabilidad (visto ${countIn10}x en últimos 10 ticks)`);
+        return null;
+    }
+
+    // ─── VERIFICAR BLACKLIST ──────────────────────────────────
+    if (botState.blacklist[chosenDigit]) return null;
 
     botState.strategyName = strategyLabel;
     return String(chosenDigit);
@@ -434,7 +451,12 @@ function finalizeTrade(c) {
         botState.lossesSession++;
         botState.dailyLoss += Math.abs(profit);
         console.log(`❌ LOSS [${botState.strategyName}] -$${Math.abs(profit).toFixed(2)}`);
-        // También rotamos en LOSS para no quedarnos atrapados en racha negativa
+        
+        // REGLA DE ORO: Blacklist de 2 minutos para el dígito perdedor
+        const badDigit = botState.currentBarrier;
+        botState.blacklist[badDigit] = Date.now() + (120 * 1000); 
+        console.log(`🛡️ Dígito ${badDigit} en Lista Negra por 2 min.`);
+
         botState.strategyIndex++;
     }
 
