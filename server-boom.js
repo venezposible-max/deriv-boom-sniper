@@ -1,9 +1,9 @@
 /**
  * ============================================================
- *  DIFFERS SNIPER ENGINE v1.0
+ *  DIFFERS SNIPER ENGINE v1.1 [FINAL PRODUCTION STABLE]
  *  Estrategia: DIFFERS — El último dígito NO será X
  *  Probabilidad de ganar: ~90% por operación
- *  Símbolo: R_10 (Volatility 10 índex — más lento, más predecible para dígitos)
+ *  Símbolo: R_25 (Volatility 25 índex — analizado en 100 ticks)
  * ============================================================
  */
 
