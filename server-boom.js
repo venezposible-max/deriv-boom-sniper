@@ -215,6 +215,14 @@ app.post('/differs/control', (req, res) => {
     res.status(400).json({ success: false, error: 'Acción inválida' });
 });
 
+// API: Toggle Recovery Mode specifically
+app.post('/differs/toggle-recovery', (req, res) => {
+    const { enabled } = req.body;
+    botState.isRecoveryEnabled = !!enabled;
+    console.log(`🛡️ RECUPERACIÓN ONE-SHOT: ${botState.isRecoveryEnabled ? 'ACTIVADA' : 'DESACTIVADA'}`);
+    res.json({ success: true, isRecoveryEnabled: botState.isRecoveryEnabled });
+});
+
 // API: Cambiar Cuenta (Real/Demo)
 app.post('/differs/switch-account', (req, res) => {
     const { isReal } = req.body;

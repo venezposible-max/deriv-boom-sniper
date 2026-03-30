@@ -385,7 +385,7 @@
                 <span style="font-size: 9px; opacity: 0.6; font-weight: 400; display: block;">Escudo One-Shot Activado</span>
             </div>
             <label class="switch">
-                <input type="checkbox" id="isRecoveryEnabled" onchange="document.getElementById('recoveryBox').className = 'recovery-box' + (this.checked ? ' active' : '')">
+                <input type="checkbox" id="isRecoveryEnabled" onchange="toggleRecovery(this.checked)">
                 <span class="slider"></span>
             </label>
         </div>
@@ -636,6 +636,18 @@
     }
 
     window.lastScanRangeAdjust = 0;
+    
+    async function toggleRecovery(enabled) {
+        document.getElementById('recoveryBox').className = 'recovery-box' + (enabled ? ' active' : '');
+        try {
+            await fetch('/differs/toggle-recovery', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ enabled })
+            });
+        } catch(e) { console.error('Error toggling recovery:', e); }
+    }
+
     let scanRangeTimeout = null;
 
     async function updateScanRange(val) {
