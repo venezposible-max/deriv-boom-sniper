@@ -560,18 +560,19 @@
     }
 
     async function switchAccount(isReal) {
-        if (isBotRunning) {
-            alert("Detén el bot primero");
+        if (isRunning) {
+            alert("Detén el Sniper antes de cambiar la cuenta.");
             return;
         }
         try {
+            console.log('🔄 Cambiando a modo:', isReal ? 'Real' : 'Demo');
             await fetch('/differs/switch-account', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ isReal })
             });
             await fetchStatus();
-        } catch(e) { console.error(e); }
+        } catch(e) { console.error('Error al cambiar cuenta:', e); }
     }
 
     async function switchMarket(symbol) {
