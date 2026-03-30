@@ -162,7 +162,7 @@ function saveState() {
 
 // ─── SERVIDOR WEB ─────────────────────────────────────────────
 const app = express();
-app.use(cors());
+app.use(cors({ origin: '*' })); // Permitir TODO para evitar bloqueos
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
 
