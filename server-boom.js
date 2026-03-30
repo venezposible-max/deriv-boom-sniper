@@ -242,6 +242,28 @@ app.post('/differs/switch-account', (req, res) => {
     res.json({ success: true, isReal: botState.isRealAccount });
 });
 
+// API: Cambiar Mercado
+app.post('/differs/switch-market', (req, res) => {
+    const { symbol } = req.body;
+    if (botState.isRunning) return res.status(400).json({ success: false, error: 'Detén el bot antes de cambiar de mercado' });
+    
+    if (['R_10', 'R_25', 'R_50', 'R_100'].includes(symbol)) {
+        SYMBOL = symbol;
+        botState.digitHistory = []; // Reset historial para el nuevo mercado
+        botState.digitFrequency = {};
+        
+        // Re-suscribir si está conectado
+        if (ws && ws.readyState === WebSocket.OPEN) {
+            ws.send(JSON.stringify({ forget_all: "ticks" }));
+            ws.send(JSON.stringify({ subscribe: 1, ticks: SYMBOL }));
+        }
+        
+        console.log(`🔄 MERCADO CAMBIADO A: ${SYMBOL}`);
+        return res.json({ success: true, symbol: SYMBOL });
+    }
+    res.status(400).json({ success: false, error: 'Símbolo no soportado' });
+});
+
 // API: Historial
 app.get('/differs/history', (req, res) => {
     res.json({ success: true, history: botState.tradeHistory.slice(0, 30) });
