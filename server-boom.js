@@ -51,6 +51,8 @@ let botState = {
     isBuying: false,
     activeContractId: null,
     tradeCount: 0,
+    strategyIndex: 0,          // 0: HOT, 1: COLD, 2: REPEAT
+    strategyName: 'HOT-SNIPER'
 };
 
 // ─── CARGAR ESTADO PREVIO ──────────────────────────────────────
@@ -72,38 +74,63 @@ if (fs.existsSync(STATE_FILE)) {
 
 function chooseBestBarrier() {
     const hist = botState.digitHistory;
-    const range = 100; // Análisis fijo de 100 ticks
+    const range = 100;
 
-    if (hist.length < 10) return '5'; 
+    if (hist.length < 10) return '5';
 
-    // 1. Encontrar el dígito más frecuente en 100 ticks (Tendencia)
+    // 1. Obtener frecuencia de 100 ticks
     const subHistory = hist.slice(-range);
     const freq = {};
     for (let d = 0; d <= 9; d++) freq[d] = 0;
     subHistory.forEach(d => freq[d]++);
 
-    let hotDigit = 0;
-    let maxCount = -1;
-    for (let d = 0; d <= 9; d++) {
-        if (freq[d] > maxCount) {
-            maxCount = freq[d];
-            hotDigit = d;
+    let chosenDigit = null;
+    let strategyLabel = '';
+
+    // ELEGIR SEGÚN EL ÍNDICE DE ROTACIÓN
+    const mode = botState.strategyIndex % 3;
+
+    if (mode === 0) {
+        // TÉCNICA 1: HOT (El que más sale en 100, pero no en últimos 5)
+        strategyLabel = '🔥 HOT-SNIPER';
+        let hotDigit = 0;
+        let maxCount = -1;
+        for (let d = 0; d <= 9; d++) {
+            if (freq[d] > maxCount) {
+                maxCount = freq[d];
+                hotDigit = d;
+            }
         }
+        
+        // Filtro de seguridad (pausa 5 ticks)
+        if (hist.slice(-5).includes(hotDigit)) {
+            if (botState.isRunning && (Date.now() % 5000 < 1000)) console.log(`⏳ [HOT] Esperando enfriamiento de ${hotDigit}`);
+            return null;
+        }
+        chosenDigit = hotDigit;
+
+    } else if (mode === 1) {
+        // TÉCNICA 2: COLD (El que menos sale en 100)
+        strategyLabel = '❄️ COLD-SNIPER';
+        let coldDigit = 0;
+        let minCount = 999;
+        for (let d = 0; d <= 9; d++) {
+            if (freq[d] < minCount) {
+                minCount = freq[d];
+                coldDigit = d;
+            }
+        }
+        chosenDigit = coldDigit;
+
+    } else {
+        // TÉCNICA 3: REPEAT (El último que salió)
+        // Estadísticamente difícil que se repita 2 veces seguidas
+        strategyLabel = '♻️ REPEAT-SNIPER';
+        chosenDigit = hist[hist.length - 1];
     }
 
-    // 2. Filtro de Seguridad: ¿Apareció este dígito en los últimos 5 ticks?
-    const last5 = hist.slice(-5);
-    const isRecent = last5.includes(hotDigit);
-
-    if (isRecent) {
-        // Log discreto para saber que el bot está analizando pero pausado por seguridad
-        if (botState.isRunning && (Date.now() % 5000 < 1000)) { // Log cada ~5s para no saturar
-            console.log(`⏳ Esperando enfriamiento del dígito ${hotDigit} (Visto en últimos 5 ticks)`);
-        }
-        return null; 
-    }
-
-    return String(hotDigit);
+    botState.strategyName = strategyLabel;
+    return String(chosenDigit);
 }
 
 // ─── GUARDAR ESTADO ───────────────────────────────────────────
@@ -381,7 +408,7 @@ function tryFireTrade() {
     botState.isBuying = true;
     botState.lastTradeTime = now;
 
-    console.log(`🎲 DIFFERS SHOOT | Barrera (NO-${barrier}) | Stake: $${botState.stake} | Últ.Dígito: ${botState.lastDigit}`);
+    console.log(`🎲 SHOOT [${botState.strategyName}] | Barrera (NO-${barrier}) | Úl.Dígito: ${botState.lastDigit}`);
     ws.send(JSON.stringify(req));
 }
 
@@ -397,11 +424,15 @@ function finalizeTrade(c) {
     if (isWin) {
         botState.winsSession++;
         botState.dailyProfit += profit;
-        console.log(`✅ WIN +$${profit.toFixed(2)} | Barrera NO-${botState.currentBarrier} AGUANTÓ`);
+        console.log(`✅ WIN [${botState.strategyName}] +$${profit.toFixed(2)}`);
+        // Rotar estrategia solo después de un WIN
+        botState.strategyIndex++;
     } else {
         botState.lossesSession++;
         botState.dailyLoss += Math.abs(profit);
-        console.log(`❌ LOSS -$${Math.abs(profit).toFixed(2)} | El dígito SÍ fue ${botState.currentBarrier}`);
+        console.log(`❌ LOSS [${botState.strategyName}] -$${Math.abs(profit).toFixed(2)}`);
+        // También rotamos en LOSS para no quedarnos atrapados en racha negativa
+        botState.strategyIndex++;
     }
 
     // Guardar en historial
