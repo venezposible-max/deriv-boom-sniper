@@ -194,11 +194,12 @@ app.post('/differs/control', (req, res) => {
         console.log(`▶️ DIFFERS SNIPER INICIADO | Stake: $${botState.stake} | Símbolo: ${SYMBOL} | TP: $${botState.takeProfit}`);
         return res.json({ success: true, message: 'Differs Sniper Activado ✅' });
     }
+
     if (action === 'STOP') {
         botState.isRunning = false;
         saveState();
         console.log('⏸️ DIFFERS SNIPER DETENIDO.');
-        return res.json({ success: true, message: 'Bot Pausado' });
+        return res.json({ success: true, message: 'Bot Pausado', isRunning: false });
     }
     if (action === 'RESET_DAY') {
         botState.dailyLoss = 0;
@@ -208,8 +209,16 @@ app.post('/differs/control', (req, res) => {
         botState.lossesSession = 0;
         botState.totalTradesSession = 0;
         botState.tradeHistory = [];
+        botState.isRunning = false; // Forzar apagado al resetear
+        botState.recoveryActive = false; // Limpiar recuperación pendiente
         saveState();
-        return res.json({ success: true, message: 'Día reiniciado' });
+        console.log('🧹 DÍA REINICIADO. Todas las estadísticas a cero.');
+        return res.json({ success: true, message: 'Día reiniciado', isRunning: false });
+    }
+
+    if (action === 'SYNC') {
+        // Endpoint simple para forzar que el server y el cliente coincidan fuera de trades
+        return res.json({ success: true, isRunning: botState.isRunning });
     }
 
     res.status(400).json({ success: false, error: 'Acción inválida' });
