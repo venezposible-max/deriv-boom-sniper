@@ -15,12 +15,15 @@
             background: #050510;
             color: #fff;
             min-height: 100vh;
+            transition: background 0.5s ease;
         }
+        body.real-mode { background: #0a0505; }
+        .card.real-mode { border: 1px solid rgba(220,38,38,0.3); }
 
         .container { max-width: 480px; margin: 0 auto; padding: 20px 16px 40px; }
 
         /* ── HEADER ── */
-        .header { text-align: center; margin-bottom: 28px; padding-top: 10px; }
+        .header { text-align: center; margin-bottom: 20px; padding-top: 10px; }
         .header h1 {
             font-size: 26px; font-weight: 900; margin: 0;
             background: linear-gradient(135deg, #a78bfa, #7c3aed);
@@ -28,7 +31,24 @@
             text-shadow: none;
             filter: drop-shadow(0 0 18px rgba(167,139,250,0.5));
         }
+        .header.real-mode h1 {
+            background: linear-gradient(135deg, #f87171, #dc2626);
+            filter: drop-shadow(0 0 18px rgba(220,38,38,0.5));
+        }
         .header p { color: #666; font-size: 12px; margin: 6px 0 0; letter-spacing: 3px; text-transform: uppercase; }
+
+        /* ── ACCOUNT TOGGLE ── */
+        .account-selector {
+            display: flex; background: rgba(255,255,255,0.05); border-radius: 12px;
+            padding: 4px; margin-bottom: 24px; border: 1px solid rgba(255,255,255,0.1);
+        }
+        .account-btn {
+            flex: 1; padding: 10px; border-radius: 8px; border: none; cursor: pointer;
+            font-size: 11px; font-weight: 900; letter-spacing: 1px; text-transform: uppercase;
+            transition: all 0.3s; color: #666; background: transparent;
+        }
+        .account-btn.active.demo { background: #7c3aed; color: #fff; box-shadow: 0 4px 15px rgba(124,58,237,0.3); }
+        .account-btn.active.real { background: #dc2626; color: #fff; box-shadow: 0 4px 15px rgba(220,38,38,0.3); }
 
         /* ── CHIPS ── */
         .chip-row { display: flex; justify-content: center; gap: 8px; margin-bottom: 20px; }
@@ -197,6 +217,17 @@
     <div class="header">
         <h1>🎲 DIFFERS SNIPER</h1>
         <p id="subTitle">Last Digit Strategy · Deriv R_25</p>
+    </div>
+
+    <div class="header" id="mainHeader">
+        <h1>DIFFERS SNIPER</h1>
+        <p>Expert Analysis Engine</p>
+    </div>
+
+    <!-- ACCOUNT TOGGLE -->
+    <div class="account-selector">
+        <button id="btnAccDemo" onclick="switchAccount(false)" class="account-btn active demo">Virtual Account</button>
+        <button id="btnAccReal" onclick="switchAccount(true)" class="account-btn real">Real Account 🔴</button>
     </div>
 
     <!-- MARKET SELECTOR -->
@@ -438,8 +469,26 @@
             const net = dp - dl;
             const netEl = document.getElementById('dailyNet');
             netEl.innerText = `${net >= 0 ? '+' : ''}$${net.toFixed(2)}`;
-            netEl.className = `stat-value ${net >= 0 ? 'green' : 'red'}`;
-            netEl.style.fontSize = '15px';
+            netEl.className = net >= 0 ? 'green' : 'red';
+
+            // ACCOUNT THEME UPDATE
+            const headerElement = document.getElementById('mainHeader');
+            const accDemo = document.getElementById('btnAccDemo');
+            const accReal = document.getElementById('btnAccReal');
+
+            if (data.isRealAccount) {
+                document.body.classList.add('real-mode');
+                headerElement.classList.add('real-mode');
+                accReal.classList.add('active');
+                accReal.classList.add('real');
+                accDemo.classList.remove('active');
+            } else {
+                document.body.classList.remove('real-mode');
+                headerElement.classList.remove('real-mode');
+                accDemo.classList.add('active');
+                accDemo.classList.add('demo');
+                accReal.classList.remove('active');
+            }
 
             // Digit history freq table
             if (data.digitHistory) {
@@ -508,6 +557,21 @@
             body: JSON.stringify({ action: 'RESET_DAY' })
         });
         fetchStatus();
+    }
+
+    async function switchAccount(isReal) {
+        if (isBotRunning) {
+            alert("Detén el bot primero");
+            return;
+        }
+        try {
+            await fetch('/differs/switch-account', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ isReal })
+            });
+            await fetchStatus();
+        } catch(e) { console.error(e); }
     }
 
     async function switchMarket(symbol) {

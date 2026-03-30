@@ -55,7 +55,8 @@ let botState = {
     strategyIndex: 0,          // 0: HOT, 1: COLD, 2: REPEAT
     strategyName: 'HOT-SNIPER',
     blacklist: {},             // Registro de dígitos en 'enfriamiento'
-    lastLosingDigit: null      // Último dígito que nos hizo perder
+    lastLosingDigit: null,     // Último dígito que nos hizo perder
+    isRealAccount: false       // true: Cuenta Real, false: Demo (por defecto)
 };
 
 // ─── CARGAR ESTADO PREVIO ──────────────────────────────────────
@@ -211,26 +212,23 @@ app.post('/differs/control', (req, res) => {
     res.status(400).json({ success: false, error: 'Acción inválida' });
 });
 
-// API: Cambiar Mercado
-app.post('/differs/switch-market', (req, res) => {
-    const { symbol } = req.body;
-    if (botState.isRunning) return res.status(400).json({ success: false, error: 'Detén el bot antes de cambiar de mercado' });
+// API: Cambiar Cuenta (Real/Demo)
+app.post('/differs/switch-account', (req, res) => {
+    const { isReal } = req.body;
+    if (botState.isRunning) return res.status(400).json({ success: false, error: 'Detén el bot primero' });
+
+    botState.isRealAccount = !!isReal;
     
-    if (['R_10', 'R_25', 'R_50', 'R_100'].includes(symbol)) {
-        SYMBOL = symbol;
-        botState.digitHistory = []; // Reset historial para el nuevo mercado
-        botState.digitFrequency = {};
-        
-        // Re-suscribir si está conectado
-        if (ws && ws.readyState === WebSocket.OPEN) {
-            ws.send(JSON.stringify({ forget_all: "ticks" }));
-            ws.send(JSON.stringify({ subscribe: 1, ticks: SYMBOL }));
-        }
-        
-        console.log(`🔄 MERCADO CAMBIADO A: ${SYMBOL}`);
-        return res.json({ success: true, symbol: SYMBOL });
+    // Forzar reconexión inmediata
+    if (ws) {
+        ws.send(JSON.stringify({ forget_all: "ticks" }));
+        ws.terminate(); // Esto disparará el cierre y la reconexión con el nuevo token
+    } else {
+        connectDeriv();
     }
-    res.status(400).json({ success: false, error: 'Símbolo no soportado' });
+
+    console.log(`👤 CUENTA CAMBIADA A: ${botState.isRealAccount ? 'REAL 🔴' : 'DEMO 🔵'}`);
+    res.json({ success: true, isReal: botState.isRealAccount });
 });
 
 // API: Historial
@@ -262,7 +260,13 @@ function connectDeriv() {
         // Retraso inicial de 5s antes de mandar el Token
         setTimeout(() => {
             if (ws && ws.readyState === WebSocket.OPEN) {
-                ws.send(JSON.stringify({ authorize: DERIV_TOKEN }));
+                // ELEGIR TOKEN SEGÚN ESTADO
+                const token = botState.isRealAccount 
+                    ? (process.env.DERIV_TOKEN_REAL || 'NhzzhoRqdOluzAs') 
+                    : (process.env.DERIV_TOKEN_DEMO || 'PMIt2RhEjEDbcLD');
+                
+                console.log(`🔑 Autenticando en modo: ${botState.isRealAccount ? 'REAL 🔴' : 'DEMO 🔵'}`);
+                ws.send(JSON.stringify({ authorize: token }));
             }
         }, 5000);
     });
