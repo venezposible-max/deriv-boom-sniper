@@ -186,21 +186,37 @@ app.post('/differs/control', (req, res) => {
     const { action, stake, maxDailyLoss } = req.body;
 
     if (action === 'START') {
+        // Verificar límites antes de arrancar
+        const netProfit = botState.dailyProfit - botState.dailyLoss;
+        if (botState.dailyLoss >= botState.maxDailyLoss || netProfit >= botState.takeProfit) {
+            return res.status(400).json({ 
+                success: false, 
+                error: 'Límite alcanzado. Pulsa Resetear Día para continuar.' 
+            });
+        }
+
         if (stake) botState.stake = Math.max(0.35, parseFloat(stake));
         if (maxDailyLoss) botState.maxDailyLoss = parseFloat(maxDailyLoss);
         if (req.body.takeProfit) botState.takeProfit = parseFloat(req.body.takeProfit);
         if (req.body.isRecoveryEnabled !== undefined) botState.isRecoveryEnabled = !!req.body.isRecoveryEnabled;
+        
         botState.isRunning = true;
+        botState.isBuying = false; // Reset de seguridad
+        botState.activeContractId = null;
+        
         console.log(`▶️ DIFFERS SNIPER INICIADO | Stake: $${botState.stake} | Símbolo: ${SYMBOL} | TP: $${botState.takeProfit}`);
-        return res.json({ success: true, message: 'Differs Sniper Activado ✅' });
+        return res.json({ success: true, message: 'Differs Sniper Activado ✅', isRunning: true });
     }
 
     if (action === 'STOP') {
         botState.isRunning = false;
+        botState.isBuying = false;
+        botState.activeContractId = null;
         saveState();
         console.log('⏸️ DIFFERS SNIPER DETENIDO.');
         return res.json({ success: true, message: 'Bot Pausado', isRunning: false });
     }
+
     if (action === 'RESET_DAY') {
         botState.dailyLoss = 0;
         botState.dailyProfit = 0;
@@ -209,10 +225,12 @@ app.post('/differs/control', (req, res) => {
         botState.lossesSession = 0;
         botState.totalTradesSession = 0;
         botState.tradeHistory = [];
-        botState.isRunning = false; // Forzar apagado al resetear
-        botState.recoveryActive = false; // Limpiar recuperación pendiente
+        botState.isRunning = false;
+        botState.recoveryActive = false;
+        botState.isBuying = false;
+        botState.activeContractId = null;
         saveState();
-        console.log('🧹 DÍA REINICIADO. Todas las estadísticas a cero.');
+        console.log('🧹 DÍA REINICIADO.');
         return res.json({ success: true, message: 'Día reiniciado', isRunning: false });
     }
 
