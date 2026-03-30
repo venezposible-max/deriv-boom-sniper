@@ -273,10 +273,10 @@ function connectDeriv() {
         setTimeout(() => {
             if (ws && ws.readyState === WebSocket.OPEN) {
                 const token = isReal 
-                    ? (process.env.DERIV_TOKEN_REAL || 'NhzzhoRqdOluzAs') 
+                    ? (process.env.DERIV_TOKEN_REAL || 'oC2QqWbtJZdjauD') 
                     : (process.env.DERIV_TOKEN_DEMO || 'PMIt2RhEjEDbcLD');
                 
-                console.log(`🔑 Mandando Token del modo: ${isReal ? 'REAL 🔴' : 'DEMO 🔵'}`);
+                console.log(`🔑 Mandando Token del modo: ${isReal ? 'REAL 🔴' : 'DEMO 🔵'} (Token: ${token.substring(0,4)}...)`);
                 ws.send(JSON.stringify({ authorize: token }));
             }
         }, waitTime);
