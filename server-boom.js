@@ -67,12 +67,17 @@ if (fs.existsSync(STATE_FILE)) {
         const saved = JSON.parse(fs.readFileSync(STATE_FILE));
         if (saved.botState) {
             botState = { ...botState, ...saved.botState };
+            
+            // 🔥 REPARACIÓN DE EMERGENCIA: Limpiar bloqueos al arrancar CUALQUIER sesión
             botState.isRunning = false;
             botState.isBuying = false;
             botState.activeContractId = null;
             botState.currentContractId = null;
+            botState.dailyLoss = 0; // Forzamos limpieza para que no arranque congelado
+            botState.dailyProfit = 0;
+            botState.recoveryActive = false;
         }
-        console.log(`📂 Estado Differs cargado. Historial: ${botState.tradeHistory.length} trades.`);
+        console.log(`📂 Estado Differs cargado y RE-INICIALIZADO.`);
     } catch (e) {
         console.log('⚠️ Error cargando estado previo, iniciando fresco.');
     }
@@ -471,18 +476,22 @@ function tryFireTrade() {
     if (!botState.isRunning) return;
     if (botState.isBuying || botState.activeContractId) return;
 
-    // Protección de pérdida diaria
+    // Protección de pérdida diaria (Solo detiene la COMPRA, no la conexión)
     if (botState.dailyLoss >= botState.maxDailyLoss) {
-        console.log(`🚫 LÍMITE DE PÉRDIDA ALCANZADO ($${botState.dailyLoss.toFixed(2)}). Bot pausado.`);
-        botState.isRunning = false;
+        if (botState.isRunning) {
+            console.log(`🚫 LÍMITE DE PÉRDIDA ALCANZADO ($${botState.dailyLoss.toFixed(2)}). Deteniendo compras.`);
+            botState.isRunning = false;
+        }
         return;
     }
 
-    // Objetivo de ganancia (Take Profit SOBRE EL BALANCE NETO REAL)
+    // Objetivo de ganancia (Take Profit)
     const netProfit = botState.dailyProfit - botState.dailyLoss;
     if (netProfit >= botState.takeProfit) {
-        console.log(`🎯 META DE GANANCIA REAL ALCANZADA ($${netProfit.toFixed(2)}). Misión cumplida ✅`);
-        botState.isRunning = false;
+        if (botState.isRunning) {
+            console.log(`🎯 META ALCANZADA ($${netProfit.toFixed(2)}). Deteniendo compras.`);
+            botState.isRunning = false;
+        }
         return;
     }
 
