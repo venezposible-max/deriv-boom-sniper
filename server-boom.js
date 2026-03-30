@@ -75,6 +75,7 @@ if (fs.existsSync(STATE_FILE)) {
 function chooseBestBarrier() {
     const hist = botState.digitHistory;
     const range = 100;
+    const lastDigit = hist[hist.length - 1];
 
     if (hist.length < 10) return '5';
 
@@ -87,12 +88,12 @@ function chooseBestBarrier() {
     let chosenDigit = null;
     let strategyLabel = '';
 
-    // ELEGIR SEGÚN EL ÍNDICE DE ROTACIÓN
+    // ELEGIR SEGÚN EL ÍNDICE DE ROTACIÓN (Híbrido de Confirmación Instantánea)
     const mode = botState.strategyIndex % 3;
 
     if (mode === 0) {
-        // TÉCNICA 1: HOT (El que más sale en 100, pero no en últimos 5)
-        strategyLabel = '🔥 HOT-SNIPER';
+        // TÉCNICA 1: HOT REACTION (El más frecuente, pero solo si acaba de salir para confirmar)
+        strategyLabel = '🎯 HOT-REACTION';
         let hotDigit = 0;
         let maxCount = -1;
         for (let d = 0; d <= 9; d++) {
@@ -101,17 +102,13 @@ function chooseBestBarrier() {
                 hotDigit = d;
             }
         }
-        
-        // Filtro de seguridad (pausa 5 ticks)
-        if (hist.slice(-5).includes(hotDigit)) {
-            if (botState.isRunning && (Date.now() % 5000 < 1000)) console.log(`⏳ [HOT] Esperando enfriamiento de ${hotDigit}`);
-            return null;
-        }
+        // Esperamos a que el Hot Digit aparezca para apostar CONTRA él en el tick siguiente
+        if (lastDigit !== hotDigit) return null; 
         chosenDigit = hotDigit;
 
     } else if (mode === 1) {
-        // TÉCNICA 2: COLD (El que menos sale en 100)
-        strategyLabel = '❄️ COLD-SNIPER';
+        // TÉCNICA 2: COLD (Tendencia pura de ausencia)
+        strategyLabel = '❄️ COLD-STABILITY';
         let coldDigit = 0;
         let minCount = 999;
         for (let d = 0; d <= 9; d++) {
@@ -120,13 +117,15 @@ function chooseBestBarrier() {
                 coldDigit = d;
             }
         }
+        // No operamos si el frío salió muy recientemente (últimos 3 ticks)
+        if (hist.slice(-3).includes(coldDigit)) return null;
         chosenDigit = coldDigit;
 
     } else {
-        // TÉCNICA 3: REPEAT (El último que salió)
-        // Estadísticamente difícil que se repita 2 veces seguidas
-        strategyLabel = '♻️ REPEAT-SNIPER';
-        chosenDigit = hist[hist.length - 1];
+        // TÉCNICA 3: ECO-SYNC (Inmediata: Apostamos contra el último que salió)
+        // La más certera para evitar duplicidades aleatorias
+        strategyLabel = '⚡ ECO-SYNC';
+        chosenDigit = lastDigit;
     }
 
     botState.strategyName = strategyLabel;
@@ -412,7 +411,7 @@ function tryFireTrade() {
     botState.isBuying = true;
     botState.lastTradeTime = now;
 
-    console.log(`🎲 SHOOT [${botState.strategyName}] | Barrera (NO-${barrier}) | Úl.Dígito: ${botState.lastDigit}`);
+    console.log(`📡 [${botState.strategyName}] Confirmado: NO-${barrier} (Tick Actual: ${botState.lastDigit})`);
     ws.send(JSON.stringify(req));
 }
 
