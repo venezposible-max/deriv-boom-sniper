@@ -396,9 +396,10 @@ function tryFireTrade() {
         return;
     }
 
-    // Objetivo de ganancia (Take Profit)
-    if (botState.dailyProfit >= botState.takeProfit) {
-        console.log(`🎯 OBJETIVO DE GANANCIA ALCANZADO ($${botState.dailyProfit.toFixed(2)}). Misión cumplida ✅`);
+    // Objetivo de ganancia (Take Profit SOBRE EL BALANCE NETO REAL)
+    const netProfit = botState.dailyProfit - botState.dailyLoss;
+    if (netProfit >= botState.takeProfit) {
+        console.log(`🎯 META DE GANANCIA REAL ALCANZADA ($${netProfit.toFixed(2)}). Misión cumplida ✅`);
         botState.isRunning = false;
         return;
     }
