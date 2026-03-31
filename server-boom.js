@@ -370,53 +370,62 @@ function connectDeriv() {
             botState.balance = msg.balance.balance;
         }
 
-        // Tick recibido → SOLAPE: Ya vimos el dígito, apostamos CONTRA otro
-        // [FRANKLIN v5.0] SOLAPE INFALIBLE
+        // Tick recibido → FRANCOTIRADOR ANTI-RACHA (Protección de Martingala)
+        // [FRANKLIN v6.0] ANTI-RACHA ESTADÍSTICO
         if (msg.msg_type === 'tick' && msg.tick) {
             const quote = msg.tick.quote;
-            const tickDigit = parseInt(String(quote).slice(-1));
+            const tickDigit = parseInt(String(parseFloat(quote).toFixed(3)).slice(-1));
             
-            // ESTRATEGIA SOLAPE: Elegir una barrera que NO sea el dígito actual
-            // Si el contrato se resuelve en ESTE MISMO tick → dígito(X) ≠ barrera(Y) → WIN 100%
-            // Si se resuelve en el siguiente tick → sigue siendo 90% porque la barrera es solo 1 de 10
-            const solapBarrier = String((tickDigit + 5) % 10); // Dígito opuesto (ej: 1→6, 3→8, 7→2)
+            // 1. Actualizar historial de mercado PRIMERO (Memoria del bot)
+            botState.lastDigit = tickDigit;
+            botState.lastTickPrice = parseFloat(quote);
+            botState.digitHistory.push(tickDigit);
+            if (botState.digitHistory.length > 50) botState.digitHistory.shift();
             
-            // DISPARO SUPREMO EN EL MISMO CICLO
-            if (botState.isRunning && !botState.isBuying && !botState.activeContractId) {
-                const now = Date.now();
-                if ((now - botState.lastTradeTime) >= botState.cooldownMs) {
-                    const netP = botState.dailyProfit - botState.dailyLoss;
-                    if (netP < botState.takeProfit && netP > -botState.maxDailyLoss) {
-                        let stakeFinal = botState.stake;
-                        if (botState.recoveryActive) stakeFinal *= 11;
+            // 2. Analizar el mercado en búsqueda de la anomalía (3 repetidos)
+            const hist = botState.digitHistory;
+            if (hist.length >= 3) {
+                const last1 = hist[hist.length - 1]; // El tick de ahora mismo
+                const last2 = hist[hist.length - 2];
+                const last3 = hist[hist.length - 3];
+                
+                // Si el dígito se repitió 3 veces seguidas (ej: 4, 4, 4)
+                if (last1 === last2 && last2 === last3) {
+                    const rachaBarrier = String(last1);
+                    
+                    // DISPARO DE FRANCOTIRADOR
+                    if (botState.isRunning && !botState.isBuying && !botState.activeContractId) {
+                        const now = Date.now();
+                        // Prevenir disparar 2 veces en la misma racha muy rápido
+                        if ((now - botState.lastTradeTime) >= botState.cooldownMs) {
+                            const netP = botState.dailyProfit - botState.dailyLoss;
+                            if (netP < botState.takeProfit && netP > -botState.maxDailyLoss) {
+                                let stakeFinal = botState.stake;
+                                if (botState.recoveryActive) stakeFinal *= 11;
 
-                        // DISPARO ATÓMICO DE SOLAPE
-                        // Barrera = dígito OPUESTO al que vemos → si se solapa, WIN seguro
-                        ws.send(JSON.stringify({
-                            buy: 1, price: stakeFinal,
-                            parameters: {
-                                amount: stakeFinal, basis: 'stake',
-                                contract_type: 'DIGITDIFF', currency: botState.currency || 'USDT',
-                                symbol: SYMBOL, duration: 1, duration_unit: 't', barrier: solapBarrier
+                                // DISPARO: "Es imposible que vuelva a salir este número una 4ta vez"
+                                ws.send(JSON.stringify({
+                                    buy: 1, price: stakeFinal,
+                                    parameters: {
+                                        amount: stakeFinal, basis: 'stake',
+                                        contract_type: 'DIGITDIFF', currency: botState.currency || 'USDT',
+                                        symbol: SYMBOL, duration: 1, duration_unit: 't', barrier: rachaBarrier
+                                    }
+                                }));
+
+                                botState.isBuying = true;
+                                botState.lastTradeTime = now;
+                                botState.currentBarrier = rachaBarrier;
+                                console.log(`\n🎯 ANOMALÍA DETECTADA: [${last3}, ${last2}, ${last1}]`);
+                                console.log(`⚡ DISPARO FRANCOTIRADOR: NO-${rachaBarrier} [Precio: ${quote}]`);
+                            } else if (botState.isRunning) {
+                                botState.isRunning = false;
+                                console.log(`🎯 Meta Cumplida ($${netP.toFixed(2)}). Detenido.`);
                             }
-                        }));
-
-                        botState.isBuying = true;
-                        botState.lastTradeTime = now;
-                        botState.currentBarrier = solapBarrier;
-                        console.log(`⚡ SOLAPE: Tick=${tickDigit} → Barrera=NO-${solapBarrier} [${quote}]`);
-                    } else if (botState.isRunning) {
-                        botState.isRunning = false;
-                        console.log(`🎯 Meta Cumplida ($${netP.toFixed(2)}). Detenido.`);
+                        }
                     }
                 }
             }
-
-            // Actualizar datos secundarios después del disparo
-            botState.lastDigit = tickDigit;
-            botState.lastTickPrice = parseFloat(quote);
-            botState.digitHistory.push(botState.lastDigit);
-            if (botState.digitHistory.length > 50) botState.digitHistory.shift();
         }
 
         // Compra confirmada
