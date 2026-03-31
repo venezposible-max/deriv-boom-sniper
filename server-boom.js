@@ -105,46 +105,14 @@ function chooseBestBarrier() {
     let chosenDigit = null;
     let strategyLabel = '';
 
-    // ELEGIR SEGÚN EL ÍNDICE DE ROTACIÓN (4 Modos ahora)
+    // ELEGIR ESTRATEGIA (BLOQUEADO A SOLO FLASH-MIRROR POR PETICIÓN)
+    strategyLabel = '⚡ FLASH-MIRROR';
+    chosenDigit = lastDigit;
+
+    /* BLOQUEO TEMPORAL DE OTROS MODOS
     const mode = botState.strategyIndex % 4;
-
-    if (mode === 0) {
-        strategyLabel = '🎯 HOT-REACTION';
-        let hotDigit = 0;
-        let maxCount = -1;
-        for (let d = 0; d <= 9; d++) {
-            if (freq[d] > maxCount) {
-                maxCount = freq[d];
-                hotDigit = d;
-            }
-        }
-        // Solo si el caliente acaba de salir
-        if (lastDigit !== hotDigit) return null; 
-        chosenDigit = hotDigit;
-
-    } else if (mode === 1) {
-        strategyLabel = '❄️ COLD-STABILITY';
-        let coldDigit = 0;
-        let minCount = 999;
-        for (let d = 0; d <= 9; d++) {
-            if (freq[d] < minCount) {
-                minCount = freq[d];
-                coldDigit = d;
-            }
-        }
-        if (hist.slice(-5).includes(coldDigit)) return null;
-        chosenDigit = coldDigit;
-
-    } else if (mode === 2) {
-        // ECO-SYNC (Contra el último que salió)
-        strategyLabel = '⚡ ECO-SYNC';
-        chosenDigit = lastDigit;
-    } else {
-        // [NUEVO] FLASH-MIRROR (Técnica de Solape sugerida por Franklin)
-        // Dispara de forma instantánea contra el dígito que acaba de nacer
-        strategyLabel = '⚡ FLASH-MIRROR';
-        chosenDigit = lastDigit;
-    }
+    ... original logic ...
+    */
 
     // ─── FILTRO ANTI-TRIPLE (NUEVO) ───────────────────────────
     // Si el dígito elegido aparece 2 veces en los últimos 10 ticks, es "Inestable"
