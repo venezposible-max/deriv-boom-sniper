@@ -164,26 +164,20 @@ app.post('/differs/control', (req, res) => {
     const { action, stake, maxDailyLoss } = req.body;
 
     if (action === 'START') {
-        // Verificar límites antes de arrancar
         const netProfit = botState.dailyProfit - botState.dailyLoss;
-        if (botState.dailyLoss >= botState.maxDailyLoss || netProfit >= botState.takeProfit) {
-            return res.status(400).json({ 
-                success: false, 
-                error: 'Límite alcanzado. Pulsa Resetear Día para continuar.' 
-            });
-        }
-
+        // Permitimos el arranque incluso si hay registro previo (el usuario tiene el control)
         if (stake) botState.stake = Math.max(0.35, parseFloat(stake));
         if (maxDailyLoss) botState.maxDailyLoss = parseFloat(maxDailyLoss);
         if (req.body.takeProfit) botState.takeProfit = parseFloat(req.body.takeProfit);
         if (req.body.isRecoveryEnabled !== undefined) botState.isRecoveryEnabled = !!req.body.isRecoveryEnabled;
         
         botState.isRunning = true;
-        botState.isBuying = false; // Reset de seguridad
+        botState.isBuying = false; 
         botState.activeContractId = null;
+        botState.lastTradeTime = 0; // Permitir respuesta rápida
         
-        console.log(`▶️ DIFFERS SNIPER INICIADO | Stake: $${botState.stake} | Símbolo: ${SYMBOL} | TP: $${botState.takeProfit}`);
-        return res.json({ success: true, message: 'Differs Sniper Activado ✅', isRunning: true });
+        console.log(`▶️ SNIPER v4.0 INICIADO | Moneda: ${botState.currency || 'U'}`);
+        return res.json({ success: true, message: 'Sniper Activado ✅', isRunning: true });
     }
 
     if (action === 'STOP') {
