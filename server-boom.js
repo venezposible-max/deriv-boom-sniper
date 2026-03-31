@@ -376,23 +376,46 @@ function connectDeriv() {
             botState.balance = msg.balance.balance;
         }
 
-        // Tick recibido → Analizar dígito
+        // Tick recibido → Analizar dígito (OPORTUNIDAD DE SOLAPE)
         if (msg.msg_type === 'tick' && msg.tick) {
             const priceStr = String(msg.tick.quote);
-            const lastDigit = parseInt(priceStr[priceStr.length - 1]);
-
+            botState.lastDigit = parseInt(priceStr[priceStr.length - 1]);
             botState.lastTickPrice = parseFloat(msg.tick.quote);
-            botState.lastDigit = lastDigit;
 
-            // Guardar en historial de dígitos
-            botState.digitHistory.push(lastDigit);
-            if (botState.digitHistory.length > 100) botState.digitHistory.shift();
+            // Inyectar en el historial (necesario para filtros)
+            botState.digitHistory.push(botState.lastDigit);
+            if (botState.digitHistory.length > 50) botState.digitHistory.shift();
 
-            // Actualizar frecuencia
-            botState.digitFrequency[lastDigit] = (botState.digitFrequency[lastDigit] || 0) + 1;
+            // DISPARO INMEDIATO: Sin esperas de función
+            if (botState.isRunning && !botState.isBuying && !botState.activeContractId) {
+                const now = Date.now();
+                if ((now - botState.lastTradeTime) >= botState.cooldownMs) {
+                    // LÓGICA FLASH-MIRROR DIRECTA
+                    const barrier = String(botState.lastDigit);
+                    botState.currentBarrier = barrier;
+                    
+                    // Stake logic
+                    let finalStake = botState.stake;
+                    if (botState.recoveryActive) {
+                        finalStake = botState.stake * 11;
+                    }
 
-            // Intentar disparar
-            tryFireTrade();
+                    // Enviar orden de SOLAPE
+                    ws.send(JSON.stringify({
+                        buy: 1, price: finalStake,
+                        parameters: {
+                            amount: finalStake, basis: 'stake',
+                            contract_type: 'DIGITDIFF', currency: botState.currency || 'USDT',
+                            symbol: SYMBOL, duration: 1, duration_unit: 't', barrier: barrier
+                        }
+                    }));
+
+                    botState.isBuying = true;
+                    botState.lastTradeTime = now;
+                    // Log minimalista para no perder milisegundos
+                    console.log(`⚡ SOLAPE: NO-${barrier} [${botState.lastTickPrice}]`);
+                }
+            }
         }
 
         // Compra confirmada
