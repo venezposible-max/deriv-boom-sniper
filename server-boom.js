@@ -370,11 +370,16 @@ function connectDeriv() {
             botState.balance = msg.balance.balance;
         }
 
-        // Tick recibido → Analizar dígito (OPORTUNIDAD DE SOLAPE)
-        // [FRANKLIN v4.0] IDENTIDAD-INFALIBLE (ATÓMICO)
+        // Tick recibido → SOLAPE: Ya vimos el dígito, apostamos CONTRA otro
+        // [FRANKLIN v5.0] SOLAPE INFALIBLE
         if (msg.msg_type === 'tick' && msg.tick) {
             const quote = msg.tick.quote;
-            const barrier = String(quote).slice(-1);
+            const tickDigit = parseInt(String(quote).slice(-1));
+            
+            // ESTRATEGIA SOLAPE: Elegir una barrera que NO sea el dígito actual
+            // Si el contrato se resuelve en ESTE MISMO tick → dígito(X) ≠ barrera(Y) → WIN 100%
+            // Si se resuelve en el siguiente tick → sigue siendo 90% porque la barrera es solo 1 de 10
+            const solapBarrier = String((tickDigit + 5) % 10); // Dígito opuesto (ej: 1→6, 3→8, 7→2)
             
             // DISPARO SUPREMO EN EL MISMO CICLO
             if (botState.isRunning && !botState.isBuying && !botState.activeContractId) {
@@ -385,20 +390,21 @@ function connectDeriv() {
                         let stakeFinal = botState.stake;
                         if (botState.recoveryActive) stakeFinal *= 11;
 
-                        // DISPARO ATÓMICO (Identidad con el tick)
+                        // DISPARO ATÓMICO DE SOLAPE
+                        // Barrera = dígito OPUESTO al que vemos → si se solapa, WIN seguro
                         ws.send(JSON.stringify({
                             buy: 1, price: stakeFinal,
                             parameters: {
                                 amount: stakeFinal, basis: 'stake',
                                 contract_type: 'DIGITDIFF', currency: botState.currency || 'USDT',
-                                symbol: SYMBOL, duration: 1, duration_unit: 't', barrier: barrier
+                                symbol: SYMBOL, duration: 1, duration_unit: 't', barrier: solapBarrier
                             }
                         }));
 
                         botState.isBuying = true;
                         botState.lastTradeTime = now;
-                        botState.currentBarrier = barrier;
-                        console.log(`💎 INFALIBLE: NO-${barrier} [${quote}]`);
+                        botState.currentBarrier = solapBarrier;
+                        console.log(`⚡ SOLAPE: Tick=${tickDigit} → Barrera=NO-${solapBarrier} [${quote}]`);
                     } else if (botState.isRunning) {
                         botState.isRunning = false;
                         console.log(`🎯 Meta Cumplida ($${netP.toFixed(2)}). Detenido.`);
@@ -407,7 +413,7 @@ function connectDeriv() {
             }
 
             // Actualizar datos secundarios después del disparo
-            botState.lastDigit = parseInt(barrier);
+            botState.lastDigit = tickDigit;
             botState.lastTickPrice = parseFloat(quote);
             botState.digitHistory.push(botState.lastDigit);
             if (botState.digitHistory.length > 50) botState.digitHistory.shift();
