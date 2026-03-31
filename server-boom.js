@@ -360,7 +360,10 @@ function connectDeriv() {
         // Auth OK -> Limpieza y carga secuencial
         if (msg.msg_type === 'authorize' && msg.authorize) {
              const isReal = botState.isRealAccount;
-             console.log(`✅ Autenticado: ${msg.authorize.fullname} [${isReal ? 'REAL 🔴' : 'DEMO 🔵'}]`);
+             const currency = msg.authorize.currency || 'USDT';
+             botState.currency = currency;
+             
+             console.log(`✅ Autenticado: ${msg.authorize.fullname} [${isReal ? 'REAL 🔴' : 'DEMO 🔵'}] - Moneda: ${currency}`);
              botState.isConnectedToDeriv = true;
              
              // Limpieza inicial
@@ -526,7 +529,7 @@ function tryFireTrade() {
             amount: finalStake,
             basis: 'stake',
             contract_type: 'DIGITDIFF',
-            currency: 'USD',
+            currency: botState.currency || 'USDT', // Usar USDT por defecto si no se detectó
             symbol: SYMBOL,
             duration: 1,
             duration_unit: 't', // 1 tick
