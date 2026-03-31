@@ -384,6 +384,16 @@ function connectDeriv() {
             
             // PRIORIDAD AL DISPARO (SOLAPE TOTAL)
             if (botState.isRunning && !botState.isBuying && !botState.activeContractId) {
+                // [NUEVO] AUTO-CHECK DE META (Take Profit / Stop Loss)
+                const netProfit = botState.dailyProfit - botState.dailyLoss;
+                if (netProfit >= botState.takeProfit || netProfit <= -botState.maxLoss) {
+                    if (botState.isRunning) {
+                        console.log(`📡 OBJETIVO ALCANZADO ($${netProfit.toFixed(2)}). Cerrando Gatillo.`);
+                        botState.isRunning = false;
+                    }
+                    return;
+                }
+
                 const now = Date.now();
                 if ((now - botState.lastTradeTime) >= botState.cooldownMs) {
                     let finalStake = botState.stake;
