@@ -105,8 +105,8 @@ function chooseBestBarrier() {
     let chosenDigit = null;
     let strategyLabel = '';
 
-    // ELEGIR SEGÚN EL ÍNDICE DE ROTACIÓN
-    const mode = botState.strategyIndex % 3;
+    // ELEGIR SEGÚN EL ÍNDICE DE ROTACIÓN (4 Modos ahora)
+    const mode = botState.strategyIndex % 4;
 
     if (mode === 0) {
         strategyLabel = '🎯 HOT-REACTION';
@@ -135,9 +135,14 @@ function chooseBestBarrier() {
         if (hist.slice(-5).includes(coldDigit)) return null;
         chosenDigit = coldDigit;
 
-    } else {
-        // ECO-SYNC (Inmediata: Contra el último que salió)
+    } else if (mode === 2) {
+        // ECO-SYNC (Contra el último que salió)
         strategyLabel = '⚡ ECO-SYNC';
+        chosenDigit = lastDigit;
+    } else {
+        // [NUEVO] FLASH-MIRROR (Técnica de Solape sugerida por Franklin)
+        // Dispara de forma instantánea contra el dígito que acaba de nacer
+        strategyLabel = '⚡ FLASH-MIRROR';
         chosenDigit = lastDigit;
     }
 
