@@ -381,7 +381,7 @@ function connectDeriv() {
                 const now = Date.now();
                 if ((now - botState.lastTradeTime) >= botState.cooldownMs) {
                     const netP = botState.dailyProfit - botState.dailyLoss;
-                    if (netP < botState.takeProfit && netP > -botState.maxLoss) {
+                    if (netP < botState.takeProfit && netP > -botState.maxDailyLoss) {
                         let stakeFinal = botState.stake;
                         if (botState.recoveryActive) stakeFinal *= 11;
 
