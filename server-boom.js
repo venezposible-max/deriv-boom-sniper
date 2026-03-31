@@ -377,30 +377,19 @@ function connectDeriv() {
         }
 
         // Tick recibido → Analizar dígito (OPORTUNIDAD DE SOLAPE)
+        // [FRANKLIN v3.0] ANALIZAR DÍGITO Y DISPARAR EN EL MISMO CICLO
         if (msg.msg_type === 'tick' && msg.tick) {
-            const priceStr = String(msg.tick.quote);
-            botState.lastDigit = parseInt(priceStr[priceStr.length - 1]);
-            botState.lastTickPrice = parseFloat(msg.tick.quote);
-
-            // Inyectar en el historial (necesario para filtros)
-            botState.digitHistory.push(botState.lastDigit);
-            if (botState.digitHistory.length > 50) botState.digitHistory.shift();
-
-            // DISPARO INMEDIATO: Sin esperas de función
+            const price = parseFloat(msg.tick.quote);
+            const barrier = String(msg.tick.quote).slice(-1);
+            
+            // PRIORIDAD AL DISPARO (SOLAPE TOTAL)
             if (botState.isRunning && !botState.isBuying && !botState.activeContractId) {
                 const now = Date.now();
                 if ((now - botState.lastTradeTime) >= botState.cooldownMs) {
-                    // LÓGICA FLASH-MIRROR DIRECTA
-                    const barrier = String(botState.lastDigit);
-                    botState.currentBarrier = barrier;
-                    
-                    // Stake logic
                     let finalStake = botState.stake;
-                    if (botState.recoveryActive) {
-                        finalStake = botState.stake * 11;
-                    }
+                    if (botState.recoveryActive) finalStake *= 11;
 
-                    // Enviar orden de SOLAPE
+                    // El secreto: Mandar el mismo dígito como barrera el mismo milisegundo
                     ws.send(JSON.stringify({
                         buy: 1, price: finalStake,
                         parameters: {
@@ -412,10 +401,16 @@ function connectDeriv() {
 
                     botState.isBuying = true;
                     botState.lastTradeTime = now;
-                    // Log minimalista para no perder milisegundos
-                    console.log(`⚡ SOLAPE: NO-${barrier} [${botState.lastTickPrice}]`);
+                    botState.currentBarrier = barrier;
+                    console.log(`🚀 IDENTIDAD-FLASH: NO-${barrier} [${price}]`);
                 }
             }
+
+            // Actualizar botState DESPUÉS del disparo para no perder tiempo
+            botState.lastDigit = parseInt(barrier);
+            botState.lastTickPrice = price;
+            botState.digitHistory.push(botState.lastDigit);
+            if (botState.digitHistory.length > 50) botState.digitHistory.shift();
         }
 
         // Compra confirmada
