@@ -581,6 +581,10 @@ function finalizeTrade(c) {
         }
 
         botState.strategyIndex++;
+        
+        // [NUEVO v3.1] SELLO DE SEGURIDAD: 2 Segundos de calma tras perder
+        botState.lastTradeTime = Date.now() + 2000; 
+        console.log("⏳ Calibrando escudo tras pérdida (2s de pausa)...");
     }
 
     // Guardar en historial
