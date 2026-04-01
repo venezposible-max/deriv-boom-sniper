@@ -482,7 +482,11 @@ function connectDeriv() {
                         botState.currentBarrier = targetBarrier;
                         botState.currentContractType = contractType;
                         
-                        console.log(`\n🎯 MODO ${botState.recoveryActive ? 'RESCATE' : 'RECOLECTOR'} ACTIVADO: [${triggerActive}]`);
+                        const modeLabel = botState.strategyMode === 'OVER_UNDER' 
+                            ? 'ESTRATEGIA PRINCIPAL' 
+                            : (botState.recoveryActive ? 'RESCATE CRUZADO' : 'RECOLECTOR');
+                        
+                        console.log(`\n🎯 MODO ${modeLabel} ACTIVADO: [${triggerActive}]`);
                         console.log(`⚡ DISPARO: ${contractType} (${targetBarrier}) | Stake: $${stakeFinal} | Precio: ${quote}`);
                     } else if (botState.isRunning) {
                         botState.isRunning = false;
@@ -626,7 +630,8 @@ function finalizeTrade(c) {
     if (isWin) {
         botState.winsSession++;
         botState.dailyProfit += profit;
-        console.log(`✅ WIN [${botState.strategyName}] +$${profit.toFixed(2)}`);
+        const sn = botState.strategyMode === 'OVER_UNDER' ? 'OVER/UNDER-SNIPER' : botState.strategyName;
+        console.log(`✅ WIN [${sn}] +$${profit.toFixed(2)}`);
         
         // Si ganamos, desactivamos recuperación si estaba activa
         if (botState.recoveryActive) {
@@ -639,7 +644,8 @@ function finalizeTrade(c) {
     } else {
         botState.lossesSession++;
         botState.dailyLoss += Math.abs(profit);
-        console.log(`❌ LOSS [${botState.strategyName}] -$${Math.abs(profit).toFixed(2)}`);
+        const sn = botState.strategyMode === 'OVER_UNDER' ? 'OVER/UNDER-SNIPER' : botState.strategyName;
+        console.log(`❌ LOSS [${sn}] -$${Math.abs(profit).toFixed(2)}`);
         
         // REGLA DE ORO: Blacklist de 2 minutos para el dígito perdedor
         const badDigit = botState.currentBarrier;
