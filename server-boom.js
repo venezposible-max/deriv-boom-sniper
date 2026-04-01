@@ -458,6 +458,7 @@ function connectDeriv() {
                         botState.isBuying = true;
                         botState.lastTradeTime = now;
                         botState.currentBarrier = targetBarrier;
+                        botState.currentContractType = contractType;
                         
                         console.log(`\n🎯 MODO ${botState.recoveryActive ? 'RESCATE' : 'RECOLECTOR'} ACTIVADO: [${triggerActive}]`);
                         console.log(`⚡ DISPARO: ${contractType} (${targetBarrier}) | Stake: $${stakeFinal} | Precio: ${quote}`);
@@ -645,8 +646,12 @@ function finalizeTrade(c) {
 
     // Guardar en historial
     const timeVE = new Date().toLocaleString('es-VE', { timeZone: 'America/Caracas' });
+    let labelOutput = `DIFFERS (NO-${botState.currentBarrier})`;
+    if (botState.currentContractType === 'DIGITOVER') labelOutput = `OVER (${botState.currentBarrier})`;
+    if (botState.currentContractType === 'DIGITUNDER') labelOutput = `UNDER (${botState.currentBarrier})`;
+
     botState.tradeHistory.unshift({
-        type: `DIFFERS (NO-${botState.currentBarrier})`,
+        type: labelOutput,
         profit: profit,
         time: timeVE,
         barrier: botState.currentBarrier,
