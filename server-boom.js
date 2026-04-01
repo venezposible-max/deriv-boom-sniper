@@ -58,7 +58,9 @@ let botState = {
     lastLosingDigit: null,     // Último dígito que nos hizo perder
     isRealAccount: false,      // true: Cuenta Real, false: Demo (por defecto)
     isRecoveryEnabled: false,   // true: Intentar recuperar tras pérdida
-    recoveryActive: false      // Internal: si el próximo trade es de recuperación
+    recoveryActive: false,     // Internal: si el próximo trade es de recuperación
+    virtualLossStreak: 0,      // Racha de pérdidas fantasma
+    activeVirtualContract: null // Si hay un contrato simulado pendiente
 };
 
 // ─── CARGAR ESTADO PREVIO ──────────────────────────────────────
@@ -387,6 +389,22 @@ function connectDeriv() {
             botState.digitHistory.push(tickDigit);
             if (botState.digitHistory.length > 50) botState.digitHistory.shift();
             
+            // 1.5 CHECK VIRTUAL TRADE RESOLUTION (SHADOW TRADING PARA DIFFERS)
+            if (botState.activeVirtualContract && botState.strategyMode === 'DIFFERS' && !botState.recoveryActive) {
+                const target = botState.activeVirtualContract.barrier;
+                // En DIFFERS, el loss pasa si el último dígito ES IGUAL a la barrera disparada
+                const isLoss = (String(tickDigit) === String(target)); 
+                
+                if (isLoss) {
+                    botState.virtualLossStreak++;
+                    console.log(`🎯 ¡PÉRDIDA FANTASMA ATRAPADA! (Dígito ${tickDigit} chocó). Racha Fantasma: ${botState.virtualLossStreak}`);
+                    console.log(`🚀 PRÓXIMA OPORTUNIDAD SE EJECUTARÁ CON DINERO REAL.`);
+                } else {
+                    botState.virtualLossStreak = 0; // Se ganó, volvemos a buscar la pérdida simulada
+                }
+                botState.activeVirtualContract = null;
+            }
+            
             // 2. EVALUACIÓN DE GATILLOS INTELIGENTES (Modo Recolector vs Modo Rescate)
             const hist = botState.digitHistory;
             let triggerActive = null;
@@ -465,6 +483,26 @@ function connectDeriv() {
             if (triggerActive && contractType && botState.isRunning && !botState.isBuying && !botState.activeContractId) {
                 const now = Date.now();
                 if ((now - botState.lastTradeTime) >= botState.cooldownMs) {
+                    
+                    // ============================================
+                    // SHADOW TRADING INTERCEPTOR (Solo para DIFFERS Principal)
+                    // ============================================
+                    if (botState.strategyMode === 'DIFFERS' && !botState.recoveryActive) {
+                        if (botState.virtualLossStreak < 1) {
+                            // En lugar de ir a la API, lanzamos un trade simulado en la mente del bot
+                            if (!botState.activeVirtualContract) {
+                                botState.activeVirtualContract = { barrier: targetBarrier };
+                                console.log(`\n👻 OPERACIÓN FANTASMA: Simulando ${contractType} NO-${targetBarrier} [Gatillo: ${triggerActive}]`);
+                                botState.lastTradeTime = now; // Put on cooldown para no spam
+                            }
+                            return; // ABORT REAL TRADE!
+                        } else {
+                            // ¡Pérdida trampa purgada! Disparamos con dinero real
+                            botState.virtualLossStreak = 0;
+                            console.log(`\n💎 DISPARO REAL: Racha de mala suerte simulada purgada pacientemente...`);
+                        }
+                    }
+
                     const netP = botState.dailyProfit - botState.dailyLoss;
                     if (netP < botState.takeProfit && netP > -botState.maxDailyLoss) {
 
