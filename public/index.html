@@ -259,6 +259,12 @@
         <button id="btnAccReal" onclick="switchAccount(true)" class="account-btn real">Real Account 🔴</button>
     </div>
 
+    <!-- STRATEGY SELECTOR -->
+    <div style="display: flex; gap: 8px; margin-bottom: 20px; justify-content: center;">
+        <button id="btnStratDiffers" onclick="switchStrategy('DIFFERS')" class="chip chip-purple" style="cursor:pointer; border:none; background: #7c3aed; color:white; padding: 10px 16px; font-weight: 800;">🎯 SMART DIFFERS</button>
+        <button id="btnStratOU" onclick="switchStrategy('OVER_UNDER')" class="chip chip-purple" style="cursor:pointer; border:none; padding: 10px 16px; font-weight: 800; background: rgba(167,139,250,0.15); color: #a78bfa;">🔥 OVER/UNDER REBOTE</button>
+    </div>
+
     <!-- MARKET SELECTOR -->
     <div style="display: flex; gap: 8px; margin-bottom: 20px; justify-content: center;">
         <button id="btnV10" onclick="switchMarket('R_10')" class="chip chip-purple" style="cursor:pointer; border:none;">V10</button>
@@ -409,6 +415,21 @@
     let isRunning = false;
     let isFetching = false;
     let lastDigitHistory = [];
+    let currentStrategy = 'DIFFERS';
+
+    function switchStrategy(strat) {
+        if (isRunning) return;
+        currentStrategy = strat;
+        
+        document.getElementById('btnStratDiffers').style.background = strat === 'DIFFERS' ? '#7c3aed' : 'rgba(167,139,250,0.15)';
+        document.getElementById('btnStratDiffers').style.color = strat === 'DIFFERS' ? 'white' : '#a78bfa';
+        document.getElementById('btnStratOU').style.background = strat === 'OVER_UNDER' ? '#7c3aed' : 'rgba(167,139,250,0.15)';
+        document.getElementById('btnStratOU').style.color = strat === 'OVER_UNDER' ? 'white' : '#a78bfa';
+        
+        document.getElementById('subTitle').innerText = strat === 'DIFFERS' ? 'Smart Differs (90%)' : 'Over/Under Rebote 5x (95%)';
+        const theBtn = document.getElementById('btnToggle');
+        if (!isRunning) theBtn.innerText = strat === 'DIFFERS' ? '🎲 Iniciar Differs Sniper' : '🔥 Iniciar Over/Under Sniper';
+    }
 
     // Build frequency table
     function buildFreqTable(digitHistory, barrier) {
@@ -596,6 +617,7 @@
             body.maxDailyLoss = parseFloat(document.getElementById('maxDailyLoss').value);
             body.takeProfit = parseFloat(document.getElementById('takeProfit').value);
             body.isRecoveryEnabled = document.getElementById('isRecoveryEnabled').checked;
+            body.strategyMode = currentStrategy;
         }
         try {
             await fetch('/differs/control', {

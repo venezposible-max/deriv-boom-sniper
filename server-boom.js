@@ -170,6 +170,7 @@ app.post('/differs/control', (req, res) => {
         if (maxDailyLoss) botState.maxDailyLoss = parseFloat(maxDailyLoss);
         if (req.body.takeProfit) botState.takeProfit = parseFloat(req.body.takeProfit);
         if (req.body.isRecoveryEnabled !== undefined) botState.isRecoveryEnabled = !!req.body.isRecoveryEnabled;
+        if (req.body.strategyMode) botState.strategyMode = req.body.strategyMode;
         
         botState.isRunning = true;
         botState.isBuying = false; 
@@ -393,47 +394,68 @@ function connectDeriv() {
             let contractType = 'DIGITDIFF';
             let stakeFinal = botState.stake;
 
-            if (hist.length >= 4) {
+            if (hist.length >= 5) {
                 const last1 = hist[hist.length - 1]; // actual
                 const last2 = hist[hist.length - 2];
                 const last3 = hist[hist.length - 3];
                 const last4 = hist[hist.length - 4];
+                const last5 = hist[hist.length - 5];
 
-                // === MODO RESCATE (OVER/UNDER Cruzado) ===
-                if (botState.recoveryActive) {
-                    contractType = null; // Esperando gatillo exclusivo
-                    stakeFinal = parseFloat((botState.stake * 1.2).toFixed(2)); // Stake cruzado barato
+                const isAllHigh = last1 > 5 && last2 > 5 && last3 > 5 && last4 > 5 && last5 > 5;
+                const isAllLow  = last1 < 4 && last2 < 4 && last3 < 4 && last4 < 4 && last5 < 4;
 
-                    // GATILLO DE RESCATE: Rebote Extremo Hacia Abajo
-                    if (last1 > 5 && last2 > 5 && last3 > 5 && last4 > 5) {
-                        triggerActive = 'REBOTE BAJISTA (4 altos seguidos)';
-                        contractType = 'DIGITUNDER';
-                        targetBarrier = '5'; // Gana con 0,1,2,3,4
+                // === ESTRATEGIA PRINCIPAL: OVER_UNDER (Rebote 5x) ===
+                if (botState.strategyMode === 'OVER_UNDER') {
+                    contractType = null; // Esperando gatillo
+                    // Martingala leve de x2.1 para recuperación (muy segura comparada con x11)
+                    stakeFinal = botState.recoveryActive ? parseFloat((botState.stake * 2.1).toFixed(2)) : botState.stake;
+
+                    if (isAllHigh) {
+                        triggerActive = 'REBOTE BAJISTA (5 altos)';
+                        contractType = 'DIGITUNDER'; targetBarrier = '5';
+                    } else if (isAllLow) {
+                        triggerActive = 'REBOTE ALCISTA (5 bajos)';
+                        contractType = 'DIGITOVER'; targetBarrier = '4';
                     }
-                    // GATILLO DE RESCATE: Rebote Extremo Hacia Arriba
-                    else if (last1 < 4 && last2 < 4 && last3 < 4 && last4 < 4) {
-                        triggerActive = 'REBOTE ALCISTA (4 bajos seguidos)';
-                        contractType = 'DIGITOVER';
-                        targetBarrier = '4'; // Gana con 5,6,7,8,9
-                    }
-                } 
-                // === MODO RECOLECTOR (Smart DIFFERS) ===
+                }
+                // === ESTRATEGIA PRINCIPAL: DIFFERS ===
                 else {
-                    contractType = 'DIGITDIFF';
+                    // === MODO RESCATE (OVER/UNDER Cruzado) ===
+                    if (botState.recoveryActive) {
+                        contractType = null; // Esperando gatillo exclusivo
+                        stakeFinal = parseFloat((botState.stake * 1.2).toFixed(2)); // Stake cruzado barato
 
-                    if (last1 === last2) {
-                        triggerActive = 'SOMBRA (Micro-Racha 2x)';
-                        targetBarrier = String(last1);
-                    }
-                    else if (priceJump > 1.2) {
-                        triggerActive = 'SPIKE (Alta Volatilidad)';
-                        targetBarrier = String(last1);
-                    }
-                    else if (hist.length >= 26) {
-                        const last25 = hist.slice(-26, -1);
-                        if (!last25.includes(last1)) {
-                            triggerActive = 'FANTASMA (Salió del Desierto)';
+                        // GATILLO DE RESCATE: Rebote Extremo Hacia Abajo (Modificado a 5x para máxima seguridad)
+                        if (isAllHigh) {
+                            triggerActive = 'REBOTE BAJISTA CRUZADO (5 altos)';
+                            contractType = 'DIGITUNDER';
+                            targetBarrier = '5'; // Gana con 0,1,2,3,4
+                        }
+                        // GATILLO DE RESCATE: Rebote Extremo Hacia Arriba
+                        else if (isAllLow) {
+                            triggerActive = 'REBOTE ALCISTA CRUZADO (5 bajos)';
+                            contractType = 'DIGITOVER';
+                            targetBarrier = '4'; // Gana con 5,6,7,8,9
+                        }
+                    } 
+                    // === MODO RECOLECTOR (Smart DIFFERS) ===
+                    else {
+                        contractType = 'DIGITDIFF';
+
+                        if (last1 === last2) {
+                            triggerActive = 'SOMBRA (Micro-Racha 2x)';
                             targetBarrier = String(last1);
+                        }
+                        else if (priceJump > 1.2) {
+                            triggerActive = 'SPIKE (Alta Volatilidad)';
+                            targetBarrier = String(last1);
+                        }
+                        else if (hist.length >= 26) {
+                            const last25 = hist.slice(-26, -1);
+                            if (!last25.includes(last1)) {
+                                triggerActive = 'FANTASMA (Salió del Desierto)';
+                                targetBarrier = String(last1);
+                            }
                         }
                     }
                 }
