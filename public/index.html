@@ -590,7 +590,8 @@
 
             // Toggle button
             const btn = document.getElementById('btnToggle');
-            btn.innerText = isRunning ? '⏸️ Detener Sniper' : '🎲 Iniciar Differs Sniper';
+            const startText = currentStrategy === 'DIFFERS' ? '🎲 Iniciar Differs Sniper' : '🔥 Iniciar Over/Under Sniper';
+            btn.innerText = isRunning ? '⏸️ Detener Sniper' : startText;
             btn.className = `btn-main ${isRunning ? 'btn-stop' : 'btn-start'}`;
 
             // History
