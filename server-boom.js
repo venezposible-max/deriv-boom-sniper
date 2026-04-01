@@ -370,59 +370,86 @@ function connectDeriv() {
             botState.balance = msg.balance.balance;
         }
 
-        // Tick recibido → FRANCOTIRADOR ANTI-RACHA (Protección de Martingala)
-        // [FRANKLIN v6.0] ANTI-RACHA ESTADÍSTICO
+        // Tick recibido → SMART DIFFERS (3 Gatillos IA)
+        // [FRANKLIN v7.0] MOTOR MULTIMODAL HÍBRIDO
         if (msg.msg_type === 'tick' && msg.tick) {
             const quote = msg.tick.quote;
-            const tickDigit = parseInt(String(parseFloat(quote).toFixed(3)).slice(-1));
+            const tickPrice = parseFloat(quote);
+            const tickDigit = parseInt(String(tickPrice.toFixed(3)).slice(-1));
             
-            // 1. Actualizar historial de mercado PRIMERO (Memoria del bot)
+            // 1. Calcular volatilidad y actualizar historial (Memoria del bot)
+            const prevPrice = botState.lastTickPrice || tickPrice;
+            const priceJump = Math.abs(tickPrice - prevPrice);
+            
             botState.lastDigit = tickDigit;
-            botState.lastTickPrice = parseFloat(quote);
+            botState.lastTickPrice = tickPrice;
             botState.digitHistory.push(tickDigit);
             if (botState.digitHistory.length > 50) botState.digitHistory.shift();
             
-            // 2. Analizar el mercado en búsqueda de la anomalía (3 repetidos)
+            // 2. EVALUACIÓN DE LOS 3 GATILLOS INTELIGENTES
             const hist = botState.digitHistory;
-            if (hist.length >= 3) {
-                const last1 = hist[hist.length - 1]; // El tick de ahora mismo
+            let triggerActive = null;
+            let targetBarrier = null;
+
+            if (hist.length >= 2) {
+                const last1 = hist[hist.length - 1]; // El tick actual
                 const last2 = hist[hist.length - 2];
-                const last3 = hist[hist.length - 3];
+
+                // GATILLO 1: LA SOMBRA (Micro-Racha)
+                // Si el dígito cayó 2 veces seguidas, es rarísimo que caiga una 3ra. (Asume la pérdida virtual)
+                if (last1 === last2) {
+                    triggerActive = 'SOMBRA (Micro-Racha 2x)';
+                    targetBarrier = String(last1);
+                }
                 
-                // Si el dígito se repitió 3 veces seguidas (ej: 4, 4, 4)
-                if (last1 === last2 && last2 === last3) {
-                    const rachaBarrier = String(last1);
-                    
-                    // DISPARO DE FRANCOTIRADOR
-                    if (botState.isRunning && !botState.isBuying && !botState.activeContractId) {
-                        const now = Date.now();
-                        // Prevenir disparar 2 veces en la misma racha muy rápido
-                        if ((now - botState.lastTradeTime) >= botState.cooldownMs) {
-                            const netP = botState.dailyProfit - botState.dailyLoss;
-                            if (netP < botState.takeProfit && netP > -botState.maxDailyLoss) {
-                                let stakeFinal = botState.stake;
-                                if (botState.recoveryActive) stakeFinal *= 11;
+                // GATILLO 2: SPIKE DE VOLATILIDAD
+                // Si el salto de precio es mayor a 1.2 puntos (un salto muy violento para R_25)
+                else if (priceJump > 1.2) {
+                    triggerActive = 'SPIKE (Alta Volatilidad)';
+                    targetBarrier = String(last1);
+                }
 
-                                // DISPARO: "Es imposible que vuelva a salir este número una 4ta vez"
-                                ws.send(JSON.stringify({
-                                    buy: 1, price: stakeFinal,
-                                    parameters: {
-                                        amount: stakeFinal, basis: 'stake',
-                                        contract_type: 'DIGITDIFF', currency: botState.currency || 'USDT',
-                                        symbol: SYMBOL, duration: 1, duration_unit: 't', barrier: rachaBarrier
-                                    }
-                                }));
+                // GATILLO 3: EL DÍGITO FANTASMA (Desierto)
+                // Si el dígito actual NO apareció en los últimos 25 ticks, es una aparición puramente aislada
+                else if (hist.length >= 26) {
+                    const last25 = hist.slice(-26, -1); // Los 25 anteriores excluyendo este
+                    if (!last25.includes(last1)) {
+                        triggerActive = 'FANTASMA (Salió del Desierto)';
+                        targetBarrier = String(last1);
+                    }
+                }
+            }
+            
+            // 3. DISPARO INTELIGENTE (Si algún gatillo encendió)
+            if (triggerActive && botState.isRunning && !botState.isBuying && !botState.activeContractId) {
+                const now = Date.now();
+                // Prevenir múltiples disparos muy rápidos por la misma anomalía
+                if ((now - botState.lastTradeTime) >= botState.cooldownMs) {
+                    const netP = botState.dailyProfit - botState.dailyLoss;
+                    if (netP < botState.takeProfit && netP > -botState.maxDailyLoss) {
+                        let stakeFinal = botState.stake;
+                        // Tus 2 únicas martingalas limitadas (x11)
+                        if (botState.recoveryActive) stakeFinal *= 11;
 
-                                botState.isBuying = true;
-                                botState.lastTradeTime = now;
-                                botState.currentBarrier = rachaBarrier;
-                                console.log(`\n🎯 ANOMALÍA DETECTADA: [${last3}, ${last2}, ${last1}]`);
-                                console.log(`⚡ DISPARO FRANCOTIRADOR: NO-${rachaBarrier} [Precio: ${quote}]`);
-                            } else if (botState.isRunning) {
-                                botState.isRunning = false;
-                                console.log(`🎯 Meta Cumplida ($${netP.toFixed(2)}). Detenido.`);
+                        // DISPARO CONFIRMADO
+                        ws.send(JSON.stringify({
+                            buy: 1, price: stakeFinal,
+                            parameters: {
+                                amount: stakeFinal, basis: 'stake',
+                                contract_type: 'DIGITDIFF', currency: botState.currency || 'USDT',
+                                symbol: SYMBOL, duration: 1, duration_unit: 't', barrier: targetBarrier
                             }
-                        }
+                        }));
+
+                        botState.isBuying = true;
+                        botState.lastTradeTime = now;
+                        botState.currentBarrier = targetBarrier;
+                        
+                        console.log(`\n🎯 GATILLO ACTIVADO: [${triggerActive}]`);
+                        console.log(`⚡ DISPARO SMART DIFFERS: NO-${targetBarrier} [Precio: ${quote} | Salto: ${priceJump.toFixed(2)}]`);
+                    } else if (botState.isRunning) {
+                        botState.isRunning = false;
+                        console.log(`🎯 Meta Cumplida ($${netP.toFixed(2)}). Detenido.`);
                     }
                 }
             }
