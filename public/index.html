@@ -303,9 +303,9 @@
             <div class="last-digit-badge" id="lastDigitBadge">-</div>
         </div>
         <div class="barrier-card" style="flex:1; margin-bottom:0;">
-            <div class="label">Diferir De</div>
+            <div class="label" id="barrierLabelTitle">Diferir De</div>
             <div class="value" id="barrierDisplay">-</div>
-            <div class="sublabel">El último dígito NO será este</div>
+            <div class="sublabel" id="barrierLabelSub">El último dígito NO será este</div>
         </div>
     </div>
 
@@ -387,8 +387,8 @@
         <!-- RECOVERY SWITCH -->
         <div class="recovery-box" id="recoveryBox">
             <div class="rec-label">
-                🛡️ Recuperar Tras Pérdida
-                <span style="font-size: 9px; opacity: 0.6; font-weight: 400; display: block;">Escudo One-Shot Activado</span>
+                🛡️ <span id="recoveryLabelTitle">Recuperar Tras Pérdida</span>
+                <span id="recoveryLabelSub" style="font-size: 9px; opacity: 0.6; font-weight: 400; display: block;">Escudo One-Shot Activado</span>
             </div>
             <label class="switch">
                 <input type="checkbox" id="isRecoveryEnabled" onchange="toggleRecovery(this.checked)">
@@ -429,6 +429,12 @@
         document.getElementById('subTitle').innerText = strat === 'DIFFERS' ? 'Smart Differs (90%)' : 'Over/Under Rebote 5x (95%)';
         const theBtn = document.getElementById('btnToggle');
         if (!isRunning) theBtn.innerText = strat === 'DIFFERS' ? '🎲 Iniciar Differs Sniper' : '🔥 Iniciar Over/Under Sniper';
+
+        document.getElementById('barrierLabelTitle').innerText = strat === 'DIFFERS' ? 'Diferir De' : 'Esperando Contrato';
+        document.getElementById('barrierLabelSub').innerText = strat === 'DIFFERS' ? 'El último dígito NO será este' : 'Over (Altos) o Under (Bajos)';
+        
+        document.getElementById('recoveryLabelTitle').innerText = strat === 'DIFFERS' ? 'Recuperar Tras Pérdida' : 'Martingala Suave (x2.1)';
+        document.getElementById('recoveryLabelSub').innerText = strat === 'DIFFERS' ? 'Escudo One-Shot Activado' : 'Recuperación segura para Over/Under';
     }
 
     // Build frequency table
