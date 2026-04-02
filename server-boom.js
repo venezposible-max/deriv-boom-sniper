@@ -456,25 +456,13 @@ function connectDeriv() {
                             targetBarrier = '4'; // Gana con 5,6,7,8,9
                         }
                     } 
-                    // === MODO RECOLECTOR (Smart DIFFERS) ===
+                    // === MODO RECOLECTOR (Rápido y Dinámico) ===
                     else {
                         contractType = 'DIGITDIFF';
-
-                        if (last1 === last2) {
-                            triggerActive = 'SOMBRA (Micro-Racha 2x)';
-                            targetBarrier = String(last1);
-                        }
-                        else if (priceJump > 1.2) {
-                            triggerActive = 'SPIKE (Alta Volatilidad)';
-                            targetBarrier = String(last1);
-                        }
-                        else if (hist.length >= 26) {
-                            const last25 = hist.slice(-26, -1);
-                            if (!last25.includes(last1)) {
-                                triggerActive = 'FANTASMA (Salió del Desierto)';
-                                targetBarrier = String(last1);
-                            }
-                        }
+                        // Generador de Números Aleatorios (RNG Puro) - Ignora falsos patrones
+                        const randomDigit = Math.floor(Math.random() * 10);
+                        triggerActive = 'ALGORITMO ALEATORIO (Rápido)';
+                        targetBarrier = String(randomDigit);
                     }
                 }
             }
