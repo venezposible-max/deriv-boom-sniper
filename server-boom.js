@@ -442,15 +442,26 @@ function connectDeriv() {
                             contractType = null;
                         }
                     } 
-                    // === MODO RECOLECTOR (HEDGE-MATCH RISK-ZERO) ===
+                    // === MODO RECOLECTOR (ESCUDO INTELIGENTE) ===
                     else {
                         // El motor elige un número RNG puro
                         const randomDigit = Math.floor(Math.random() * 10);
                         targetBarrier = String(randomDigit);
                         
-                        // Activamos la cobertura perfecta
-                        triggerActive = 'HEDGE-MATCH (Cobertura 100%)';
-                        contractType = 'HEDGE_ZERO_RISK'; 
+                        // ANALISIS DE PELIGRO: 
+                        // Si el dígito elegido ha salido 2 o más veces en los últimos 10 ticks, hay "calor".
+                        const hotCount = botState.digitHistory.slice(-10).filter(d => d === randomDigit).length;
+                        
+                        if (hotCount >= 2) {
+                            // ZONA DE PELIGRO: El número está saliendo mucho. Activamos el Paracaídas Match.
+                            triggerActive = 'ESCUDO INTELIGENTE (Peligro Detectado)';
+                            contractType = 'HEDGE_ZERO_RISK'; 
+                        } else {
+                            // ZONA SEGURA: El número está frío. Disparamos Differs limpio para Profit rápido.
+                            triggerActive = 'SMART-SNIPER (Profit Grifo)';
+                            contractType = 'DIGITDIFF';
+                            stakeFinal = 1.00; // Profit limpio del 9%
+                        }
                     }
                 }
             }
