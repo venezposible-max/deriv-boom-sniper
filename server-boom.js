@@ -23,7 +23,7 @@ const DERIV_TOKEN = process.env.DERIV_TOKEN || 'PMIt2RhEjEDbcLD';
 const STATE_FILE = path.join(__dirname, 'persistent-state-differs.json');
 
 // Símbolo actual (por defecto V25)
-let SYMBOL = 'R_25';
+let SYMBOL = 'R_100'; // Volatilidad 100 (Gana-Gana Real)
 
 // ─── ESTADO GLOBAL ────────────────────────────────────────────
 let botState = {
@@ -444,19 +444,16 @@ function connectDeriv() {
                     } 
                     // === MODO RECOLECTOR (ESCUDO ULTRA-SENSIBLE) ===
                     else {
-                        const randomDigit = Math.floor(Math.random() * 10);
-                        targetBarrier = String(randomDigit);
-                        
                         // ANALISIS DE SEGURIDAD TOTAL: 
-                        // Si el número salió tan solo UNA VEZ en 10 ticks, prendemos el seguro.
+                        // Si el número salió 2 o más veces en 10 ticks, prendemos el seguro.
                         const hotCount = botState.digitHistory.slice(-10).filter(d => d === randomDigit).length;
                         
-                        if (hotCount >= 1) {
-                            // ZONA ALERTA: Seguro Match ($6.00 / $0.50) ACTIVADO.
-                            triggerActive = 'ESCUDO ULTRA (Seguridad Match)';
+                        if (hotCount >= 2) {
+                            // ZONA ALERTA (HOT): Seguro Match ($6.00 / $0.50) ACTIVADO.
+                            triggerActive = 'ESCUDO NIVEL-2 (Seguridad Match)';
                             contractType = 'HEDGE_ZERO_RISK'; 
                         } else {
-                            // ZONA FRIO: Profit Grifo ($1.00 -> +$0.09 neto).
+                            // ZONA FRIO (NORMAL): Profit Grifo ($1.00 -> +$0.09 neto).
                             triggerActive = 'ULTRA-SNIPER (Profit Limpio)';
                             contractType = 'DIGITDIFF';
                             stakeFinal = 1.00;
@@ -503,18 +500,18 @@ function connectDeriv() {
                             botState.currentContractType = 'BINARY_STRIKE';
                             botState.currentBarrier = '0-9';
                         } else if (contractType === 'HEDGE_ZERO_RISK') {
-                            // --- DISPARO DUAL (EL MOTOR DE PROFIT REAL v3.0) ---
-                            // 1. Contrato Differs Principal ($6.00) -> Gana ~$0.54
+                            // --- DISPARO DUAL (GANA-GANA v6.0 - RIESGO CHOQUE $0.00) ---
+                            // 1. Contrato Differs Principal ($3.50)
                             ws.send(JSON.stringify({
-                                buy: 1, price: 6.00,
+                                buy: 1, price: 3.50,
                                 parameters: {
-                                    amount: 6.00, basis: 'stake',
+                                    amount: 3.50, basis: 'stake',
                                     contract_type: 'DIGITDIFF', currency: botState.currency || 'USDT',
                                     symbol: SYMBOL, duration: 1, duration_unit: 't', barrier: targetBarrier
                                 }
                             }));
 
-                            // 2. Seguro Match ($0.50) -> Cuesta -$0.50
+                            // 2. Seguro Match ($0.50) -> Cubre el 100% de la perdida de $3.50
                             ws.send(JSON.stringify({
                                 buy: 1, price: 0.50,
                                 parameters: {
@@ -524,8 +521,8 @@ function connectDeriv() {
                                 }
                             }));
 
-                            console.log(`\n💎 HEDGE-MATCH v3.0 PROFIT REAL: [SI/NO al ${targetBarrier}]`);
-                            console.log(`⚡ DISPARO: Differs($6.00) + Match($0.50) | Profit p/Tick: +$0.04`);
+                            console.log(`\n💎 GANA-GANA v6.0 ACTIVADO: [SI/NO al ${targetBarrier}]`);
+                            console.log(`⚡ DISPARO: Differs($3.50) + Match($0.50) | Riesgo de Choque: $0.00`);
                             
                             botState.currentContractType = 'HEDGE_ZERO_RISK';
                         } else {
