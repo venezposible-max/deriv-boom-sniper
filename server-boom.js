@@ -442,25 +442,24 @@ function connectDeriv() {
                             contractType = null;
                         }
                     } 
-                    // === MODO RECOLECTOR (ESCUDO INTELIGENTE) ===
+                    // === MODO RECOLECTOR (ESCUDO ULTRA-SENSIBLE) ===
                     else {
-                        // El motor elige un número RNG puro
                         const randomDigit = Math.floor(Math.random() * 10);
                         targetBarrier = String(randomDigit);
                         
-                        // ANALISIS DE PELIGRO: 
-                        // Si el dígito elegido ha salido 2 o más veces en los últimos 10 ticks, hay "calor".
+                        // ANALISIS DE SEGURIDAD TOTAL: 
+                        // Si el número salió tan solo UNA VEZ en 10 ticks, prendemos el seguro.
                         const hotCount = botState.digitHistory.slice(-10).filter(d => d === randomDigit).length;
                         
-                        if (hotCount >= 2) {
-                            // ZONA DE PELIGRO: El número está saliendo mucho. Activamos el Paracaídas Match.
-                            triggerActive = 'ESCUDO INTELIGENTE (Peligro Detectado)';
+                        if (hotCount >= 1) {
+                            // ZONA ALERTA: Seguro Match ($6.00 / $0.50) ACTIVADO.
+                            triggerActive = 'ESCUDO ULTRA (Seguridad Match)';
                             contractType = 'HEDGE_ZERO_RISK'; 
                         } else {
-                            // ZONA SEGURA: El número está frío. Disparamos Differs limpio para Profit rápido.
-                            triggerActive = 'SMART-SNIPER (Profit Grifo)';
+                            // ZONA FRIO: Profit Grifo ($1.00 -> +$0.09 neto).
+                            triggerActive = 'ULTRA-SNIPER (Profit Limpio)';
                             contractType = 'DIGITDIFF';
-                            stakeFinal = 1.00; // Profit limpio del 9%
+                            stakeFinal = 1.00;
                         }
                     }
                 }
