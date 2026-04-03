@@ -455,19 +455,19 @@ function connectDeriv() {
                             contractType = null;
                         }
                     } 
-                    // === MODO RECOLECTOR (GANA-GANA v12.2: CILINDRO MAESTRO) ===
+                    // === MODO RECOLECTOR (NÉMESIS v13.0: EL BLOQUE SAGRADO) ===
                     else {
                         const targetDigit = Math.floor(Math.random() * 10);
                         targetBarrier = String(targetDigit);
 
-                        // ANALISIS DE SEGURIDAD TRIANGULAR (R_100 + R_10)
-                        triggerActive = 'CILINDRO MAESTRO (Inmortalidad Activa)';
+                        // ANALISIS DE SEGURIDAD ABSOLUTA (R_100 + R_10)
+                        triggerActive = 'BLOQUE SAGRADO (Inmunidad Total)';
                         contractType = 'TRIANGULAR_HEDGE';
                         
-                        // Configuración de Stakes Optimizados (Gana-Gana Real)
-                        // R_100: $15.00 Differs + $1.90 Match
-                        // R_10: $6.00 Differs NO-0 (Profit $0.54) -> Paga el Seguro de R_100
-                        stakeFinal = 15.00;
+                        // Configuración de Stakes Matemáticos Perfectos
+                        // R_100: $6.00 Differs + $0.75 Match (Seguro de Choque)
+                        // R_10: $8.20 Differs NO-0 (Profit $0.74) -> Paga el Seguro
+                        stakeFinal = 6.00;
                     }
                 }
             }
@@ -539,41 +539,40 @@ function connectDeriv() {
                             
                             botState.currentContractType = 'HEDGE_ZERO_RISK';
                         } else if (contractType === 'TRIANGULAR_HEDGE') {
-                            // --- DISPARO TRIPLE (CILINDRO MAESTRO v12.2) ---
+                            // --- DISPARO TRIPLE (EL BLOQUE SAGRADO v13.0) ---
                             
-                            // 1. R_100: TANQUE DIFFERS ($15.00) -> NO al targetDigit (Profit +$1.36)
-                            ws.send(JSON.stringify({
-                                buy: 1, price: 15.00,
-                                parameters: {
-                                    amount: 15.00, basis: 'stake',
-                                    contract_type: 'DIGITDIFF', currency: botState.currency || 'USDT',
-                                    symbol: 'R_100', duration: 1, duration_unit: 't', barrier: targetBarrier
-                                }
-                            }));
-
-                            // 2. R_100: ESCUDO MATCH ($1.90) -> SI al targetDigit (Seguro de Choque)
-                            ws.send(JSON.stringify({
-                                buy: 1, price: 1.90,
-                                parameters: {
-                                    amount: 1.90, basis: 'stake',
-                                    contract_type: 'DIGITMATCH', currency: botState.currency || 'USDT',
-                                    symbol: 'R_100', duration: 1, duration_unit: 't', barrier: targetBarrier
-                                }
-                            }));
-
-                            // 3. R_10 (Mercado Externo): MOTOR DE PROFIT ($6.00) -> Differs NO-0 (Profit +$0.54)
-                            // Este profit de +$0.54 paga exactamente el costo del seguro (-$0.54)
+                            // 1. R_100: PIEZA CENTRAL ($6.00) -> NO al targetDigit (Profit +$0.54)
                             ws.send(JSON.stringify({
                                 buy: 1, price: 6.00,
                                 parameters: {
                                     amount: 6.00, basis: 'stake',
                                     contract_type: 'DIGITDIFF', currency: botState.currency || 'USDT',
+                                    symbol: 'R_100', duration: 1, duration_unit: 't', barrier: targetBarrier
+                                }
+                            }));
+
+                            // 2. R_100: SEGURO DE CHOQUE ($0.75) -> SI al targetDigit (Recupera +$6.10)
+                            ws.send(JSON.stringify({
+                                buy: 1, price: 0.75,
+                                parameters: {
+                                    amount: 0.75, basis: 'stake',
+                                    contract_type: 'DIGITMATCH', currency: botState.currency || 'USDT',
+                                    symbol: 'R_100', duration: 1, duration_unit: 't', barrier: targetBarrier
+                                }
+                            }));
+
+                            // 3. R_10: ANCLA DE PROFIT ($8.20) -> NO al 0 (Profit +$0.74)
+                            ws.send(JSON.stringify({
+                                buy: 1, price: 8.20,
+                                parameters: {
+                                    amount: 8.20, basis: 'stake',
+                                    contract_type: 'DIGITDIFF', currency: botState.currency || 'USDT',
                                     symbol: 'R_10', duration: 1, duration_unit: 't', barrier: '0'
                                 }
                             }));
 
-                            console.log(`\n🌀 CILINDRO v12.2 ACTIVADO: [R100: $15 / $1.90] + [R10: $6]`);
-                            console.log(`🛡️ Riesgo de Choque: $0.00 | Profit x Tick: +$0.00 (Empate Total)`);
+                            console.log(`\n🗿 BLOQUE SAGRADO v13.0: [R100: $6 / $0.75] + [R10: $8.20]`);
+                            console.log(`🛡️ Choque: +$0.09 | Gana Normal: +$0.53`);
                             botState.currentContractType = 'TRIANGULAR_HEDGE';
                         } else if (contractType) {
                             // --- DISPARO ÚNICO (DE RESPALDO) ---
