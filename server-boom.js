@@ -493,18 +493,18 @@ function connectDeriv() {
                             botState.currentContractType = 'BINARY_STRIKE';
                             botState.currentBarrier = '0-9';
                         } else if (contractType === 'HEDGE_ZERO_RISK') {
-                            // --- DISPARO DUAL (EL SNIPER MATEMÁTICO v2.0) ---
-                            // 1. Contrato Differs Principal ($3.50)
+                            // --- DISPARO DUAL (EL MOTOR DE PROFIT REAL v3.0) ---
+                            // 1. Contrato Differs Principal ($6.00) -> Gana ~$0.54
                             ws.send(JSON.stringify({
-                                buy: 1, price: 3.50,
+                                buy: 1, price: 6.00,
                                 parameters: {
-                                    amount: 3.50, basis: 'stake',
+                                    amount: 6.00, basis: 'stake',
                                     contract_type: 'DIGITDIFF', currency: botState.currency || 'USDT',
                                     symbol: SYMBOL, duration: 1, duration_unit: 't', barrier: targetBarrier
                                 }
                             }));
 
-                            // 2. Seguro Match ($0.50) -> Paga ~$3.96 neto
+                            // 2. Seguro Match ($0.50) -> Cuesta -$0.50
                             ws.send(JSON.stringify({
                                 buy: 1, price: 0.50,
                                 parameters: {
@@ -514,8 +514,8 @@ function connectDeriv() {
                                 }
                             }));
 
-                            console.log(`\n💎 HEDGE-MATCH v2.0 ACTIVADO: [SI/NO al ${targetBarrier}]`);
-                            console.log(`⚡ DISPARO: Differs($3.50) + Match($0.50) | Profit al chocar: +$0.46`);
+                            console.log(`\n💎 HEDGE-MATCH v3.0 PROFIT REAL: [SI/NO al ${targetBarrier}]`);
+                            console.log(`⚡ DISPARO: Differs($6.00) + Match($0.50) | Profit p/Tick: +$0.04`);
                             
                             botState.currentContractType = 'HEDGE_ZERO_RISK';
                         } else {
