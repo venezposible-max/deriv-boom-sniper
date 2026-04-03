@@ -455,32 +455,24 @@ function connectDeriv() {
                             contractType = null;
                         }
                     } 
-                    // === MODO RECOLECTOR (NÉMESIS v10.0) ===
+                    // === MODO RECOLECTOR (GANA-GANA v6.1) ===
                     else {
-                        // 1. EL REPETIDOR (Buscamos peligro para Diferirlo)
-                        const last5 = hist.slice(-5);
-                        let repeater = null;
-                        for(let d=0; d<=9; d++) {
-                            if (last5.filter(x => x === d).length >= 2) { repeater = d; break; }
-                        }
+                        const randomDigit = Math.floor(Math.random() * 10);
+                        targetBarrier = String(randomDigit);
 
-                        // 2. EL CONGELADO (Buscamos oportunidad para el Match)
-                        const last25 = hist.slice(-25);
-                        let frozen = null;
-                        for(let d=0; d<=9; d++) {
-                            if (!last25.includes(d)) { frozen = d; break; }
-                        }
-
-                        // VALIDACION DE ATAQUE NÉMESIS (v10.2 SAFE-HYBRID)
-                        if (repeater !== null && frozen !== null) {
-                            triggerActive = 'NÉMESIS (Caza Segura 1x1)';
-                            contractType = 'NEMESIS_DUAL';
-                            // Guardamos ambos blancos: repeater para Differs, frozen para Match
-                            targetBarrier = `${repeater},${frozen}`;
-                            stakeFinal = 1.00; // Stake base de $1.00 para ambos
+                        // ANALISIS DE SEGURIDAD TOTAL: 
+                        // Si el número salió 2 o más veces en 10 ticks, prendemos el seguro.
+                        const hotCount = botState.digitHistory.slice(-10).filter(d => d === randomDigit).length;
+                        
+                        if (hotCount >= 2) {
+                            // ZONA ALERTA (HOT): Seguro Match ($3.50 / $0.50) ACTIVADO.
+                            triggerActive = 'GANA-GANA (Seguro Activo)';
+                            contractType = 'HEDGE_ZERO_RISK'; 
                         } else {
-                            triggerActive = null;
-                            contractType = null;
+                            // ZONA FRIO (NORMAL): Profit Grifo ($1.00 -> +$0.09 neto).
+                            triggerActive = 'ULTRA-SNIPER (Profit Limpio)';
+                            contractType = 'DIGITDIFF';
+                            stakeFinal = 1.00;
                         }
                     }
                 }
@@ -526,33 +518,32 @@ function connectDeriv() {
                             
                             botState.currentContractType = 'BINARY_STRIKE';
                             botState.currentBarrier = '0-9';
-                        } else if (contractType === 'NEMESIS_DUAL') {
-                            const [rep, froz] = targetBarrier.split(',');
-                            
-                            // 1. DISPARO PRINCIPAL (Differs al Repetidor - Stake $1.00)
+                        } else if (contractType === 'HEDGE_ZERO_RISK') {
+                            // --- DISPARO DUAL (GANA-GANA v6.0 - RIESGO CHOQUE $0.00) ---
+                            // 1. Contrato Differs Principal ($3.50)
                             ws.send(JSON.stringify({
-                                buy: 1, price: 1.00,
+                                buy: 1, price: 3.50,
                                 parameters: {
-                                    amount: 1.00, basis: 'stake',
+                                    amount: 3.50, basis: 'stake',
                                     contract_type: 'DIGITDIFF', currency: botState.currency || 'USDT',
-                                    symbol: SYMBOL, duration: 1, duration_unit: 't', barrier: rep
+                                    symbol: SYMBOL, duration: 1, duration_unit: 't', barrier: targetBarrier
                                 }
                             }));
 
-                            // 2. DISPARO BONUS (Match al Congelado - Stake $1.00)
+                            // 2. Seguro Match ($0.50) -> Cubre el 100% de la perdida de $3.50
                             ws.send(JSON.stringify({
-                                buy: 1, price: 1.00,
+                                buy: 1, price: 0.50,
                                 parameters: {
-                                    amount: 1.00, basis: 'stake',
+                                    amount: 0.50, basis: 'stake',
                                     contract_type: 'DIGITMATCH', currency: botState.currency || 'USDT',
-                                    symbol: SYMBOL, duration: 1, duration_unit: 't', barrier: froz
+                                    symbol: SYMBOL, duration: 1, duration_unit: 't', barrier: targetBarrier
                                 }
                             }));
 
-                            console.log(`\n👹 NÉMESIS v10.2 SAFE: [NO-${rep}] + [SI-${froz}]`);
-                            console.log(`📈 Profit Esperado: +$0.09 (Differs) | Bonus Match: +$8.33`);
-                            botState.currentContractType = 'NEMESIS_DUAL';
-                            botState.lastBurstTime = Date.now();
+                            console.log(`\n💎 GANA-GANA v6.0 ACTIVADO: [SI/NO al ${targetBarrier}]`);
+                            console.log(`⚡ DISPARO: Differs($3.50) + Match($0.50) | Riesgo de Choque: $0.00`);
+                            
+                            botState.currentContractType = 'HEDGE_ZERO_RISK';
                         } else if (contractType) {
                             // --- DISPARO ÚNICO (DE RESPALDO) ---
                             ws.send(JSON.stringify({
