@@ -448,13 +448,15 @@ function connectDeriv() {
                             contractType = null;
                         }
                     } 
-                    // === MODO RECOLECTOR (Rápido y Dinámico) ===
+                    // === MODO RECOLECTOR (TANQUE INMORTAL HEDGE) ===
                     else {
-                        contractType = 'DIGITDIFF';
-                        // Generador de Números Aleatorios (RNG Puro) - Ignora falsos patrones
+                        // El motor genera un número RNG puro
                         const randomDigit = Math.floor(Math.random() * 10);
-                        triggerActive = 'RNG-Puro (Hyper-Speed)';
                         targetBarrier = String(randomDigit);
+                        
+                        // En modo Tanque activamos el disparador doble
+                        triggerActive = 'TANQUE-INMORTAL (Hedge)';
+                        contractType = 'DUAL_HEDGE'; // Flag interna para el disparador
                     }
                 }
             }
@@ -469,26 +471,51 @@ function connectDeriv() {
                     const netP = botState.dailyProfit - botState.dailyLoss;
                     if (netP < botState.takeProfit && netP > -botState.maxDailyLoss) {
 
-                        ws.send(JSON.stringify({
-                            buy: 1, price: stakeFinal,
-                            parameters: {
-                                amount: stakeFinal, basis: 'stake',
-                                contract_type: contractType, currency: botState.currency || 'USDT',
-                                symbol: SYMBOL, duration: 1, duration_unit: 't', barrier: targetBarrier
-                            }
-                        }));
+                        if (contractType === 'DUAL_HEDGE') {
+                            // --- DISPARO DUAL (EL TANQUE) ---
+                            // 1. Contrato Differs Principal ($4.00)
+                            ws.send(JSON.stringify({
+                                buy: 1, price: 4.00,
+                                parameters: {
+                                    amount: 4.00, basis: 'stake',
+                                    contract_type: 'DIGITDIFF', currency: botState.currency || 'USDT',
+                                    symbol: SYMBOL, duration: 1, duration_unit: 't', barrier: targetBarrier
+                                }
+                            }));
+
+                            // 2. Seguro Match ($0.35) - Mismo número
+                            ws.send(JSON.stringify({
+                                buy: 1, price: 0.35,
+                                parameters: {
+                                    amount: 0.35, basis: 'stake',
+                                    contract_type: 'DIGITMATCH', currency: botState.currency || 'USDT',
+                                    symbol: SYMBOL, duration: 1, duration_unit: 't', barrier: targetBarrier
+                                }
+                            }));
+
+                            console.log(`\n🛡️ MODO TANQUE ACTIVADO: [SI/NO al ${targetBarrier}]`);
+                            console.log(`⚡ DISPARO DUAL: Differs($4.00) + Match($0.35) | Reduciendo riesgo un 80%`);
+                            
+                            botState.currentContractType = 'DUAL_HEDGE';
+                        } else {
+                            // --- DISPARO ÚNICO (RESCATE DARDO) ---
+                            ws.send(JSON.stringify({
+                                buy: 1, price: stakeFinal,
+                                parameters: {
+                                    amount: stakeFinal, basis: 'stake',
+                                    contract_type: contractType, currency: botState.currency || 'USDT',
+                                    symbol: SYMBOL, duration: 1, duration_unit: 't', barrier: targetBarrier
+                                }
+                            }));
+                            console.log(`\n🎯 MODO RESCATE ACTIVADO: [${triggerActive}]`);
+                            console.log(`⚡ DISPARO: ${contractType} (${targetBarrier}) | Stake: $${stakeFinal}`);
+                            botState.currentContractType = contractType;
+                        }
 
                         botState.isBuying = true;
                         botState.lastTradeTime = now;
                         botState.currentBarrier = targetBarrier;
-                        botState.currentContractType = contractType;
                         
-                        const modeLabel = botState.strategyMode === 'OVER_UNDER' 
-                            ? 'ESTRATEGIA PRINCIPAL' 
-                            : (botState.recoveryActive ? 'RESCATE CRUZADO' : 'RECOLECTOR');
-                        
-                        console.log(`\n🎯 MODO ${modeLabel} ACTIVADO: [${triggerActive}]`);
-                        console.log(`⚡ DISPARO: ${contractType} (${targetBarrier}) | Stake: $${stakeFinal} | Precio: ${quote}`);
                     } else if (botState.isRunning) {
                         botState.isRunning = false;
                         console.log(`🎯 Meta Cumplida ($${netP.toFixed(2)}). Detenido.`);
