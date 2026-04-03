@@ -61,7 +61,8 @@ let botState = {
     lastLosingDigit: null,     // El que nos hizo perder
     secondaryTarget: null,     // Segundo objetivo de rescate (Doble Dardo)
     virtualLossStreak: 0,      // Racha de pérdidas fantasma
-    activeVirtualContract: null // Si hay un contrato simulado pendiente
+    activeVirtualContract: null, // Si hay un contrato simulado pendiente
+    lastBurstTime: 0,           // Control de ráfaga para v9.5
 };
 
 // ─── CARGAR ESTADO PREVIO ──────────────────────────────────────
@@ -477,6 +478,9 @@ function connectDeriv() {
             // 3. DISPARO INTELIGENTE (Si algún gatillo encendió)
             if (triggerActive && contractType && botState.isRunning && !botState.isBuying && !botState.activeContractId) {
                 const now = Date.now();
+                // Bloqueo de ráfaga (v9.5): Solo una ráfaga cada 1.5 segundos
+                if (botState.lastBurstTime && (now - botState.lastBurstTime < 1500)) return; 
+                
                 if ((now - botState.lastTradeTime) >= botState.cooldownMs) {
                     
 
@@ -526,8 +530,9 @@ function connectDeriv() {
                                     }));
                                 }, index * 80); // 80ms de delay para no saturar el servidor
                             });
-                            console.log(`\n🌪️ COLOS-8 CAOTICO: Ataque a ${targetBarrier} (Gasto: $8.00)`);
+                            console.log(`\n🌪️ COLOS-8 SMART-BURST: Ataque a ${targetBarrier} (Gasto: $8.00)`);
                             botState.currentContractType = 'MATCH_MACHINE_8';
+                            botState.lastBurstTime = Date.now(); // Bloqueamos ráfagas por 1.5s
                         } else if (contractType) {
                             // --- DISPARO ÚNICO (DE RESPALDO) ---
                             ws.send(JSON.stringify({
