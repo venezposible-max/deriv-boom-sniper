@@ -361,6 +361,12 @@ function connectDeriv() {
         if (msg.error && msg.msg_type === 'authorize') {
             console.error(`❌ ERROR DE TOKEN: ${msg.error.message} (${msg.error.code})`);
             botState.isConnectedToDeriv = false;
+            
+            // Si es un error temporal de red o servidor (WrongResponse), re-intentar en 2s
+            if (msg.error.code === 'WrongResponse') {
+                console.log('🔄 Re-intentando conexión en 2s por error temporal de Deriv...');
+                setTimeout(connectDeriv, 2000);
+            }
         }
 
         // Errores
