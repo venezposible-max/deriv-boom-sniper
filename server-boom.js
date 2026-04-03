@@ -415,13 +415,29 @@ function connectDeriv() {
                 const isAllHigh = last1 > 5 && last2 > 5 && last3 > 5 && last4 > 5 && last5 > 5;
                 const isAllLow  = last1 < 4 && last2 < 4 && last3 < 4 && last4 < 4 && last5 < 4;
 
-                // === ESTRATEGIA PRINCIPAL: ATAQUE BINARIO (80/20 Centro) ===
+                // === ESTRATEGIA PRINCIPAL: MATCH-HUNTER (Caza x9) ===
                 if (botState.strategyMode === 'OVER_UNDER') {
-                    // Ahora cubrimos el 80% (del 1 al 8 ganamos ambos)
-                    // Barreras: Under 9 (Gana 0-8) + Over 0 (Gana 1-9)
-                    triggerActive = 'ATAQUE BINARIO (80% Area)';
-                    contractType = 'BINARY_STRIKE';
-                    stakeFinal = botState.stake;
+                    // El cazador analiza los últimos 25 ticks
+                    const last25 = hist.slice(-25);
+                    const counts = {};
+                    for(let i=0; i<=9; i++) counts[i] = 0;
+                    last25.forEach(d => counts[d]++);
+
+                    // Buscamos un número "Congelado" (0 apariciones en 25 ticks)
+                    let frozenDigit = null;
+                    for(let i=0; i<=9; i++) {
+                        if (counts[i] === 0) { frozenDigit = i; break; }
+                    }
+
+                    if (frozenDigit !== null) {
+                        triggerActive = `DARDO LETAL (Cazando al ${frozenDigit})`;
+                        contractType = 'DIGITMATCH';
+                        targetBarrier = String(frozenDigit);
+                        stakeFinal = 1.00;
+                    } else {
+                        triggerActive = null;
+                        contractType = null;
+                    }
                 }
                 // === ESTRATEGIA PRINCIPAL: DIFFERS ===
                 else {
@@ -442,26 +458,28 @@ function connectDeriv() {
                             contractType = null;
                         }
                     } 
-                    // === MODO RECOLECTOR (ESCUDO DE SILENCIO v7.0) ===
+                    // === MODO RECOLECTOR (MATCH-HUNTER v8.0) ===
                     else {
-                        const randomDigit = Math.floor(Math.random() * 10);
-                        targetBarrier = String(randomDigit);
+                        // El cazador de Differs ahora caza MATCH
+                        const last25 = hist.slice(-25);
+                        const counts = {};
+                        for(let i=0; i<=9; i++) counts[i] = 0;
+                        last25.forEach(d => counts[d]++);
 
-                        // ANALISIS DE SEGURIDAD TOTAL: 
-                        // Si el número salió 2 o más veces en 10 ticks, el riesgo es alto.
-                        // En lugar de pagar seguro, el bot simplemente NO DISPARA.
-                        const hotCount = botState.digitHistory.slice(-10).filter(d => d === randomDigit).length;
-                        
-                        if (hotCount >= 2) {
-                            // ZONA ALERTA (HOT): Riesgo detectado. Abortamos disparo para no desangrar balance.
-                            triggerActive = null; 
-                            contractType = null;
-                            console.log(`🧊 SILENCIO: Número ${randomDigit} caliente. Esperando para proteger balance...`);
-                        } else {
-                            // ZONA FRIO (NORMAL): Profit Grifo ($1.00 -> +$0.09 neto).
-                            triggerActive = 'SILENT-SNIPER (Profit Grifo)';
-                            contractType = 'DIGITDIFF';
+                        let frozenDigit = null;
+                        // Buscamos el número con 0 apariciones (Congelado)
+                        for(let i=0; i<=9; i++) {
+                            if (counts[i] === 0) { frozenDigit = i; break; }
+                        }
+
+                        if (frozenDigit !== null) {
+                            triggerActive = `DARDO LETAL (Cazando al ${frozenDigit})`;
+                            contractType = 'DIGITMATCH';
+                            targetBarrier = String(frozenDigit);
                             stakeFinal = 1.00;
+                        } else {
+                            triggerActive = null;
+                            contractType = null;
                         }
                     }
                 }
@@ -504,8 +522,8 @@ function connectDeriv() {
                             
                             botState.currentContractType = 'BINARY_STRIKE';
                             botState.currentBarrier = '0-9';
-                        } else if (contractType) {
-                            // --- DISPARO ÚNICO (ULTRA-SNIPER) ---
+                        } else {
+                            // --- DISPARO ÚNICO (MATCH HUNTER) ---
                             ws.send(JSON.stringify({
                                 buy: 1, price: stakeFinal,
                                 parameters: {
@@ -515,6 +533,7 @@ function connectDeriv() {
                                 }
                             }));
                             botState.currentContractType = contractType;
+                            console.log(`\n🏹 DISPARANDO DARDO MATCH al ${targetBarrier} (Stake: $${stakeFinal})`);
                         }
 
                         botState.isBuying = true;
