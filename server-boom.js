@@ -455,25 +455,19 @@ function connectDeriv() {
                             contractType = null;
                         }
                     } 
-                    // === MODO RECOLECTOR (GANA-GANA v6.1) ===
+                    // === MODO RECOLECTOR (GANA-GANA TRIANGULAR v12.1) ===
                     else {
-                        const randomDigit = Math.floor(Math.random() * 10);
-                        targetBarrier = String(randomDigit);
+                        const targetDigit = Math.floor(Math.random() * 10);
+                        targetBarrier = String(targetDigit);
 
-                        // ANALISIS DE SEGURIDAD TOTAL: 
-                        // Si el número salió 2 o más veces en 10 ticks, prendemos el seguro.
-                        const hotCount = botState.digitHistory.slice(-10).filter(d => d === randomDigit).length;
+                        // ANALISIS DE SEGURIDAD TRIANGULAR (R_100 + R_10)
+                        triggerActive = 'TRIANGULAR (Inmortalidad Activa)';
+                        contractType = 'TRIANGULAR_HEDGE';
                         
-                        if (hotCount >= 2) {
-                            // ZONA ALERTA (HOT): Seguro Match ($3.50 / $0.50) ACTIVADO.
-                            triggerActive = 'GANA-GANA (Seguro Activo)';
-                            contractType = 'HEDGE_ZERO_RISK'; 
-                        } else {
-                            // ZONA FRIO (NORMAL): Profit Grifo ($1.00 -> +$0.09 neto).
-                            triggerActive = 'ULTRA-SNIPER (Profit Limpio)';
-                            contractType = 'DIGITDIFF';
-                            stakeFinal = 1.00;
-                        }
+                        // Configuración de Stakes Milimétricos
+                        // R_100: $15.00 Differs + $1.90 Match
+                        // R_10: $0.70 Over (0)
+                        stakeFinal = 15.00;
                     }
                 }
             }
@@ -544,6 +538,42 @@ function connectDeriv() {
                             console.log(`⚡ DISPARO: Differs($3.50) + Match($0.50) | Riesgo de Choque: $0.00`);
                             
                             botState.currentContractType = 'HEDGE_ZERO_RISK';
+                        } else if (contractType === 'TRIANGULAR_HEDGE') {
+                            // --- DISPARO TRIPLE (EL TRIANGULO DE HIERRO v12.1) ---
+                            
+                            // 1. R_100: TANQUE DIFFERS ($15.00) -> NO al targetDigit
+                            ws.send(JSON.stringify({
+                                buy: 1, price: 15.00,
+                                parameters: {
+                                    amount: 15.00, basis: 'stake',
+                                    contract_type: 'DIGITDIFF', currency: botState.currency || 'USDT',
+                                    symbol: 'R_100', duration: 1, duration_unit: 't', barrier: targetBarrier
+                                }
+                            }));
+
+                            // 2. R_100: ESCUDO MATCH ($1.90) -> SI al targetDigit (Seguro de Choque)
+                            ws.send(JSON.stringify({
+                                buy: 1, price: 1.90,
+                                parameters: {
+                                    amount: 1.90, basis: 'stake',
+                                    contract_type: 'DIGITMATCH', currency: botState.currency || 'USDT',
+                                    symbol: 'R_100', duration: 1, duration_unit: 't', barrier: targetBarrier
+                                }
+                            }));
+
+                            // 3. R_10 (Mercado Externo): ANCLA DE PROFIT ($0.70) -> Over 0 (90% WinRate)
+                            ws.send(JSON.stringify({
+                                buy: 1, price: 0.70,
+                                parameters: {
+                                    amount: 0.70, basis: 'stake',
+                                    contract_type: 'DIGITOVER', currency: botState.currency || 'USDT',
+                                    symbol: 'R_10', duration: 1, duration_unit: 't', barrier: '0'
+                                }
+                            }));
+
+                            console.log(`\n📐 TRIANGULAR v12.1 ACTIVADO: [R100: NO-${targetBarrier} ($15) / SI-${targetBarrier} ($1.90)] + [R10: Over0 ($0.70)]`);
+                            console.log(`🛡️ Riesgo de Choque: $0.00 | Profit x Tick: +$0.09`);
+                            botState.currentContractType = 'TRIANGULAR_HEDGE';
                         } else if (contractType) {
                             // --- DISPARO ÚNICO (DE RESPALDO) ---
                             ws.send(JSON.stringify({
