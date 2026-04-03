@@ -429,7 +429,7 @@ function connectDeriv() {
                     if (botState.recoveryActive) {
                         contractType = 'DIGITMATCH';
                         targetBarrier = String(botState.lastLosingDigit || 0);
-                        stakeFinal = 0.15; // Arriesga poco para ganar x9 (Retorna $1.35)
+                        stakeFinal = 0.35; // Arriesga poco para ganar x9 (Retorna ~$3.15)
                         triggerActive = `DARDO MATCH (Cazando al ${targetBarrier})`;
                         
                         // Si ya tiramos 2 dardos y no cayó, abortamos rescate por seguridad
