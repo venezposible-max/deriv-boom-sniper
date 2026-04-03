@@ -493,18 +493,18 @@ function connectDeriv() {
                             botState.currentContractType = 'BINARY_STRIKE';
                             botState.currentBarrier = '0-9';
                         } else if (contractType === 'HEDGE_ZERO_RISK') {
-                            // --- DISPARO DUAL (EL SNIPER MATEMÁTICO) ---
-                            // 1. Contrato Differs Principal ($5.00)
+                            // --- DISPARO DUAL (EL SNIPER MATEMÁTICO v2.0) ---
+                            // 1. Contrato Differs Principal ($3.50)
                             ws.send(JSON.stringify({
-                                buy: 1, price: 5.00,
+                                buy: 1, price: 3.50,
                                 parameters: {
-                                    amount: 5.00, basis: 'stake',
+                                    amount: 3.50, basis: 'stake',
                                     contract_type: 'DIGITDIFF', currency: botState.currency || 'USDT',
                                     symbol: SYMBOL, duration: 1, duration_unit: 't', barrier: targetBarrier
                                 }
                             }));
 
-                            // 2. Seguro Match ($0.50)
+                            // 2. Seguro Match ($0.50) -> Paga ~$3.96 neto
                             ws.send(JSON.stringify({
                                 buy: 1, price: 0.50,
                                 parameters: {
@@ -514,8 +514,8 @@ function connectDeriv() {
                                 }
                             }));
 
-                            console.log(`\n🛡️ HEDGE-MATCH ACTIVADO: [SI/NO al ${targetBarrier}]`);
-                            console.log(`⚡ DISPARO: Differs($5.00) + Match($0.50) | Cobertura de Choque: 100%`);
+                            console.log(`\n💎 HEDGE-MATCH v2.0 ACTIVADO: [SI/NO al ${targetBarrier}]`);
+                            console.log(`⚡ DISPARO: Differs($3.50) + Match($0.50) | Profit al chocar: +$0.46`);
                             
                             botState.currentContractType = 'HEDGE_ZERO_RISK';
                         } else {
