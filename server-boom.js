@@ -63,6 +63,12 @@ let botState = {
     virtualLossStreak: 0,      // Racha de pérdidas fantasma
     activeVirtualContract: null, // Si hay un contrato simulado pendiente
     lastBurstTime: 0,           // Control de ráfaga para v9.5
+    // [FRANKLIN v16.0] INDICADORES ANTIGRAVEDAD
+    rsiValues: [],
+    emaValues: [],
+    lastRSI: 50,
+    lastEMA: 0,
+    currentImpulse: null,        // 'UP' o 'DOWN'
 };
 
 // ─── CARGAR ESTADO PREVIO ──────────────────────────────────────
@@ -396,6 +402,28 @@ function connectDeriv() {
             botState.lastTickPrice = tickPrice;
             botState.digitHistory.push(tickDigit);
             if (botState.digitHistory.length > 50) botState.digitHistory.shift();
+
+            // [FRANKLIN v16.0] CALCULADORA ANTIGRAVEDAD (RSI-5 + EMA-5)
+            // EMA calculation
+            if (!botState.lastEMA) botState.lastEMA = tickPrice;
+            const k = 2 / (botState.emaPeriod + 1);
+            botState.lastEMA = (tickPrice * k) + (botState.lastEMA * (1 - k));
+            
+            // RSI calculation
+            const prices = botState.rsiValues || [];
+            prices.push(tickPrice);
+            if (prices.length > 10) prices.shift();
+            botState.rsiValues = prices;
+
+            if (prices.length >= 6) {
+                let gains = 0, losses = 0;
+                for (let i = 1; i < prices.length; i++) {
+                    const diff = prices[i] - prices[i-1];
+                    if (diff >= 0) gains += diff; else losses -= diff;
+                }
+                const rs = gains / (losses || 0.001);
+                botState.lastRSI = 100 - (100 / (1 + rs));
+            }
             
 
             
@@ -455,16 +483,29 @@ function connectDeriv() {
                             contractType = null;
                         }
                     } 
-                    // === MODO RECOLECTOR (CERO RIESGO v15.2) ===
+                    // === MODO RECOLECTOR (BOT ESCUDO ANTIGRAVEDAD v16.0) ===
                     else {
-                        const targetDigit = Math.floor(Math.random() * 10);
+                        const targetDigit = botState.lastDigit;
                         targetBarrier = String(targetDigit);
 
-                        // ANALISIS DE SEGURIDAD TOTAL: 
-                        // Activamos siempre el seguro matemático equilibrado.
-                        triggerActive = 'CERO-RIESGO (🛡️ Inmunidad Activa)';
-                        contractType = 'CERO_RIESGO_HEDGE';
-                        stakeFinal = 17.00; 
+                        // ANALISIS RSI(5) + EMA(5)
+                        const rsi = botState.lastRSI;
+                        const ema = botState.lastEMA;
+                        const currentTick = tick;
+
+                        let impulse = null;
+                        if (rsi > 75 && currentTick > ema) impulse = 'UP';
+                        if (rsi < 25 && currentTick < ema) impulse = 'DOWN';
+
+                        if (impulse) {
+                            triggerActive = `ANTIGRAVEDAD (${impulse})`;
+                            contractType = 'ANTIGRAVITY_COMBO';
+                            stakeFinal = 10.00;
+                            botState.currentImpulse = impulse;
+                        } else {
+                            triggerActive = null;
+                            contractType = null;
+                        }
                     }
                 }
             }
@@ -509,59 +550,39 @@ function connectDeriv() {
                             
                             botState.currentContractType = 'BINARY_STRIKE';
                             botState.currentBarrier = '0-9';
-                        } else if (contractType === 'HEDGE_ZERO_RISK') {
-                            // --- DISPARO DUAL (GANA-GANA v6.0 - RIESGO CHOQUE $0.00) ---
-                            // 1. Contrato Differs Principal ($3.50)
+                        } else if (contractType === 'ANTIGRAVITY_COMBO') {
+                            // --- TRIPLE CAPA ANTIGRAVEDAD v16.0 ---
+                            
+                            // 1. MOTOR (Differs NO al Last Digit)
                             ws.send(JSON.stringify({
-                                buy: 1, price: 3.50,
+                                buy: 1, price: 10.00,
                                 parameters: {
-                                    amount: 3.50, basis: 'stake',
+                                    amount: 10.00, basis: 'stake',
                                     contract_type: 'DIGITDIFF', currency: botState.currency || 'USDT',
                                     symbol: SYMBOL, duration: 1, duration_unit: 't', barrier: targetBarrier
                                 }
                             }));
 
-                            // 2. Seguro Match ($0.50) -> Cubre el 100% de la perdida de $3.50
+                            // 2. ESCUDO (Multiplier x100 con Deal Cancellation)
+                            const multi_type = botState.currentImpulse === 'UP' ? 'MULTUP' : 'MULTDOWN';
                             ws.send(JSON.stringify({
-                                buy: 1, price: 0.50,
+                                buy: 1, price: 10.00,
                                 parameters: {
-                                    amount: 0.50, basis: 'stake',
-                                    contract_type: 'DIGITMATCH', currency: botState.currency || 'USDT',
-                                    symbol: SYMBOL, duration: 1, duration_unit: 't', barrier: targetBarrier
+                                    amount: 10.00, basis: 'stake',
+                                    contract_type: multi_type, currency: botState.currency || 'USDT',
+                                    symbol: SYMBOL, multiplier: 100,
+                                    limit_order: { stop_loss: 10.00, take_profit: 10.00 },
+                                    cancellation_duration: '5m'
                                 }
                             }));
 
-                            console.log(`\n💎 GANA-GANA v6.0 ACTIVADO: [SI/NO al ${targetBarrier}]`);
-                            console.log(`⚡ DISPARO: Differs($3.50) + Match($0.50) | Riesgo de Choque: $0.00`);
+                            console.log(`\n🛡️ ESCUDO ANTIGRAVEDAD v16.0 ACTIVADO [${botState.currentImpulse}]`);
+                            console.log(`⚡ FILTRO: RSI(${botState.lastRSI.toFixed(2)}) | EMA(${botState.lastEMA.toFixed(2)})`);
+                            console.log(`🎯 DISPARO DUAL: Differs($10) + Multiplier($10) + Seguro(5m)`);
                             
-                            botState.currentContractType = 'HEDGE_ZERO_RISK';
-                        } else if (contractType === 'CERO_RIESGO_HEDGE') {
-                            // --- DISPARO DUAL (CERO RIESGO v15.2) ---
-                            // 1. Tanque Principal ($17.00 Differs) -> Profit +$1.55
-                            ws.send(JSON.stringify({
-                                buy: 1, price: 17.00,
-                                parameters: {
-                                    amount: 17.00, basis: 'stake',
-                                    contract_type: 'DIGITDIFF', currency: botState.currency || 'USDT',
-                                    symbol: SYMBOL, duration: 1, duration_unit: 't', barrier: targetBarrier
-                                }
-                            }));
-
-                            // 2. Escudo Total ($1.40 Match) -> Recupera los $17.00 perdidos y el gasto del seguro
-                            ws.send(JSON.stringify({
-                                buy: 1, price: 1.40,
-                                parameters: {
-                                    amount: 1.40, basis: 'stake',
-                                    contract_type: 'DIGITMATCH', currency: botState.currency || 'USDT',
-                                    symbol: SYMBOL, duration: 1, duration_unit: 't', barrier: targetBarrier
-                                }
-                            }));
-
-                            console.log(`\n🛡️ CERO-RIESGO v15.2 ACTIVADO: [SI/NO al ${targetBarrier}]`);
-                            console.log(`⚡ DISPARO: Differs($17.00) + Match($1.40) | Riesgo de Choque: $0.00`);
-                            
-                            botState.currentContractType = 'CERO_RIESGO_HEDGE';
+                            botState.currentContractType = 'ANTIGRAVITY_COMBO';
                         }
+
 
                         botState.isBuying = true;
                         botState.lastTradeTime = now;
@@ -784,10 +805,10 @@ function finalizeTrade(c) {
     if (botState.currentContractType === 'DIGITMATCH') labelOutput = `🎯 MATCH (SI-${botState.currentBarrier})`;
     if (botState.currentContractType === 'BINARY_STRIKE') labelOutput = `🔥 ATAQUE BINARIO`;
     
-    // [FRANKLIN v15.2] ETIQUETADO CERO RIESGO
-    if (botState.currentContractType === 'CERO_RIESGO_HEDGE') {
-        const isMatch = c.contract_type === 'DIGITMATCH';
-        labelOutput = isMatch ? `🛡️ ESCUDO: MATCH ($1.40)` : `⚡ CERO-RIESGO: DIFFERS ($17.00)`;
+    // [FRANKLIN v16.0] ETIQUETADO ANTIGRAVEDAD
+    if (botState.currentContractType === 'ANTIGRAVITY_COMBO') {
+        const isMulti = c.contract_type.startsWith('MULT');
+        labelOutput = isMulti ? `🛡️ ESCUDO: MULTIPLIER ($10)` : `⚡ MOTOR: DIFFERS ($10)`;
     }
 
     botState.tradeHistory.unshift({
