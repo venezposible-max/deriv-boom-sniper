@@ -415,10 +415,11 @@ function connectDeriv() {
                 const isAllHigh = last1 > 5 && last2 > 5 && last3 > 5 && last4 > 5 && last5 > 5;
                 const isAllLow  = last1 < 4 && last2 < 4 && last3 < 4 && last4 < 4 && last5 < 4;
 
-                // === ESTRATEGIA PRINCIPAL: ATAQUE BINARIO (60/40 Centro) ===
+                // === ESTRATEGIA PRINCIPAL: ATAQUE BINARIO (80/20 Centro) ===
                 if (botState.strategyMode === 'OVER_UNDER') {
-                    // El ataque binario siempre dispara al centro (Under 8 + Over 1)
-                    triggerActive = 'ATAQUE BINARIO (Striking)';
+                    // Ahora cubrimos el 80% (del 1 al 8 ganamos ambos)
+                    // Barreras: Under 9 (Gana 0-8) + Over 0 (Gana 1-9)
+                    triggerActive = 'ATAQUE BINARIO (80% Area)';
                     contractType = 'BINARY_STRIKE';
                     stakeFinal = botState.stake;
                 }
@@ -465,32 +466,32 @@ function connectDeriv() {
                     if (netP < botState.takeProfit && netP > -botState.maxDailyLoss) {
 
                         if (contractType === 'BINARY_STRIKE') {
-                            // --- DISPARO DUAL BINARIO (+40% Profit Potential) ---
-                            // Leg 1: DigitUnder (8) -> Gana con 0,1,2,3,4,5,6,7
+                            // --- DISPARO DUAL BINARIO (80% Área de Ganancia) ---
+                            // Leg 1: DigitUnder (9) -> Gana con 0,1,2,3,4,5,6,7,8
                             ws.send(JSON.stringify({
                                 buy: 1, price: stakeFinal,
                                 parameters: {
                                     amount: stakeFinal, basis: 'stake',
                                     contract_type: 'DIGITUNDER', currency: botState.currency || 'USDT',
-                                    symbol: SYMBOL, duration: 1, duration_unit: 't', barrier: '8'
+                                    symbol: SYMBOL, duration: 1, duration_unit: 't', barrier: '9'
                                 }
                             }));
 
-                            // Leg 2: DigitOver (1) -> Gana con 2,3,4,5,6,7,8,9
+                            // Leg 2: DigitOver (0) -> Gana con 1,2,3,4,5,6,7,8,9
                             ws.send(JSON.stringify({
                                 buy: 1, price: stakeFinal,
                                 parameters: {
                                     amount: stakeFinal, basis: 'stake',
                                     contract_type: 'DIGITOVER', currency: botState.currency || 'USDT',
-                                    symbol: SYMBOL, duration: 1, duration_unit: 't', barrier: '1'
+                                    symbol: SYMBOL, duration: 1, duration_unit: 't', barrier: '0'
                                 }
                             }));
 
-                            console.log(`\n🚀 ATAQUE BINARIO ACTIVADO: [$${stakeFinal} x2]`);
-                            console.log(`🎯 ZONA GANANCIA DOBLE: (2,3,4,5,6,7) | ZONA MITIGACIÓN: (0,1,8,9)`);
+                            console.log(`\n🚀 ATAQUE BINARIO AL 80%: [$${stakeFinal} x2]`);
+                            console.log(`🎯 ZONA GANANCIA DOBLE: (1 al 8) | ZONA SEGURIDAD: (0 y 9)`);
                             
                             botState.currentContractType = 'BINARY_STRIKE';
-                            botState.currentBarrier = '1-8';
+                            botState.currentBarrier = '0-9';
                         } else if (contractType === 'DUAL_HEDGE') {
                             // --- DISPARO ÚNICO (RESCATE DARDO) ---
                             ws.send(JSON.stringify({
@@ -724,6 +725,7 @@ function finalizeTrade(c) {
     if (botState.currentContractType === 'DIGITOVER') labelOutput = `OVER (${botState.currentBarrier})`;
     if (botState.currentContractType === 'DIGITUNDER') labelOutput = `UNDER (${botState.currentBarrier})`;
     if (botState.currentContractType === 'DIGITMATCH') labelOutput = `🎯 MATCH (SI-${botState.currentBarrier})`;
+    if (botState.currentContractType === 'BINARY_STRIKE') labelOutput = `🔥 ATAQUE BINARIO`;
 
     botState.tradeHistory.unshift({
         type: labelOutput,
