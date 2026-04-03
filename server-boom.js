@@ -455,22 +455,33 @@ function connectDeriv() {
                             contractType = null;
                         }
                     } 
-                    // === MODO RECOLECTOR (COLOS-8 CHAOTIC v9.4) ===
+                    // === MODO RECOLECTOR (NÉMESIS v10.0) ===
                     else {
-                        // El Caos Estrategico: Mezclamos los 10 Digitos
-                        const digits = [0,1,2,3,4,5,6,7,8,9];
-                        for (let i = digits.length - 1; i > 0; i--) {
-                            const j = Math.floor(Math.random() * (i + 1));
-                            [digits[i], digits[j]] = [digits[j], digits[i]];
+                        // 1. EL REPETIDOR (Buscamos peligro para Diferirlo)
+                        const last5 = hist.slice(-5);
+                        let repeater = null;
+                        for(let d=0; d<=9; d++) {
+                            if (last5.filter(x => x === d).length >= 2) { repeater = d; break; }
                         }
-                        
-                        // Elegimos 8 de forma ALEATORIA (80% Area Impredecible)
-                        const target8 = digits.slice(0, 8); 
 
-                        triggerActive = 'COLOS-8 (Caos 80% Match)';
-                        contractType = 'MATCH_MACHINE_8';
-                        targetBarrier = target8.join(',');
-                        stakeFinal = 1.00;
+                        // 2. EL CONGELADO (Buscamos oportunidad para el Match)
+                        const last25 = hist.slice(-25);
+                        let frozen = null;
+                        for(let d=0; d<=9; d++) {
+                            if (!last25.includes(d)) { frozen = d; break; }
+                        }
+
+                        // VALIDACION DE ATAQUE NÉMESIS
+                        if (repeater !== null && frozen !== null) {
+                            triggerActive = 'NÉMESIS (Acorralando el Mercado)';
+                            contractType = 'NEMESIS_DUAL';
+                            // Guardamos ambos blancos: repeater para Differs, frozen para Match
+                            targetBarrier = `${repeater},${frozen}`;
+                            stakeFinal = 10.00;
+                        } else {
+                            triggerActive = null;
+                            contractType = null;
+                        }
                     }
                 }
             }
@@ -515,24 +526,33 @@ function connectDeriv() {
                             
                             botState.currentContractType = 'BINARY_STRIKE';
                             botState.currentBarrier = '0-9';
-                        } else if (contractType === 'MATCH_MACHINE_8') {
-                            // --- DISPARO SECUENCIAL (Onda de Choque 50ms) ---
-                            const barriers = targetBarrier.split(',');
-                            barriers.forEach((b, index) => {
-                                setTimeout(() => {
-                                    ws.send(JSON.stringify({
-                                        buy: 1, price: 1.00,
-                                        parameters: {
-                                            amount: 1.00, basis: 'stake',
-                                            contract_type: 'DIGITMATCH', currency: botState.currency || 'USDT',
-                                            symbol: SYMBOL, duration: 1, duration_unit: 't', barrier: b
-                                        }
-                                    }));
-                                }, index * 80); // 80ms de delay para no saturar el servidor
-                            });
-                            console.log(`\n🌪️ COLOS-8 SMART-BURST: Ataque a ${targetBarrier} (Gasto: $8.00)`);
-                            botState.currentContractType = 'MATCH_MACHINE_8';
-                            botState.lastBurstTime = Date.now(); // Bloqueamos ráfagas por 1.5s
+                        } else if (contractType === 'NEMESIS_DUAL') {
+                            const [rep, froz] = targetBarrier.split(',');
+                            
+                            // 1. DISPARO PRINCIPAL (Differs al Repetidor - Stake $10.00)
+                            ws.send(JSON.stringify({
+                                buy: 1, price: 10.00,
+                                parameters: {
+                                    amount: 10.00, basis: 'stake',
+                                    contract_type: 'DIGITDIFF', currency: botState.currency || 'USDT',
+                                    symbol: SYMBOL, duration: 1, duration_unit: 't', barrier: rep
+                                }
+                            }));
+
+                            // 2. DISPARO BONUS (Match al Congelado - Stake $0.50)
+                            ws.send(JSON.stringify({
+                                buy: 1, price: 0.50,
+                                parameters: {
+                                    amount: 0.50, basis: 'stake',
+                                    contract_type: 'DIGITMATCH', currency: botState.currency || 'USDT',
+                                    symbol: SYMBOL, duration: 1, duration_unit: 't', barrier: froz
+                                }
+                            }));
+
+                            console.log(`\n👹 NÉMESIS v10.0: [NO-${rep}] + [SI-${froz}]`);
+                            console.log(`📈 Profit Esperado: +$0.91 (Differs) | Bonus Match: +$4.50`);
+                            botState.currentContractType = 'NEMESIS_DUAL';
+                            botState.lastBurstTime = Date.now();
                         } else if (contractType) {
                             // --- DISPARO ÚNICO (DE RESPALDO) ---
                             ws.send(JSON.stringify({
