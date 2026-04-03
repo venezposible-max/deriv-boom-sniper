@@ -548,7 +548,8 @@ function connectDeriv() {
             botState.activeContractId = msg.buy.contract_id;
             botState.currentContractId = msg.buy.contract_id;
             botState.isBuying = false;
-            console.log(`🎯 DIFFERS ABIERTO [${msg.buy.contract_id}] | Barrera: NO-${botState.currentBarrier}`);
+            const openStake = msg.buy.buy_price || 0;
+            console.log(`🎯 CONTRATO ABIERTO [${msg.buy.contract_id}] | Stake: $${openStake} | Barrera: ${botState.currentBarrier}`);
 
             // Suscribir al resultado
             ws.send(JSON.stringify({ proposal_open_contract: 1, contract_id: msg.buy.contract_id, subscribe: 1 }));
@@ -750,7 +751,12 @@ function finalizeTrade(c) {
     if (botState.currentContractType === 'DIGITUNDER') labelOutput = `UNDER (${botState.currentBarrier})`;
     if (botState.currentContractType === 'DIGITMATCH') labelOutput = `🎯 MATCH (SI-${botState.currentBarrier})`;
     if (botState.currentContractType === 'BINARY_STRIKE') labelOutput = `🔥 ATAQUE BINARIO`;
-    if (botState.currentContractType === 'HEDGE_ZERO_RISK') labelOutput = `💎 HEDGE-MATCH (Riesgo $0.00)`;
+    
+    // Especial para Hedge
+    if (botState.currentContractType === 'HEDGE_ZERO_RISK') {
+        const isMatch = c.contract_type === 'DIGITMATCH';
+        labelOutput = isMatch ? `🛡️ SEGURO MATCH ($${c.buy_price})` : `💎 DIFFERS PRINCIPAL ($${c.buy_price})`;
+    }
 
     botState.tradeHistory.unshift({
         type: labelOutput,
