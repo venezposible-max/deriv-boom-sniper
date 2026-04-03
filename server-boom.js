@@ -442,15 +442,15 @@ function connectDeriv() {
                             contractType = null;
                         }
                     } 
-                    // === MODO RECOLECTOR (TANQUE INMORTAL HEDGE) ===
+                    // === MODO RECOLECTOR (HEDGE-MATCH RISK-ZERO) ===
                     else {
-                        // El motor genera un número RNG puro
+                        // El motor elige un número RNG puro
                         const randomDigit = Math.floor(Math.random() * 10);
                         targetBarrier = String(randomDigit);
                         
-                        // En modo Tanque activamos el disparador doble
-                        triggerActive = 'TANQUE-INMORTAL (Hedge)';
-                        contractType = 'DUAL_HEDGE'; // Flag interna para el disparador
+                        // Activamos la cobertura perfecta
+                        triggerActive = 'HEDGE-MATCH (Cobertura 100%)';
+                        contractType = 'HEDGE_ZERO_RISK'; 
                     }
                 }
             }
@@ -492,8 +492,34 @@ function connectDeriv() {
                             
                             botState.currentContractType = 'BINARY_STRIKE';
                             botState.currentBarrier = '0-9';
-                        } else if (contractType === 'DUAL_HEDGE') {
-                            // --- DISPARO ÚNICO (RESCATE DARDO) ---
+                        } else if (contractType === 'HEDGE_ZERO_RISK') {
+                            // --- DISPARO DUAL (EL SNIPER MATEMÁTICO) ---
+                            // 1. Contrato Differs Principal ($5.00)
+                            ws.send(JSON.stringify({
+                                buy: 1, price: 5.00,
+                                parameters: {
+                                    amount: 5.00, basis: 'stake',
+                                    contract_type: 'DIGITDIFF', currency: botState.currency || 'USDT',
+                                    symbol: SYMBOL, duration: 1, duration_unit: 't', barrier: targetBarrier
+                                }
+                            }));
+
+                            // 2. Seguro Match ($0.50)
+                            ws.send(JSON.stringify({
+                                buy: 1, price: 0.50,
+                                parameters: {
+                                    amount: 0.50, basis: 'stake',
+                                    contract_type: 'DIGITMATCH', currency: botState.currency || 'USDT',
+                                    symbol: SYMBOL, duration: 1, duration_unit: 't', barrier: targetBarrier
+                                }
+                            }));
+
+                            console.log(`\n🛡️ HEDGE-MATCH ACTIVADO: [SI/NO al ${targetBarrier}]`);
+                            console.log(`⚡ DISPARO: Differs($5.00) + Match($0.50) | Cobertura de Choque: 100%`);
+                            
+                            botState.currentContractType = 'HEDGE_ZERO_RISK';
+                        } else {
+                            // --- DISPARO ÚNICO (DE SEGURIDAD) ---
                             ws.send(JSON.stringify({
                                 buy: 1, price: stakeFinal,
                                 parameters: {
@@ -502,8 +528,6 @@ function connectDeriv() {
                                     symbol: SYMBOL, duration: 1, duration_unit: 't', barrier: targetBarrier
                                 }
                             }));
-                            console.log(`\n🎯 MODO RESCATE ACTIVADO: [${triggerActive}]`);
-                            console.log(`⚡ DISPARO: ${contractType} (${targetBarrier}) | Stake: $${stakeFinal}`);
                             botState.currentContractType = contractType;
                         }
 
@@ -726,6 +750,7 @@ function finalizeTrade(c) {
     if (botState.currentContractType === 'DIGITUNDER') labelOutput = `UNDER (${botState.currentBarrier})`;
     if (botState.currentContractType === 'DIGITMATCH') labelOutput = `🎯 MATCH (SI-${botState.currentBarrier})`;
     if (botState.currentContractType === 'BINARY_STRIKE') labelOutput = `🔥 ATAQUE BINARIO`;
+    if (botState.currentContractType === 'HEDGE_ZERO_RISK') labelOutput = `💎 HEDGE-MATCH (Riesgo $0.00)`;
 
     botState.tradeHistory.unshift({
         type: labelOutput,
