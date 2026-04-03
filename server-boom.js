@@ -415,19 +415,12 @@ function connectDeriv() {
                 const isAllHigh = last1 > 5 && last2 > 5 && last3 > 5 && last4 > 5 && last5 > 5;
                 const isAllLow  = last1 < 4 && last2 < 4 && last3 < 4 && last4 < 4 && last5 < 4;
 
-                // === ESTRATEGIA PRINCIPAL: OVER_UNDER (Rebote 5x) ===
+                // === ESTRATEGIA PRINCIPAL: ATAQUE BINARIO (60/40 Centro) ===
                 if (botState.strategyMode === 'OVER_UNDER') {
-                    contractType = null; // Esperando gatillo
-                    // Martingala leve de x2.1 para recuperación (muy segura comparada con x11)
-                    stakeFinal = botState.recoveryActive ? parseFloat((botState.stake * 2.1).toFixed(2)) : botState.stake;
-
-                    if (isAllHigh) {
-                        triggerActive = 'REBOTE BAJISTA (5 altos)';
-                        contractType = 'DIGITUNDER'; targetBarrier = '5';
-                    } else if (isAllLow) {
-                        triggerActive = 'REBOTE ALCISTA (5 bajos)';
-                        contractType = 'DIGITOVER'; targetBarrier = '4';
-                    }
+                    // El ataque binario siempre dispara al centro (Under 8 + Over 1)
+                    triggerActive = 'ATAQUE BINARIO (Striking)';
+                    contractType = 'BINARY_STRIKE';
+                    stakeFinal = botState.stake;
                 }
                 // === ESTRATEGIA PRINCIPAL: DIFFERS ===
                 else {
@@ -471,33 +464,34 @@ function connectDeriv() {
                     const netP = botState.dailyProfit - botState.dailyLoss;
                     if (netP < botState.takeProfit && netP > -botState.maxDailyLoss) {
 
-                        if (contractType === 'DUAL_HEDGE') {
-                            // --- DISPARO DUAL (EL TANQUE) ---
-                            // 1. Contrato Differs Principal ($4.00)
+                        if (contractType === 'BINARY_STRIKE') {
+                            // --- DISPARO DUAL BINARIO (+40% Profit Potential) ---
+                            // Leg 1: DigitUnder (8) -> Gana con 0,1,2,3,4,5,6,7
                             ws.send(JSON.stringify({
-                                buy: 1, price: 4.00,
+                                buy: 1, price: stakeFinal,
                                 parameters: {
-                                    amount: 4.00, basis: 'stake',
-                                    contract_type: 'DIGITDIFF', currency: botState.currency || 'USDT',
-                                    symbol: SYMBOL, duration: 1, duration_unit: 't', barrier: targetBarrier
+                                    amount: stakeFinal, basis: 'stake',
+                                    contract_type: 'DIGITUNDER', currency: botState.currency || 'USDT',
+                                    symbol: SYMBOL, duration: 1, duration_unit: 't', barrier: '8'
                                 }
                             }));
 
-                            // 2. Seguro Match ($0.35) - Mismo número
+                            // Leg 2: DigitOver (1) -> Gana con 2,3,4,5,6,7,8,9
                             ws.send(JSON.stringify({
-                                buy: 1, price: 0.35,
+                                buy: 1, price: stakeFinal,
                                 parameters: {
-                                    amount: 0.35, basis: 'stake',
-                                    contract_type: 'DIGITMATCH', currency: botState.currency || 'USDT',
-                                    symbol: SYMBOL, duration: 1, duration_unit: 't', barrier: targetBarrier
+                                    amount: stakeFinal, basis: 'stake',
+                                    contract_type: 'DIGITOVER', currency: botState.currency || 'USDT',
+                                    symbol: SYMBOL, duration: 1, duration_unit: 't', barrier: '1'
                                 }
                             }));
 
-                            console.log(`\n🛡️ MODO TANQUE ACTIVADO: [SI/NO al ${targetBarrier}]`);
-                            console.log(`⚡ DISPARO DUAL: Differs($4.00) + Match($0.35) | Reduciendo riesgo un 80%`);
+                            console.log(`\n🚀 ATAQUE BINARIO ACTIVADO: [$${stakeFinal} x2]`);
+                            console.log(`🎯 ZONA GANANCIA DOBLE: (2,3,4,5,6,7) | ZONA MITIGACIÓN: (0,1,8,9)`);
                             
-                            botState.currentContractType = 'DUAL_HEDGE';
-                        } else {
+                            botState.currentContractType = 'BINARY_STRIKE';
+                            botState.currentBarrier = '1-8';
+                        } else if (contractType === 'DUAL_HEDGE') {
                             // --- DISPARO ÚNICO (RESCATE DARDO) ---
                             ws.send(JSON.stringify({
                                 buy: 1, price: stakeFinal,
