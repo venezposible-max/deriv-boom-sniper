@@ -389,21 +389,7 @@ function connectDeriv() {
             botState.digitHistory.push(tickDigit);
             if (botState.digitHistory.length > 50) botState.digitHistory.shift();
             
-            // 1.5 CHECK VIRTUAL TRADE RESOLUTION (SHADOW TRADING PARA DIFFERS)
-            if (botState.activeVirtualContract && botState.strategyMode === 'DIFFERS' && !botState.recoveryActive) {
-                const target = botState.activeVirtualContract.barrier;
-                // En DIFFERS, el loss pasa si el último dígito ES IGUAL a la barrera disparada
-                const isLoss = (String(tickDigit) === String(target)); 
-                
-                if (isLoss) {
-                    botState.virtualLossStreak++;
-                    console.log(`🎯 ¡PÉRDIDA FANTASMA ATRAPADA! (Dígito ${tickDigit} chocó). Racha Fantasma: ${botState.virtualLossStreak}`);
-                    console.log(`🚀 PRÓXIMA OPORTUNIDAD SE EJECUTARÁ CON DINERO REAL.`);
-                } else {
-                    botState.virtualLossStreak = 0; // Se ganó, volvemos a buscar la pérdida simulada
-                }
-                botState.activeVirtualContract = null;
-            }
+
             
             // 2. EVALUACIÓN DE GATILLOS INTELIGENTES (Modo Recolector vs Modo Rescate)
             const hist = botState.digitHistory;
@@ -461,7 +447,7 @@ function connectDeriv() {
                         contractType = 'DIGITDIFF';
                         // Generador de Números Aleatorios (RNG Puro) - Ignora falsos patrones
                         const randomDigit = Math.floor(Math.random() * 10);
-                        triggerActive = 'ALGORITMO ALEATORIO (Rápido)';
+                        triggerActive = 'RNG-Puro (Hyper-Speed)';
                         targetBarrier = String(randomDigit);
                     }
                 }
@@ -472,24 +458,7 @@ function connectDeriv() {
                 const now = Date.now();
                 if ((now - botState.lastTradeTime) >= botState.cooldownMs) {
                     
-                    // ============================================
-                    // SHADOW TRADING INTERCEPTOR (Solo para DIFFERS Principal)
-                    // ============================================
-                    if (botState.strategyMode === 'DIFFERS' && !botState.recoveryActive) {
-                        if (botState.virtualLossStreak < 1) {
-                            // En lugar de ir a la API, lanzamos un trade simulado en la mente del bot
-                            if (!botState.activeVirtualContract) {
-                                botState.activeVirtualContract = { barrier: targetBarrier };
-                                console.log(`\n👻 OPERACIÓN FANTASMA: Simulando ${contractType} NO-${targetBarrier} [Gatillo: ${triggerActive}]`);
-                                botState.lastTradeTime = now; // Put on cooldown para no spam
-                            }
-                            return; // ABORT REAL TRADE!
-                        } else {
-                            // ¡Pérdida trampa purgada! Disparamos con dinero real
-                            botState.virtualLossStreak = 0;
-                            console.log(`\n💎 DISPARO REAL: Racha de mala suerte simulada purgada pacientemente...`);
-                        }
-                    }
+
 
                     const netP = botState.dailyProfit - botState.dailyLoss;
                     if (netP < botState.takeProfit && netP > -botState.maxDailyLoss) {
