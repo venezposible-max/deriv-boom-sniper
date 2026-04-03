@@ -454,29 +454,24 @@ function connectDeriv() {
                             contractType = null;
                         }
                     } 
-                    // === MODO RECOLECTOR (MATCH-HUNTER v8.0) ===
+                    // === MODO RECOLECTOR (COLOS-8 MACHINE v9.2) ===
                     else {
-                        // El cazador de Differs ahora caza MATCH
+                        // Analisis de Frecuencia (Uiltimos 25 Ticks)
                         const last25 = hist.slice(-25);
                         const counts = {};
                         for(let i=0; i<=9; i++) counts[i] = 0;
                         last25.forEach(d => counts[d]++);
 
-                        let frozenDigit = null;
-                        // Buscamos el número con 0 apariciones (Congelado)
-                        for(let i=0; i<=9; i++) {
-                            if (counts[i] === 0) { frozenDigit = i; break; }
-                        }
+                        // Ordenar de Mayor a Menor aparicion
+                        const sorted = Object.keys(counts).sort((a, b) => counts[b] - counts[a]);
+                        
+                        // ELEGIMOS LOS 8 MAS ACTIVOS (80% Area)
+                        const target8 = sorted.slice(0, 8); 
 
-                        if (frozenDigit !== null) {
-                            triggerActive = `DARDO LETAL (Cazando al ${frozenDigit})`;
-                            contractType = 'DIGITMATCH';
-                            targetBarrier = String(frozenDigit);
-                            stakeFinal = 1.00;
-                        } else {
-                            triggerActive = null;
-                            contractType = null;
-                        }
+                        triggerActive = 'COLOS-8 (Ametralladora 80%)';
+                        contractType = 'MATCH_MACHINE_8';
+                        targetBarrier = target8.join(',');
+                        stakeFinal = 1.00;
                     }
                 }
             }
