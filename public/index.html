@@ -26,10 +26,10 @@
         .header { text-align: center; margin-bottom: 20px; padding-top: 10px; }
         .header h1 {
             font-size: 26px; font-weight: 900; margin: 0;
-            background: linear-gradient(135deg, #a78bfa, #7c3aed);
+            background: linear-gradient(135deg, #34d399, #059669);
             -webkit-background-clip: text; -webkit-text-fill-color: transparent;
             text-shadow: none;
-            filter: drop-shadow(0 0 18px rgba(167,139,250,0.5));
+            filter: drop-shadow(0 0 18px rgba(52,211,153,0.5));
         }
         .header.real-mode h1 {
             background: linear-gradient(135deg, #f87171, #dc2626);
@@ -261,8 +261,7 @@
 
     <!-- STRATEGY SELECTOR -->
     <div style="display: flex; gap: 8px; margin-bottom: 20px; justify-content: center;">
-        <button id="btnStratDiffers" onclick="switchStrategy('DIFFERS')" class="chip chip-purple" style="cursor:pointer; border:none; background: #7c3aed; color:white; padding: 10px 16px; font-weight: 800;">🎯 SMART DIFFERS</button>
-        <button id="btnStratOU" onclick="switchStrategy('OVER_UNDER')" class="chip chip-purple" style="cursor:pointer; border:none; padding: 10px 16px; font-weight: 800; background: rgba(167,139,250,0.15); color: #a78bfa;">🔥 ATAQUE BINARIO</button>
+        <button id="btnStratDiffers" class="chip chip-green" style="cursor:default; border:none; background: #059669; color:white; padding: 10px 16px; font-weight: 800;">🛡️ ANTIGRAVITY SHIELD v16.1</button>
     </div>
 
     <!-- MARKET SELECTOR -->
@@ -294,6 +293,16 @@
     <div class="price-block">
         <div class="balance-badge" id="balanceDisplay">SALDO: $0.00</div>
         <div class="price-hero" id="priceDisplay">---</div>
+        
+        <!-- [FRANKLIN v16.1] AREA DE INDICADORES -->
+        <div style="display: flex; justify-content: center; gap: 12px; margin-top: 15px;">
+            <div id="rsiBadge" style="padding: 6px 12px; border-radius: 10px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); font-size: 13px; font-weight: 800;">
+                ⚡ RSI-5: <span id="rsiValueDisplay">--</span>
+            </div>
+            <div id="emaBadge" style="padding: 6px 12px; border-radius: 10px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); font-size: 13px; font-weight: 800;">
+                📊 EMA-5: <span id="emaValueDisplay">--</span>
+            </div>
+        </div>
     </div>
 
     <!-- LAST DIGIT + BARRIER -->
@@ -506,6 +515,20 @@
             // Price
             const price = parseFloat(data.lastTickPrice || 0);
             document.getElementById('priceDisplay').innerText = price > 0 ? price.toFixed(3) : '---';
+
+            // [FRANKLIN v16.1] SYNC INDICATORS
+            const rsi = parseFloat(data.lastRSI || 50);
+            const ema = parseFloat(data.lastEMA || 0);
+            const rsiDisp = document.getElementById('rsiValueDisplay');
+            const emaDisp = document.getElementById('emaValueDisplay');
+            
+            rsiDisp.innerText = rsi.toFixed(2);
+            emaDisp.innerText = ema.toFixed(3);
+
+            // Estilos dinámicos
+            document.getElementById('rsiBadge').style.borderColor = (rsi > 75 || rsi < 25) ? '#34d399' : 'rgba(255,255,255,0.1)';
+            document.getElementById('rsiBadge').style.color = (rsi > 75 || rsi < 25) ? '#34d399' : '#fff';
+            document.getElementById('emaBadge').style.borderColor = (price > ema) ? '#34d399' : '#f87171';
 
             // Last digit
             const ld = document.getElementById('lastDigitBadge');
