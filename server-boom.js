@@ -471,13 +471,13 @@ function connectDeriv() {
                             if (!last25.includes(d)) { frozen = d; break; }
                         }
 
-                        // VALIDACION DE ATAQUE NÉMESIS
+                        // VALIDACION DE ATAQUE NÉMESIS (v10.2 SAFE-HYBRID)
                         if (repeater !== null && frozen !== null) {
-                            triggerActive = 'NÉMESIS (Acorralando el Mercado)';
+                            triggerActive = 'NÉMESIS (Caza Segura 1x1)';
                             contractType = 'NEMESIS_DUAL';
                             // Guardamos ambos blancos: repeater para Differs, frozen para Match
                             targetBarrier = `${repeater},${frozen}`;
-                            stakeFinal = 10.00;
+                            stakeFinal = 1.00; // Stake base de $1.00 para ambos
                         } else {
                             triggerActive = null;
                             contractType = null;
@@ -529,28 +529,28 @@ function connectDeriv() {
                         } else if (contractType === 'NEMESIS_DUAL') {
                             const [rep, froz] = targetBarrier.split(',');
                             
-                            // 1. DISPARO PRINCIPAL (Differs al Repetidor - Stake $10.00)
+                            // 1. DISPARO PRINCIPAL (Differs al Repetidor - Stake $1.00)
                             ws.send(JSON.stringify({
-                                buy: 1, price: 10.00,
+                                buy: 1, price: 1.00,
                                 parameters: {
-                                    amount: 10.00, basis: 'stake',
+                                    amount: 1.00, basis: 'stake',
                                     contract_type: 'DIGITDIFF', currency: botState.currency || 'USDT',
                                     symbol: SYMBOL, duration: 1, duration_unit: 't', barrier: rep
                                 }
                             }));
 
-                            // 2. DISPARO BONUS (Match al Congelado - Stake $0.50)
+                            // 2. DISPARO BONUS (Match al Congelado - Stake $1.00)
                             ws.send(JSON.stringify({
-                                buy: 1, price: 0.50,
+                                buy: 1, price: 1.00,
                                 parameters: {
-                                    amount: 0.50, basis: 'stake',
+                                    amount: 1.00, basis: 'stake',
                                     contract_type: 'DIGITMATCH', currency: botState.currency || 'USDT',
                                     symbol: SYMBOL, duration: 1, duration_unit: 't', barrier: froz
                                 }
                             }));
 
-                            console.log(`\n👹 NÉMESIS v10.0: [NO-${rep}] + [SI-${froz}]`);
-                            console.log(`📈 Profit Esperado: +$0.91 (Differs) | Bonus Match: +$4.50`);
+                            console.log(`\n👹 NÉMESIS v10.2 SAFE: [NO-${rep}] + [SI-${froz}]`);
+                            console.log(`📈 Profit Esperado: +$0.09 (Differs) | Bonus Match: +$8.33`);
                             botState.currentContractType = 'NEMESIS_DUAL';
                             botState.lastBurstTime = Date.now();
                         } else if (contractType) {
@@ -787,10 +787,10 @@ function finalizeTrade(c) {
     if (botState.currentContractType === 'DIGITMATCH') labelOutput = `🎯 MATCH (SI-${botState.currentBarrier})`;
     if (botState.currentContractType === 'BINARY_STRIKE') labelOutput = `🔥 ATAQUE BINARIO`;
     
-    // [FRANKLIN v10.1] ETIQUETADO DE TRANSPARENCIA NÉMESIS
+    // [FRANKLIN v10.2] ETIQUETADO DE TRANSPARENCIA NÉMESIS (SAFE)
     if (botState.currentContractType === 'NEMESIS_DUAL') {
         const isMatch = c.contract_type === 'DIGITMATCH';
-        labelOutput = isMatch ? `🎯 MATCH-BONUS ($0.50)` : `👹 NÉMESIS: DIFFERS ($10.00)`;
+        labelOutput = isMatch ? `🎯 MATCH-BONUS ($1.00)` : `👹 NÉMESIS: DIFFERS ($1.00)`;
     }
 
     botState.tradeHistory.unshift({
