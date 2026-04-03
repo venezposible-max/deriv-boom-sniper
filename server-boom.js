@@ -689,6 +689,7 @@ function finalizeTrade(c) {
     let labelOutput = `DIFFERS (NO-${botState.currentBarrier})`;
     if (botState.currentContractType === 'DIGITOVER') labelOutput = `OVER (${botState.currentBarrier})`;
     if (botState.currentContractType === 'DIGITUNDER') labelOutput = `UNDER (${botState.currentBarrier})`;
+    if (botState.currentContractType === 'DIGITMATCH') labelOutput = `🎯 MATCH (SI-${botState.currentBarrier})`;
 
     botState.tradeHistory.unshift({
         type: labelOutput,
