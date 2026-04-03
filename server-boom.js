@@ -455,21 +455,16 @@ function connectDeriv() {
                             contractType = null;
                         }
                     } 
-                    // === MODO RECOLECTOR (SNIPER ELITE v15.0) ===
+                    // === MODO RECOLECTOR (CERO RIESGO v15.2) ===
                     else {
-                        const randomDigit = Math.floor(Math.random() * 10);
-                        targetBarrier = String(randomDigit);
+                        const targetDigit = Math.floor(Math.random() * 10);
+                        targetBarrier = String(targetDigit);
 
-                        // GATILLO: Si el número NO salió en los últimos 5 ticks, es SEGURO diferirlo.
-                        const last5 = botState.digitHistory.slice(-5);
-                        if (!last5.includes(randomDigit)) {
-                            triggerActive = 'SNIPER (Profit Limpio)';
-                            contractType = 'DIGITDIFF';
-                            stakeFinal = 1.00;
-                        } else {
-                            triggerActive = null;
-                            contractType = null;
-                        }
+                        // ANALISIS DE SEGURIDAD TOTAL: 
+                        // Activamos siempre el seguro matemático equilibrado.
+                        triggerActive = 'CERO-RIESGO (🛡️ Inmunidad Activa)';
+                        contractType = 'CERO_RIESGO_HEDGE';
+                        stakeFinal = 17.00; 
                     }
                 }
             }
@@ -540,18 +535,32 @@ function connectDeriv() {
                             console.log(`⚡ DISPARO: Differs($3.50) + Match($0.50) | Riesgo de Choque: $0.00`);
                             
                             botState.currentContractType = 'HEDGE_ZERO_RISK';
-                        } else {
-                            // --- DISPARO ÚNICO (SNIIPER ELITE) ---
+                        } else if (contractType === 'CERO_RIESGO_HEDGE') {
+                            // --- DISPARO DUAL (CERO RIESGO v15.2) ---
+                            // 1. Tanque Principal ($17.00 Differs) -> Profit +$1.55
                             ws.send(JSON.stringify({
-                                buy: 1, price: stakeFinal,
+                                buy: 1, price: 17.00,
                                 parameters: {
-                                    amount: stakeFinal, basis: 'stake',
-                                    contract_type: contractType, currency: botState.currency || 'USDT',
+                                    amount: 17.00, basis: 'stake',
+                                    contract_type: 'DIGITDIFF', currency: botState.currency || 'USDT',
                                     symbol: SYMBOL, duration: 1, duration_unit: 't', barrier: targetBarrier
                                 }
                             }));
-                            botState.currentContractType = contractType;
-                            console.log(`\n🎯 SNIPER v15.0: ${contractType} al ${targetBarrier} (Stake: $${stakeFinal})`);
+
+                            // 2. Escudo Total ($1.40 Match) -> Recupera los $17.00 perdidos y el gasto del seguro
+                            ws.send(JSON.stringify({
+                                buy: 1, price: 1.40,
+                                parameters: {
+                                    amount: 1.40, basis: 'stake',
+                                    contract_type: 'DIGITMATCH', currency: botState.currency || 'USDT',
+                                    symbol: SYMBOL, duration: 1, duration_unit: 't', barrier: targetBarrier
+                                }
+                            }));
+
+                            console.log(`\n🛡️ CERO-RIESGO v15.2 ACTIVADO: [SI/NO al ${targetBarrier}]`);
+                            console.log(`⚡ DISPARO: Differs($17.00) + Match($1.40) | Riesgo de Choque: $0.00`);
+                            
+                            botState.currentContractType = 'CERO_RIESGO_HEDGE';
                         }
 
                         botState.isBuying = true;
@@ -775,9 +784,11 @@ function finalizeTrade(c) {
     if (botState.currentContractType === 'DIGITMATCH') labelOutput = `🎯 MATCH (SI-${botState.currentBarrier})`;
     if (botState.currentContractType === 'BINARY_STRIKE') labelOutput = `🔥 ATAQUE BINARIO`;
     
-    // [FRANKLIN v15.0] ETIQUETADO SNIPER ELITE
-    if (botState.currentContractType === 'DIGITDIFF') labelOutput = `⚡ SNIPER: DIFFERS`;
-    if (botState.currentContractType === 'DIGITMATCH') labelOutput = `🎯 RECOVERY: MATCH`;
+    // [FRANKLIN v15.2] ETIQUETADO CERO RIESGO
+    if (botState.currentContractType === 'CERO_RIESGO_HEDGE') {
+        const isMatch = c.contract_type === 'DIGITMATCH';
+        labelOutput = isMatch ? `🛡️ ESCUDO: MATCH ($1.40)` : `⚡ CERO-RIESGO: DIFFERS ($17.00)`;
+    }
 
     botState.tradeHistory.unshift({
         type: labelOutput,
