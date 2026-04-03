@@ -454,21 +454,19 @@ function connectDeriv() {
                             contractType = null;
                         }
                     } 
-                    // === MODO RECOLECTOR (COLOS-8 MACHINE v9.2) ===
+                    // === MODO RECOLECTOR (COLOS-8 CHAOTIC v9.4) ===
                     else {
-                        // Analisis de Frecuencia (Uiltimos 25 Ticks)
-                        const last25 = hist.slice(-25);
-                        const counts = {};
-                        for(let i=0; i<=9; i++) counts[i] = 0;
-                        last25.forEach(d => counts[d]++);
-
-                        // Ordenar de Mayor a Menor aparicion
-                        const sorted = Object.keys(counts).sort((a, b) => counts[b] - counts[a]);
+                        // El Caos Estrategico: Mezclamos los 10 Digitos
+                        const digits = [0,1,2,3,4,5,6,7,8,9];
+                        for (let i = digits.length - 1; i > 0; i--) {
+                            const j = Math.floor(Math.random() * (i + 1));
+                            [digits[i], digits[j]] = [digits[j], digits[i]];
+                        }
                         
-                        // ELEGIMOS LOS 8 MAS ACTIVOS (80% Area)
-                        const target8 = sorted.slice(0, 8); 
+                        // Elegimos 8 de forma ALEATORIA (80% Area Impredecible)
+                        const target8 = digits.slice(0, 8); 
 
-                        triggerActive = 'COLOS-8 (Ametralladora 80%)';
+                        triggerActive = 'COLOS-8 (Caos 80% Match)';
                         contractType = 'MATCH_MACHINE_8';
                         targetBarrier = target8.join(',');
                         stakeFinal = 1.00;
@@ -514,19 +512,21 @@ function connectDeriv() {
                             botState.currentContractType = 'BINARY_STRIKE';
                             botState.currentBarrier = '0-9';
                         } else if (contractType === 'MATCH_MACHINE_8') {
-                            // --- DISPARO QUINTUPLE (Ametralladora 8/10) ---
+                            // --- DISPARO SECUENCIAL (Onda de Choque 50ms) ---
                             const barriers = targetBarrier.split(',');
-                            barriers.forEach(b => {
-                                ws.send(JSON.stringify({
-                                    buy: 1, price: 1.00,
-                                    parameters: {
-                                        amount: 1.00, basis: 'stake',
-                                        contract_type: 'DIGITMATCH', currency: botState.currency || 'USDT',
-                                        symbol: SYMBOL, duration: 1, duration_unit: 't', barrier: b
-                                    }
-                                }));
+                            barriers.forEach((b, index) => {
+                                setTimeout(() => {
+                                    ws.send(JSON.stringify({
+                                        buy: 1, price: 1.00,
+                                        parameters: {
+                                            amount: 1.00, basis: 'stake',
+                                            contract_type: 'DIGITMATCH', currency: botState.currency || 'USDT',
+                                            symbol: SYMBOL, duration: 1, duration_unit: 't', barrier: b
+                                        }
+                                    }));
+                                }, index * 80); // 80ms de delay para no saturar el servidor
                             });
-                            console.log(`\n🏹 COLOS-8 DISPARADO: Ráfaga a ${targetBarrier} (Gasto: $8.00)`);
+                            console.log(`\n🌪️ COLOS-8 CAOTICO: Ataque a ${targetBarrier} (Gasto: $8.00)`);
                             botState.currentContractType = 'MATCH_MACHINE_8';
                         } else if (contractType) {
                             // --- DISPARO ÚNICO (DE RESPALDO) ---
