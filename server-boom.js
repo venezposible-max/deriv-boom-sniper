@@ -455,18 +455,18 @@ function connectDeriv() {
                             contractType = null;
                         }
                     } 
-                    // === MODO RECOLECTOR (GANA-GANA TRIANGULAR v12.1) ===
+                    // === MODO RECOLECTOR (GANA-GANA v12.2: CILINDRO MAESTRO) ===
                     else {
                         const targetDigit = Math.floor(Math.random() * 10);
                         targetBarrier = String(targetDigit);
 
                         // ANALISIS DE SEGURIDAD TRIANGULAR (R_100 + R_10)
-                        triggerActive = 'TRIANGULAR (Inmortalidad Activa)';
+                        triggerActive = 'CILINDRO MAESTRO (Inmortalidad Activa)';
                         contractType = 'TRIANGULAR_HEDGE';
                         
-                        // Configuración de Stakes Milimétricos
+                        // Configuración de Stakes Optimizados (Gana-Gana Real)
                         // R_100: $15.00 Differs + $1.90 Match
-                        // R_10: $0.70 Over (0)
+                        // R_10: $6.00 Differs NO-0 (Profit $0.54) -> Paga el Seguro de R_100
                         stakeFinal = 15.00;
                     }
                 }
@@ -539,9 +539,9 @@ function connectDeriv() {
                             
                             botState.currentContractType = 'HEDGE_ZERO_RISK';
                         } else if (contractType === 'TRIANGULAR_HEDGE') {
-                            // --- DISPARO TRIPLE (EL TRIANGULO DE HIERRO v12.1) ---
+                            // --- DISPARO TRIPLE (CILINDRO MAESTRO v12.2) ---
                             
-                            // 1. R_100: TANQUE DIFFERS ($15.00) -> NO al targetDigit
+                            // 1. R_100: TANQUE DIFFERS ($15.00) -> NO al targetDigit (Profit +$1.36)
                             ws.send(JSON.stringify({
                                 buy: 1, price: 15.00,
                                 parameters: {
@@ -561,18 +561,19 @@ function connectDeriv() {
                                 }
                             }));
 
-                            // 3. R_10 (Mercado Externo): ANCLA DE PROFIT ($0.70) -> Over 0 (90% WinRate)
+                            // 3. R_10 (Mercado Externo): MOTOR DE PROFIT ($6.00) -> Differs NO-0 (Profit +$0.54)
+                            // Este profit de +$0.54 paga exactamente el costo del seguro (-$0.54)
                             ws.send(JSON.stringify({
-                                buy: 1, price: 0.70,
+                                buy: 1, price: 6.00,
                                 parameters: {
-                                    amount: 0.70, basis: 'stake',
-                                    contract_type: 'DIGITOVER', currency: botState.currency || 'USDT',
+                                    amount: 6.00, basis: 'stake',
+                                    contract_type: 'DIGITDIFF', currency: botState.currency || 'USDT',
                                     symbol: 'R_10', duration: 1, duration_unit: 't', barrier: '0'
                                 }
                             }));
 
-                            console.log(`\n📐 TRIANGULAR v12.1 ACTIVADO: [R100: NO-${targetBarrier} ($15) / SI-${targetBarrier} ($1.90)] + [R10: Over0 ($0.70)]`);
-                            console.log(`🛡️ Riesgo de Choque: $0.00 | Profit x Tick: +$0.09`);
+                            console.log(`\n🌀 CILINDRO v12.2 ACTIVADO: [R100: $15 / $1.90] + [R10: $6]`);
+                            console.log(`🛡️ Riesgo de Choque: $0.00 | Profit x Tick: +$0.00 (Empate Total)`);
                             botState.currentContractType = 'TRIANGULAR_HEDGE';
                         } else if (contractType) {
                             // --- DISPARO ÚNICO (DE RESPALDO) ---
