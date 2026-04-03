@@ -415,29 +415,25 @@ function connectDeriv() {
                 const isAllHigh = last1 > 5 && last2 > 5 && last3 > 5 && last4 > 5 && last5 > 5;
                 const isAllLow  = last1 < 4 && last2 < 4 && last3 < 4 && last4 < 4 && last5 < 4;
 
-                // === ESTRATEGIA PRINCIPAL: MATCH-HUNTER (Caza x9) ===
+                // === ESTRATEGIA: COLOS-8 (Ametralladora 8/10) ===
                 if (botState.strategyMode === 'OVER_UNDER') {
-                    // El cazador analiza los últimos 25 ticks
+                    // El Analista de 25 Ticks
                     const last25 = hist.slice(-25);
                     const counts = {};
                     for(let i=0; i<=9; i++) counts[i] = 0;
                     last25.forEach(d => counts[d]++);
 
-                    // Buscamos un número "Congelado" (0 apariciones en 25 ticks)
-                    let frozenDigit = null;
-                    for(let i=0; i<=9; i++) {
-                        if (counts[i] === 0) { frozenDigit = i; break; }
-                    }
+                    // Ordenar por apariciones (De Hot a Cold)
+                    const sortedDigits = Object.keys(counts).sort((a, b) => counts[b] - counts[a]);
+                    
+                    // SEGURIDAD ANALITICA: Omitimos los 2 números que MENOS han salido (Los que están muertos)
+                    // Disparamos del 0 al 7 (Los 8 más activos)
+                    const target8 = sortedDigits.slice(0, 8); 
 
-                    if (frozenDigit !== null) {
-                        triggerActive = `DARDO LETAL (Cazando al ${frozenDigit})`;
-                        contractType = 'DIGITMATCH';
-                        targetBarrier = String(frozenDigit);
-                        stakeFinal = 1.00;
-                    } else {
-                        triggerActive = null;
-                        contractType = null;
-                    }
+                    triggerActive = 'COLOS-8 (Rafaga 80% Match)';
+                    contractType = 'MATCH_MACHINE_8';
+                    targetBarrier = target8.join(',');
+                    stakeFinal = 1.00;
                 }
                 // === ESTRATEGIA PRINCIPAL: DIFFERS ===
                 else {
@@ -522,8 +518,23 @@ function connectDeriv() {
                             
                             botState.currentContractType = 'BINARY_STRIKE';
                             botState.currentBarrier = '0-9';
-                        } else {
-                            // --- DISPARO ÚNICO (MATCH HUNTER) ---
+                        } else if (contractType === 'MATCH_MACHINE_8') {
+                            // --- DISPARO QUINTUPLE (Ametralladora 8/10) ---
+                            const barriers = targetBarrier.split(',');
+                            barriers.forEach(b => {
+                                ws.send(JSON.stringify({
+                                    buy: 1, price: 1.00,
+                                    parameters: {
+                                        amount: 1.00, basis: 'stake',
+                                        contract_type: 'DIGITMATCH', currency: botState.currency || 'USDT',
+                                        symbol: SYMBOL, duration: 1, duration_unit: 't', barrier: b
+                                    }
+                                }));
+                            });
+                            console.log(`\n🏹 COLOS-8 DISPARADO: Ráfaga a ${targetBarrier} (Gasto: $8.00)`);
+                            botState.currentContractType = 'MATCH_MACHINE_8';
+                        } else if (contractType) {
+                            // --- DISPARO ÚNICO (DE RESPALDO) ---
                             ws.send(JSON.stringify({
                                 buy: 1, price: stakeFinal,
                                 parameters: {
@@ -533,7 +544,6 @@ function connectDeriv() {
                                 }
                             }));
                             botState.currentContractType = contractType;
-                            console.log(`\n🏹 DISPARANDO DARDO MATCH al ${targetBarrier} (Stake: $${stakeFinal})`);
                         }
 
                         botState.isBuying = true;
