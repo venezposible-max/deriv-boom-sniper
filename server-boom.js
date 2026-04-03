@@ -59,6 +59,7 @@ let botState = {
     isRealAccount: false,      // true: Cuenta Real, false: Demo (por defecto)
     isRecoveryEnabled: false,   // true: Intentar recuperar tras pérdida
     recoveryActive: false,     // Internal: si el próximo trade es de recuperación
+    recoveryStep: 0,           // Contador de intentos de recuperación
     virtualLossStreak: 0,      // Racha de pérdidas fantasma
     activeVirtualContract: null // Si hay un contrato simulado pendiente
 };
@@ -424,22 +425,19 @@ function connectDeriv() {
                 }
                 // === ESTRATEGIA PRINCIPAL: DIFFERS ===
                 else {
-                    // === MODO RESCATE (OVER/UNDER Cruzado) ===
+                    // === MODO RESCATE (Técnica A: Dardo Match x9) ===
                     if (botState.recoveryActive) {
-                        contractType = null; // Esperando gatillo exclusivo
-                        stakeFinal = parseFloat((botState.stake * 1.2).toFixed(2)); // Stake cruzado barato
-
-                        // GATILLO DE RESCATE: Rebote Extremo Hacia Abajo (Modificado a 5x para máxima seguridad)
-                        if (isAllHigh) {
-                            triggerActive = 'REBOTE BAJISTA CRUZADO (5 altos)';
-                            contractType = 'DIGITUNDER';
-                            targetBarrier = '5'; // Gana con 0,1,2,3,4
-                        }
-                        // GATILLO DE RESCATE: Rebote Extremo Hacia Arriba
-                        else if (isAllLow) {
-                            triggerActive = 'REBOTE ALCISTA CRUZADO (5 bajos)';
-                            contractType = 'DIGITOVER';
-                            targetBarrier = '4'; // Gana con 5,6,7,8,9
+                        contractType = 'DIGITMATCH';
+                        targetBarrier = String(botState.lastLosingDigit || 0);
+                        stakeFinal = 0.15; // Arriesga poco para ganar x9 (Retorna $1.35)
+                        triggerActive = `DARDO MATCH (Cazando al ${targetBarrier})`;
+                        
+                        // Si ya tiramos 2 dardos y no cayó, abortamos rescate por seguridad
+                        if (botState.recoveryStep >= 2) {
+                            botState.recoveryActive = false;
+                            botState.recoveryStep = 0;
+                            triggerActive = null;
+                            contractType = null;
                         }
                     } 
                     // === MODO RECOLECTOR (Rápido y Dinámico) ===
@@ -630,8 +628,9 @@ function finalizeTrade(c) {
         
         // Si ganamos, desactivamos recuperación si estaba activa
         if (botState.recoveryActive) {
-            console.log("💎 RECUPERACIÓN EXITOSA. Volviendo al Stake normal.");
+            console.log("💎 DARDO MATCH IMPACTADO: Recuperación Exitosa.");
             botState.recoveryActive = false;
+            botState.recoveryStep = 0;
         }
 
         // Rotar estrategia solo después de un WIN
@@ -648,16 +647,28 @@ function finalizeTrade(c) {
         console.log(`🛡️ Dígito ${badDigit} en Lista Negra por 2 min.`);
 
         // LÓGICA ONE-SHOT:
-        if (botState.isRecoveryEnabled && !botState.recoveryActive) {
-            // SI venimos de un trade NORMAL y perdemos, activamos recuperación
-            botState.recoveryActive = true;
-            console.log("🛡️ MODO RECUPERACIÓN ACTIVADO PARA EL SIGUIENTE DISPARO (One-Shot).");
-        } else {
-            // SI YA ESTÁBAMOS EN RECUPERACIÓN y perdemos (o si el modo está OFF), volvemos a stake normal
-            if (botState.recoveryActive) {
-                console.log("⚠️ RECUPERACIÓN FALLIDA. Abortando martingala para proteger cuenta.");
+        // LÓGICA DE RESCATE (TÉCNICA A: DARDO MATCH):
+        if (botState.isRecoveryEnabled) {
+            if (!botState.recoveryActive) {
+                // PRIMER INTENTO
+                botState.recoveryActive = true;
+                botState.recoveryStep = 1;
+                botState.lastLosingDigit = botState.currentBarrier;
+                console.log(`🛡️ ACTIVANDO DARDO MATCH: Cazando al dígito ${botState.lastLosingDigit} (x9)`);
+            } else {
+                // SEGUNDO INTENTO (Si fallamos el primer dardo)
+                botState.recoveryStep++;
+                if (botState.recoveryStep > 2) {
+                    console.log(`⚠️ RESCATE FALLIDO (2 intentos). Volviendo a modo normal.`);
+                    botState.recoveryActive = false;
+                    botState.recoveryStep = 0;
+                } else {
+                    console.log(`🛡️ REINTENTO DARDO MATCH (${botState.recoveryStep}/2)...`);
+                }
             }
+        } else {
             botState.recoveryActive = false;
+            botState.recoveryStep = 0;
         }
 
         botState.strategyIndex++;
