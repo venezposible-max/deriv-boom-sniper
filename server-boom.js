@@ -55,11 +55,11 @@ let botState = {
     strategyIndex: 0,          // 0: HOT, 1: COLD, 2: REPEAT
     strategyName: 'HOT-SNIPER',
     blacklist: {},             // Registro de dígitos en 'enfriamiento'
-    lastLosingDigit: null,     // Último dígito que nos hizo perder
-    isRealAccount: false,      // true: Cuenta Real, false: Demo (por defecto)
     isRecoveryEnabled: false,   // true: Intentar recuperar tras pérdida
     recoveryActive: false,     // Internal: si el próximo trade es de recuperación
     recoveryStep: 0,           // Contador de intentos de recuperación
+    lastLosingDigit: null,     // El que nos hizo perder
+    secondaryTarget: null,     // Segundo objetivo de rescate (Doble Dardo)
     virtualLossStreak: 0,      // Racha de pérdidas fantasma
     activeVirtualContract: null // Si hay un contrato simulado pendiente
 };
@@ -431,15 +431,17 @@ function connectDeriv() {
                 }
                 // === ESTRATEGIA PRINCIPAL: DIFFERS ===
                 else {
-                    // === MODO RESCATE (Técnica A: Dardo Match x9) ===
+                    // === MODO RESCATE (Técnica: DOBLE DARDO MATCH x9) ===
                     if (botState.recoveryActive) {
                         contractType = 'DIGITMATCH';
-                        targetBarrier = String(botState.lastLosingDigit || 0);
-                        stakeFinal = 0.35; // Arriesga poco para ganar x9 (Retorna ~$3.15)
-                        triggerActive = `DARDO MATCH (Cazando al ${targetBarrier})`;
+                        // Elige el que nos hizo perder O el secundario alternadamente o por racha
+                        const target = (botState.recoveryStep === 1) ? botState.lastLosingDigit : botState.secondaryTarget;
+                        targetBarrier = String(target || 0);
+                        stakeFinal = 0.35; 
+                        triggerActive = `DOBLE DARDO [${botState.recoveryStep}/2] (Cazando al ${targetBarrier})`;
                         
-                        // Si ya tiramos 2 dardos y no cayó, abortamos rescate por seguridad
-                        if (botState.recoveryStep >= 2) {
+                        // Si ya tiramos los 2 dardos, abortamos rescate
+                        if (botState.recoveryStep > 2) {
                             botState.recoveryActive = false;
                             botState.recoveryStep = 0;
                             triggerActive = null;
@@ -653,23 +655,34 @@ function finalizeTrade(c) {
         console.log(`🛡️ Dígito ${badDigit} en Lista Negra por 2 min.`);
 
         // LÓGICA ONE-SHOT:
-        // LÓGICA DE RESCATE (TÉCNICA A: DARDO MATCH):
+        // LÓGICA DE RESCATE (TÉCNICA: DOBLE DARDO MATCH):
         if (botState.isRecoveryEnabled) {
             if (!botState.recoveryActive) {
-                // PRIMER INTENTO
                 botState.recoveryActive = true;
                 botState.recoveryStep = 1;
                 botState.lastLosingDigit = botState.currentBarrier;
-                console.log(`🛡️ ACTIVANDO DARDO MATCH: Cazando al dígito ${botState.lastLosingDigit} (x9)`);
+                
+                // Objetivo Secundario: El que más ha salido últimamente (El "Hot")
+                const hist = botState.digitHistory;
+                const freq = {}; 
+                hist.slice(-20).forEach(d => freq[d] = (freq[d] || 0) + 1);
+                const mostFreq = Object.keys(freq).reduce((a, b) => freq[a] > freq[b] ? a : b, 0);
+                botState.secondaryTarget = parseInt(mostFreq);
+
+                console.log(`🛡️ ACTIVANDO DOBLE DARDO: Cazando al ${botState.lastLosingDigit} y al ${botState.secondaryTarget} (x9)`);
+                
+                // [FRANKLIN] Hack de velocidad: Reducimos cooldown para que el segundo dardo salga de inmediato
+                botState.lastTradeTime = 0; 
             } else {
-                // SEGUNDO INTENTO (Si fallamos el primer dardo)
                 botState.recoveryStep++;
                 if (botState.recoveryStep > 2) {
-                    console.log(`⚠️ RESCATE FALLIDO (2 intentos). Volviendo a modo normal.`);
+                    console.log(`⚠️ RESCATE TERMINADO (2 Dardos lanzados).`);
                     botState.recoveryActive = false;
                     botState.recoveryStep = 0;
                 } else {
-                    console.log(`🛡️ REINTENTO DARDO MATCH (${botState.recoveryStep}/2)...`);
+                    // Preparamos el segundo dardo para el próximo tick
+                    botState.lastTradeTime = 0; 
+                    console.log(`🚀 Lanzando Segundo Dardo del par...`);
                 }
             }
         } else {
