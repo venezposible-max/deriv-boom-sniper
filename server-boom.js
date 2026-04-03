@@ -491,7 +491,7 @@ function connectDeriv() {
                         // ANALISIS RSI(5) + EMA(5)
                         const rsi = botState.lastRSI;
                         const ema = botState.lastEMA;
-                        const currentTick = tick;
+                        const currentTick = tickPrice;
 
                         let impulse = null;
                         if (rsi > 75 && currentTick > ema) impulse = 'UP';
