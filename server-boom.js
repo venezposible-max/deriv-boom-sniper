@@ -787,10 +787,10 @@ function finalizeTrade(c) {
     if (botState.currentContractType === 'DIGITMATCH') labelOutput = `🎯 MATCH (SI-${botState.currentBarrier})`;
     if (botState.currentContractType === 'BINARY_STRIKE') labelOutput = `🔥 ATAQUE BINARIO`;
     
-    // Especial para Hedge
-    if (botState.currentContractType === 'HEDGE_ZERO_RISK') {
+    // [FRANKLIN v10.1] ETIQUETADO DE TRANSPARENCIA NÉMESIS
+    if (botState.currentContractType === 'NEMESIS_DUAL') {
         const isMatch = c.contract_type === 'DIGITMATCH';
-        labelOutput = isMatch ? `🛡️ SEGURO MATCH ($${c.buy_price})` : `💎 DIFFERS PRINCIPAL ($${c.buy_price})`;
+        labelOutput = isMatch ? `🎯 MATCH-BONUS ($0.50)` : `👹 NÉMESIS: DIFFERS ($10.00)`;
     }
 
     botState.tradeHistory.unshift({
