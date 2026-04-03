@@ -455,19 +455,21 @@ function connectDeriv() {
                             contractType = null;
                         }
                     } 
-                    // === MODO RECOLECTOR (NÉMESIS v13.0: EL BLOQUE SAGRADO) ===
+                    // === MODO RECOLECTOR (SNIPER ELITE v15.0) ===
                     else {
-                        const targetDigit = Math.floor(Math.random() * 10);
-                        targetBarrier = String(targetDigit);
+                        const randomDigit = Math.floor(Math.random() * 10);
+                        targetBarrier = String(randomDigit);
 
-                        // ANALISIS DE SEGURIDAD ABSOLUTA (R_100 + R_10)
-                        triggerActive = 'BLOQUE SAGRADO (Inmunidad Total)';
-                        contractType = 'TRIANGULAR_HEDGE';
-                        
-                        // Configuración de Stakes Matemáticos Perfectos
-                        // R_100: $6.00 Differs + $0.75 Match (Seguro de Choque)
-                        // R_10: $8.20 Differs NO-0 (Profit $0.74) -> Paga el Seguro
-                        stakeFinal = 6.00;
+                        // GATILLO: Si el número NO salió en los últimos 5 ticks, es SEGURO diferirlo.
+                        const last5 = botState.digitHistory.slice(-5);
+                        if (!last5.includes(randomDigit)) {
+                            triggerActive = 'SNIPER (Profit Limpio)';
+                            contractType = 'DIGITDIFF';
+                            stakeFinal = 1.00;
+                        } else {
+                            triggerActive = null;
+                            contractType = null;
+                        }
                     }
                 }
             }
@@ -538,44 +540,8 @@ function connectDeriv() {
                             console.log(`⚡ DISPARO: Differs($3.50) + Match($0.50) | Riesgo de Choque: $0.00`);
                             
                             botState.currentContractType = 'HEDGE_ZERO_RISK';
-                        } else if (contractType === 'TRIANGULAR_HEDGE') {
-                            // --- DISPARO TRIPLE (EL BLOQUE SAGRADO v13.0) ---
-                            
-                            // 1. R_100: PIEZA CENTRAL ($6.00) -> NO al targetDigit (Profit +$0.54)
-                            ws.send(JSON.stringify({
-                                buy: 1, price: 6.00,
-                                parameters: {
-                                    amount: 6.00, basis: 'stake',
-                                    contract_type: 'DIGITDIFF', currency: botState.currency || 'USDT',
-                                    symbol: 'R_100', duration: 1, duration_unit: 't', barrier: targetBarrier
-                                }
-                            }));
-
-                            // 2. R_100: SEGURO DE CHOQUE ($0.75) -> SI al targetDigit (Recupera +$6.10)
-                            ws.send(JSON.stringify({
-                                buy: 1, price: 0.75,
-                                parameters: {
-                                    amount: 0.75, basis: 'stake',
-                                    contract_type: 'DIGITMATCH', currency: botState.currency || 'USDT',
-                                    symbol: 'R_100', duration: 1, duration_unit: 't', barrier: targetBarrier
-                                }
-                            }));
-
-                            // 3. R_10: ANCLA DE PROFIT ($8.20) -> NO al 0 (Profit +$0.74)
-                            ws.send(JSON.stringify({
-                                buy: 1, price: 8.20,
-                                parameters: {
-                                    amount: 8.20, basis: 'stake',
-                                    contract_type: 'DIGITDIFF', currency: botState.currency || 'USDT',
-                                    symbol: 'R_10', duration: 1, duration_unit: 't', barrier: '0'
-                                }
-                            }));
-
-                            console.log(`\n🗿 BLOQUE SAGRADO v13.0: [R100: $6 / $0.75] + [R10: $8.20]`);
-                            console.log(`🛡️ Choque: +$0.09 | Gana Normal: +$0.53`);
-                            botState.currentContractType = 'TRIANGULAR_HEDGE';
-                        } else if (contractType) {
-                            // --- DISPARO ÚNICO (DE RESPALDO) ---
+                        } else {
+                            // --- DISPARO ÚNICO (SNIIPER ELITE) ---
                             ws.send(JSON.stringify({
                                 buy: 1, price: stakeFinal,
                                 parameters: {
@@ -585,6 +551,7 @@ function connectDeriv() {
                                 }
                             }));
                             botState.currentContractType = contractType;
+                            console.log(`\n🎯 SNIPER v15.0: ${contractType} al ${targetBarrier} (Stake: $${stakeFinal})`);
                         }
 
                         botState.isBuying = true;
@@ -808,11 +775,9 @@ function finalizeTrade(c) {
     if (botState.currentContractType === 'DIGITMATCH') labelOutput = `🎯 MATCH (SI-${botState.currentBarrier})`;
     if (botState.currentContractType === 'BINARY_STRIKE') labelOutput = `🔥 ATAQUE BINARIO`;
     
-    // [FRANKLIN v10.2] ETIQUETADO DE TRANSPARENCIA NÉMESIS (SAFE)
-    if (botState.currentContractType === 'NEMESIS_DUAL') {
-        const isMatch = c.contract_type === 'DIGITMATCH';
-        labelOutput = isMatch ? `🎯 MATCH-BONUS ($1.00)` : `👹 NÉMESIS: DIFFERS ($1.00)`;
-    }
+    // [FRANKLIN v15.0] ETIQUETADO SNIPER ELITE
+    if (botState.currentContractType === 'DIGITDIFF') labelOutput = `⚡ SNIPER: DIFFERS`;
+    if (botState.currentContractType === 'DIGITMATCH') labelOutput = `🎯 RECOVERY: MATCH`;
 
     botState.tradeHistory.unshift({
         type: labelOutput,
