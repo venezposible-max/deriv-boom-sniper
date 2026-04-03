@@ -442,22 +442,24 @@ function connectDeriv() {
                             contractType = null;
                         }
                     } 
-                    // === MODO RECOLECTOR (ESCUDO INTELIGENTE v6.1) ===
+                    // === MODO RECOLECTOR (ESCUDO DE SILENCIO v7.0) ===
                     else {
                         const randomDigit = Math.floor(Math.random() * 10);
                         targetBarrier = String(randomDigit);
 
                         // ANALISIS DE SEGURIDAD TOTAL: 
-                        // Si el número salió 2 o más veces en 10 ticks, prendemos el seguro.
+                        // Si el número salió 2 o más veces en 10 ticks, el riesgo es alto.
+                        // En lugar de pagar seguro, el bot simplemente NO DISPARA.
                         const hotCount = botState.digitHistory.slice(-10).filter(d => d === randomDigit).length;
                         
                         if (hotCount >= 2) {
-                            // ZONA ALERTA (HOT): Seguro Match ($3.50 / $0.50) ACTIVADO.
-                            triggerActive = 'GANA-GANA (Seguro Activo)';
-                            contractType = 'HEDGE_ZERO_RISK'; 
+                            // ZONA ALERTA (HOT): Riesgo detectado. Abortamos disparo para no desangrar balance.
+                            triggerActive = null; 
+                            contractType = null;
+                            console.log(`🧊 SILENCIO: Número ${randomDigit} caliente. Esperando para proteger balance...`);
                         } else {
                             // ZONA FRIO (NORMAL): Profit Grifo ($1.00 -> +$0.09 neto).
-                            triggerActive = 'ULTRA-SNIPER (Profit Limpio)';
+                            triggerActive = 'SILENT-SNIPER (Profit Grifo)';
                             contractType = 'DIGITDIFF';
                             stakeFinal = 1.00;
                         }
@@ -502,34 +504,8 @@ function connectDeriv() {
                             
                             botState.currentContractType = 'BINARY_STRIKE';
                             botState.currentBarrier = '0-9';
-                        } else if (contractType === 'HEDGE_ZERO_RISK') {
-                            // --- DISPARO DUAL (GANA-GANA v6.0 - RIESGO CHOQUE $0.00) ---
-                            // 1. Contrato Differs Principal ($3.50)
-                            ws.send(JSON.stringify({
-                                buy: 1, price: 3.50,
-                                parameters: {
-                                    amount: 3.50, basis: 'stake',
-                                    contract_type: 'DIGITDIFF', currency: botState.currency || 'USDT',
-                                    symbol: SYMBOL, duration: 1, duration_unit: 't', barrier: targetBarrier
-                                }
-                            }));
-
-                            // 2. Seguro Match ($0.50) -> Cubre el 100% de la perdida de $3.50
-                            ws.send(JSON.stringify({
-                                buy: 1, price: 0.50,
-                                parameters: {
-                                    amount: 0.50, basis: 'stake',
-                                    contract_type: 'DIGITMATCH', currency: botState.currency || 'USDT',
-                                    symbol: SYMBOL, duration: 1, duration_unit: 't', barrier: targetBarrier
-                                }
-                            }));
-
-                            console.log(`\n💎 GANA-GANA v6.0 ACTIVADO: [SI/NO al ${targetBarrier}]`);
-                            console.log(`⚡ DISPARO: Differs($3.50) + Match($0.50) | Riesgo de Choque: $0.00`);
-                            
-                            botState.currentContractType = 'HEDGE_ZERO_RISK';
-                        } else {
-                            // --- DISPARO ÚNICO (DE SEGURIDAD) ---
+                        } else if (contractType) {
+                            // --- DISPARO ÚNICO (ULTRA-SNIPER) ---
                             ws.send(JSON.stringify({
                                 buy: 1, price: stakeFinal,
                                 parameters: {
