@@ -442,15 +442,18 @@ function connectDeriv() {
                             contractType = null;
                         }
                     } 
-                    // === MODO RECOLECTOR (ESCUDO ULTRA-SENSIBLE) ===
+                    // === MODO RECOLECTOR (ESCUDO INTELIGENTE v6.1) ===
                     else {
+                        const randomDigit = Math.floor(Math.random() * 10);
+                        targetBarrier = String(randomDigit);
+
                         // ANALISIS DE SEGURIDAD TOTAL: 
                         // Si el número salió 2 o más veces en 10 ticks, prendemos el seguro.
                         const hotCount = botState.digitHistory.slice(-10).filter(d => d === randomDigit).length;
                         
                         if (hotCount >= 2) {
-                            // ZONA ALERTA (HOT): Seguro Match ($6.00 / $0.50) ACTIVADO.
-                            triggerActive = 'ESCUDO NIVEL-2 (Seguridad Match)';
+                            // ZONA ALERTA (HOT): Seguro Match ($3.50 / $0.50) ACTIVADO.
+                            triggerActive = 'GANA-GANA (Seguro Activo)';
                             contractType = 'HEDGE_ZERO_RISK'; 
                         } else {
                             // ZONA FRIO (NORMAL): Profit Grifo ($1.00 -> +$0.09 neto).
