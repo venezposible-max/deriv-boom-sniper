@@ -499,19 +499,27 @@ function connectDeriv() {
             }
             
             // --- [v16.4] MULTI-MARKET SCANNER (Market Rotation) ---
-            // Si el RSI está en la "Zona de Aburrimiento" (45-55) y no hemos disparado en 15 seg, buscamos otro mercado
-            const isBored = botState.lastRSI > 45 && botState.lastRSI < 55;
-            const timeSinceLastTrade = Date.now() - botState.lastTradeTime;
-            if (botState.isRunning && isBored && timeSinceLastTrade > 15000 && !botState.isBuying && !botState.activeContractId && !botState.straddleUpId && !botState.straddleDownId) {
+            // Solo rotamos si:
+            // 1. Tenemos al menos 30 ticks acumulados (para un RSI confiable, no el 50 base).
+            // 2. El RSI está en la "Zona de Aburrimiento" (45-55).
+            // 3. Han pasado 15 segundos sin disparar ni una sola orden en ESTE mercado.
+            const hasEnoughData = botState.digitHistory.length >= 30;
+            const isBored = botState.lastRSI >= 45 && botState.lastRSI <= 55;
+            const timeInThisMarket = Date.now() - botState.lastTradeTime;
+            
+            if (botState.isRunning && hasEnoughData && isBored && timeInThisMarket > 15000 && !botState.isBuying && !botState.activeContractId && !botState.straddleUpId && !botState.straddleDownId) {
                 botState.currentSymbolIndex = (botState.currentSymbolIndex + 1) % botState.scanSymbols.length;
                 const nextSymbol = botState.scanSymbols[botState.currentSymbolIndex];
-                console.log(`🔍 [SCANNER] Mercado ${SYMBOL} aburrido (RSI:${botState.lastRSI.toFixed(2)}). Saltando a ${nextSymbol}...`);
+                console.log(`🔍 [SCANNER] Mercado ${SYMBOL} sin acción (RSI:${botState.lastRSI.toFixed(2)}). Buscando en ${nextSymbol}...`);
                 
                 SYMBOL = nextSymbol;
-                // Reset indicadores para el nuevo mercado
+                // Reset indicadores y RELOJ para el nuevo mercado
                 botState.rsiValues = [];
-                botState.emaInitialized = false;
                 botState.digitHistory = [];
+                botState.priceHistory = [];
+                botState.lastTradeTime = Date.now(); // Dale 15 segundos al nuevo mercado
+                botState.lastRSI = 50; 
+                botState.emaInitialized = false;
                 
                 // Reconectar para suscribirse al nuevo tick stream
                 if (ws) {
