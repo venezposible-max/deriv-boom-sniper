@@ -50,7 +50,7 @@ let botState = {
     dailyLoss: 0,
     dailyProfit: 0,
     lastTradeTime: 0,
-    cooldownMs: 2000,          // 2 segundos entre operaciones
+    cooldownMs: 15000,                // [v17.0] 15s - Sigilo total entre disparos
     isBuying: false,
     activeContractId: null,
     tradeCount: 0,
@@ -1219,7 +1219,8 @@ function executeFlashMirrorFire() {
         }));
 
         console.log(`\n⚡ FLASH-MIRROR ATOMIC: LANZANDO NO-${targetBarrier} [${botState.currentImpulse}]`);
-        console.log(`🛰️ SINCRONÍA: Ghost-Leak OK | Latencia de Red compensada.`);
+        console.log(`🛰️ SINCRONÍA: Ghost-Leak OK | Frecuencia de red calibrada.`);
+        console.log(`🛡️ SIGILO: Entrando en periodo de análisis (15s)...`);
         
         botState.currentContractType = 'ANTIGRAVITY_COMBO';
         botState.lastTradeTime = now;
@@ -1230,10 +1231,11 @@ function executeFlashMirrorFire() {
 
 // Reloj de pulso cada 20ms para cazar la ventana de latencia
 setInterval(() => {
-    if (!botState.pendingSignal || !botState.isRunning) return;
+    if (!botState.isRunning) return;
     
-    // --- [v16.9] HEARTBEAT GHOST POLLER (ULTRA-FREQ 50ms) ---
-    if (Date.now() % 50 < 20) {
+    // --- [v17.0] GHOST POLLER SIGILOSO (Solo bajo señal) ---
+    // Solo pedimos historial si hay una señal de RSI/EMA pendiente
+    if (botState.pendingSignal && (Date.now() % 300 < 20)) {
         if (ws && ws.readyState === WebSocket.OPEN) {
             ws.send(JSON.stringify({ ticks_history: SYMBOL, end: 'latest', count: 1 }));
         }
