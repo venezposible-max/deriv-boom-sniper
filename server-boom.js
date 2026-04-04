@@ -166,19 +166,23 @@ function chooseBestBarrier() {
     // Si no tenemos historia de este par, usamos el último por defecto
     if (maxFreq === 0) chosenDigit = lastDigit;
 
-    /* BLOQUEO TEMPORAL DE OTROS MODOS
-    const mode = botState.strategyIndex % 4;
-    ... original logic ...
-    */
-
-    // ─── FILTRO ANTI-TRIPLE (NUEVO) ───────────────────────────
-    // Si el dígito elegido aparece 2 veces en los últimos 10 ticks, es "Inestable"
+    // ─── FILTRO ANTI-CUÁDRUPLE (SEGURIDAD DINÁMICA) ───────────
     const last10 = hist.slice(-10);
     const countIn10 = last10.filter(d => d === parseInt(chosenDigit)).length;
     
-    if (countIn10 >= 2) {
-        if (botState.isRunning && (now % 5000 < 500)) console.log(`🛡️ Bloqueando ${chosenDigit} por inestabilidad (visto ${countIn10}x en últimos 10 ticks)`);
-        return null;
+    // Si el número es extremadamente inestable (4 veces en 10 ticks), buscamos un reemplazo
+    if (countIn10 >= 4) {
+        // --- DARDO DE REPUESTO: Buscar el número MENOS frecuente de los últimos 100 ticks ---
+        let minFreq = 101;
+        let backupDigit = chosenDigit;
+        for (let d = 0; d <= 9; d++) {
+            if (freq[d] < minFreq && !botState.blacklist[d]) {
+                minFreq = freq[d];
+                backupDigit = String(d);
+            }
+        }
+        chosenDigit = backupDigit;
+        strategyLabel = '🎯 DARDO DE REPUESTO (Cold-Spot)';
     }
 
     // ─── VERIFICAR BLACKLIST ──────────────────────────────────
