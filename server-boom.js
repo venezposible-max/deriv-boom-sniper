@@ -33,6 +33,8 @@ let botState = {
     winsSession: 0,
     lossesSession: 0,
     totalTradesSession: 0,
+    isRecoveryEnabled: true,   // [v18.7.1] Asegurar que existe en el estado base
+    recoveryActive: false,
     tradeHistory: [],
     lastDigit: null,
     digitHistory: [],
@@ -134,6 +136,41 @@ app.post('/differs/control', (req, res) => {
     if (action === 'STOP') { botState.isRunning = false; return res.json({ success: true, isRunning: false }); }
     if (action === 'RESET_DAY') { botState.dailyLoss = 0; botState.dailyProfit = 0; botState.tradeHistory = []; return res.json({ success: true }); }
     res.status(400).json({ success: false });
+});
+
+app.post('/differs/toggle-recovery', (req, res) => {
+    const { enabled } = req.body;
+    botState.isRecoveryEnabled = !!enabled;
+    console.log(`🛡️ RECUPERACIÓN ${botState.isRecoveryEnabled ? 'ACTIVADA' : 'DESACTIVADA'}`);
+    saveState();
+    res.json({ success: true, isRecoveryEnabled: botState.isRecoveryEnabled });
+});
+
+app.post('/differs/switch-market', (req, res) => {
+    const { symbol } = req.body;
+    if (symbol) {
+        SYMBOL = symbol;
+        botState.symbol = symbol;
+        console.log(`🌐 CAMBIANDO MERCADO A: ${symbol}`);
+        if (ws && ws.readyState === WebSocket.OPEN) {
+            ws.send(JSON.stringify({ forget_all: 'ticks' }));
+            setTimeout(() => {
+                ws.send(JSON.stringify({ ticks: symbol }));
+            }, 1000);
+        }
+    }
+    res.json({ success: true, symbol: SYMBOL });
+});
+
+app.post('/differs/switch-account', (req, res) => {
+    const { isReal } = req.body;
+    TOKEN = isReal ? process.env.DERIV_TOKEN_REAL : process.env.DERIV_TOKEN_DEMO;
+    botState.isRealAccount = !!isReal;
+    console.log(`🔑 CAMBIANDO A CUENTA: ${isReal ? 'REAL 🔴' : 'DEMO 🔵'}`);
+    if (ws) {
+        ws.close(); // Esto disparará la reconexión con el nuevo token
+    }
+    res.json({ success: true, isRealAccount: botState.isRealAccount });
 });
 
 // ─── CONEXIÓN A DERIV ───
