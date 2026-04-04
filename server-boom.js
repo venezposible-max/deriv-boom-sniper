@@ -51,9 +51,11 @@ let botState = {
     dailyProfit: 0,
     lastTradeTime: 0,
     cooldownMs: 15000,                // [v17.0] 15s - Sigilo total entre disparos
+    lastGhostPollTime: 0,             // [v17.1] Control de tiempo estricto para evitar bloqueos
     isBuying: false,
     activeContractId: null,
     tradeCount: 0,
+    isAuthing: false,                 // [v17.1] Bloqueo de llave para evitar error 1008
     strategyIndex: 0,          // 0: HOT, 1: COLD, 2: REPEAT
     strategyName: 'HOT-SNIPER',
     blacklist: {},             // Registro de dígitos en 'enfriamiento'
@@ -111,6 +113,7 @@ if (fs.existsSync(STATE_FILE)) {
             botState.dailyLoss = 0; // Forzamos limpieza para que no arranque congelado
             botState.dailyProfit = 0;
             botState.recoveryActive = false;
+            botState.isAuthing = false;
             
             // 🔧 RESET INDICADORES para recalcular con datos frescos
             botState.emaInitialized = false;
@@ -395,7 +398,7 @@ function connectDeriv() {
         console.log(`🔌 Conexión abierta. Autenticando en ${waitTime/1000}s...`);
 
         setTimeout(() => {
-            if (ws && ws.readyState === WebSocket.OPEN) {
+            if (ws && ws.readyState === WebSocket.OPEN && !botState.isAuthing) {
                 const tokenRaw = isReal 
                     ? (process.env.DERIV_TOKEN_REAL || 'oC2QqWbtJZdjauD') 
                     : (process.env.DERIV_TOKEN_DEMO || 'PMIt2RhEjEDbcLD');
@@ -420,12 +423,13 @@ function connectDeriv() {
 
         // Auth Error -> Manejo inteligente
         if (msg.msg_type === 'authorize' && msg.error) {
+            botState.isAuthing = false;
             console.error(`❌ ERROR DE TOKEN: ${msg.error.message} (${msg.error.code})`);
             
             if (msg.error.code === 'WrongResponse' || msg.error.code === 'RateLimit') {
                 console.log(`🔄 Re-intentando conexión en 3s por error temporal de Deriv...`);
                 if (ws) {
-                    ws.terminate(); // Esto gatilla automáticamente el reconectar del .on('close')
+                    ws.terminate(); 
                     ws = null;
                 }
             } else {
@@ -436,6 +440,7 @@ function connectDeriv() {
 
         // Auth OK -> Limpieza y carga secuencial
         if (msg.msg_type === 'authorize' && msg.authorize) {
+             botState.isAuthing = false;
              const isReal = botState.isRealAccount;
              const currency = msg.authorize.currency || 'USDT';
              botState.currency = currency;
@@ -1231,25 +1236,20 @@ function executeFlashMirrorFire() {
 
 // Reloj de pulso cada 20ms para cazar la ventana de latencia
 setInterval(() => {
-    if (!botState.isRunning) return;
-    
-    // --- [v17.0] GHOST POLLER SIGILOSO (Solo bajo señal) ---
-    // Solo pedimos historial si hay una señal de RSI/EMA pendiente
-    if (botState.pendingSignal && (Date.now() % 300 < 20)) {
-        if (ws && ws.readyState === WebSocket.OPEN) {
-            ws.send(JSON.stringify({ ticks_history: SYMBOL, end: 'latest', count: 1 }));
-        }
-    }
-
-    // --- [v16.9] PING TRACKER (CADA 10s) ---
-    if (Date.now() % 10000 < 20) {
-        if (ws && ws.readyState === WebSocket.OPEN) {
-            botState.lastPingSentAt = Date.now();
-            ws.send(JSON.stringify({ ping: 1 }));
-        }
-    }
-
+    if (!botState.isRunning || !ws || ws.readyState !== WebSocket.OPEN) return;
     const now = Date.now();
+
+    // --- [v17.1] GHOST POLLER ANTI-BAN (Throttled 1.5s) ---
+    if (botState.pendingSignal && (now - botState.lastGhostPollTime >= 1500)) {
+        ws.send(JSON.stringify({ ticks_history: SYMBOL, end: 'latest', count: 1 }));
+        botState.lastGhostPollTime = now;
+    }
+
+    if (now % 10000 < 20) {
+        botState.lastPingSentAt = now;
+        ws.send(JSON.stringify({ ping: 1 }));
+    }
+
     const timeSinceLast = now - botState.lastTickReceivedAt;
     const nextExpected = botState.avgTickInterval;
     
