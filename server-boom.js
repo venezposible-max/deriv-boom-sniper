@@ -81,6 +81,11 @@ let botState = {
     straddleMaxLoss: 3.00,             // Cancelar el que equivoque su rumbo
     straddleTimeoutMs: 240000,         // Vender forzado a los 4 min
     lastDiffersResult: null,           // 'WIN' o 'LOSS' del último Differs en el combo
+    // [v16.4] MULTI-MARKET SCANNER & TWIN FILTER
+    currentSymbolIndex: 0,
+    scanSymbols: ['R_10', 'R_25', 'R_50', 'R_100'],
+    lastTickTime: 0,
+    isTwinDetected: false,
 };
 
 // ─── CARGAR ESTADO PREVIO ──────────────────────────────────────
@@ -487,6 +492,35 @@ function connectDeriv() {
                 botState.lastRSI = 100 - (100 / (1 + rs));
             }
             
+            // --- [v16.4] MULTI-MARKET SCANNER (Market Rotation) ---
+            // Si el RSI está en la "Zona de Aburrimiento" (45-55) y no hemos disparado en 15 seg, buscamos otro mercado
+            const isBored = botState.lastRSI > 45 && botState.lastRSI < 55;
+            const timeSinceLastTrade = Date.now() - botState.lastTradeTime;
+            if (botState.isRunning && isBored && timeSinceLastTrade > 15000 && !botState.isBuying && !botState.activeContractId && !botState.straddleUpId && !botState.straddleDownId) {
+                botState.currentSymbolIndex = (botState.currentSymbolIndex + 1) % botState.scanSymbols.length;
+                const nextSymbol = botState.scanSymbols[botState.currentSymbolIndex];
+                console.log(`🔍 [SCANNER] Mercado ${SYMBOL} aburrido (RSI:${botState.lastRSI.toFixed(2)}). Saltando a ${nextSymbol}...`);
+                
+                SYMBOL = nextSymbol;
+                // Reset indicadores para el nuevo mercado
+                botState.rsiValues = [];
+                botState.emaInitialized = false;
+                botState.digitHistory = [];
+                
+                // Reconectar para suscribirse al nuevo tick stream
+                if (ws) {
+                    ws.send(JSON.stringify({ forget_all: "ticks" }));
+                    ws.send(JSON.stringify({ subscribe: 1, ticks: SYMBOL }));
+                }
+                return; 
+            }
+            
+            // --- [v16.4] FILTRO GEMELO CONSECUTIVO ---
+            if (botState.digitHistory.length >= 2) {
+                const prev = botState.digitHistory[botState.digitHistory.length - 2];
+                botState.isTwinDetected = (lastDigit === prev);
+            }
+            
 
             
             // 2. EVALUACIÓN DE GATILLOS INTELIGENTES (Modo Recolector vs Modo Rescate)
@@ -497,6 +531,12 @@ function connectDeriv() {
             let stakeFinal = botState.stake;
 
             if (hist.length >= 5) {
+                // Bloqueo Gemelo: Si acabamos de ver el mismo número dos veces, pausamos Differs
+                if (botState.isTwinDetected) {
+                     // console.log(`⏳ [GEMELO] Esperando deshielo de gemelos...`);
+                     return; 
+                }
+
                 const last1 = hist[hist.length - 1]; // actual
                 const last2 = hist[hist.length - 2];
                 const last3 = hist[hist.length - 3];
@@ -700,9 +740,16 @@ function connectDeriv() {
                 if (isStraddleUp) botState.straddleUpProfit = profit;
                 else botState.straddleDownProfit = profit;
                 
+                // --- [v16.4] REGLA: HOURGLASS TP (TP DINÁMICO) ---
+                // Min 0-2: TP 12.00 | Min 3: TP 8.00 | Min 4: TP 4.00 | Casi fin: TP 1.00
+                let dynamicTP = botState.straddleTP; // Base 12.00
+                if (elapsed > 180000) dynamicTP = 8.00; // 3 min
+                if (elapsed > 220000) dynamicTP = 4.00; // 3:40 min
+                if (elapsed > 235000) dynamicTP = 1.00; // 3:55 min
+
                 // REGLA 1: Take Profit Global para el Pierna Ganadora
-                if (profit >= botState.straddleTP) {
-                    console.log(`💰 STRADDLE ${legName} WIN: Take Profit (+${botState.straddleTP}) alcanzado → VENDIENDO PARA CUBRIR DIFFERS`);
+                if (profit >= dynamicTP) {
+                    console.log(`💰 STRADDLE ${legName} WIN: Hourglass TP (+${dynamicTP.toFixed(2)}) alcanzado → CERRANDO`);
                     ws.send(JSON.stringify({ sell: contractId, price: 0 }));
                 }
                 // REGLA 2: Cancelar Pierna Perdedora (Guillotina Anti-Sierra)
