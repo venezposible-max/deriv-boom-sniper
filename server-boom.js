@@ -887,8 +887,8 @@ function fireStraddleRescue() {
         // Si el precio cambió de dirección 2 o más veces en 5 ticks, es un mercado picado (sierra)
         if (directionChanges >= 2) {
             console.log(`\n🚨 ¡DIFFERS FALLÓ! MERCADO PICADO DETECTADO (${directionChanges} rebotes en 5 ticks).`);
-            console.log(`🛡️ ABORTANDO RESCATE DIRECCIONAL PARA EVITAR DOBLE PÉRDIDA EN CONSOLIDACIÓN.`);
-            return; // Nos comemos la pérdida del Differs, pero salvamos el seguro.
+            console.log(`🛡️ IGNORANDO FILTRO A PETICIÓN DEL USUARIO: Lanzando rescate direccional de todas formas.`);
+            // return; // <-- DESACTIVADO: El usuario solicitó lanzar el rescate SIEMPRE.
         }
     }
 
