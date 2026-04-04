@@ -13,6 +13,7 @@ import { fileURLToPath } from 'url';
 import express from 'express';
 import cors from 'cors';
 import WebSocket from 'ws';
+import crypto from 'crypto';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -514,7 +515,8 @@ function connectDeriv() {
                     } 
                     // === MODO RECOLECTOR (BOT ESCUDO ANTIGRAVEDAD v16.0) ===
                     else {
-                        const targetDigit = botState.lastDigit;
+                        // Generación de número super aleatorio (0-9) con motor criptográfico
+                        const targetDigit = crypto.randomInt(0, 10);
                         targetBarrier = String(targetDigit);
 
                         // ANALISIS RSI(5) + EMA(5)
