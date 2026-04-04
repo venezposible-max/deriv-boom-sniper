@@ -651,7 +651,12 @@
                 document.getElementById('shieldTitle').innerText = `🛡️ RESCATE DIRECCIONAL (${activeLeg})`;
                 
                 const elapsedSecs = Math.floor((Date.now() - (data.straddleOpenTime || Date.now())) / 1000);
-                document.getElementById('shieldStatusMsg').innerText = `Tiempo de rescate: ${elapsedSecs}s | Cierre Auto al cubrir pérdida (+$12.00)`;
+                const remainingSecs = Math.max(0, 300 - elapsedSecs);
+                const m = Math.floor(remainingSecs / 60);
+                const s = remainingSecs % 60;
+                const formattedTime = `${m}:${s.toString().padStart(2, '0')}`;
+                
+                document.getElementById('shieldStatusMsg').innerText = `⏳ Seguro expira en: ${formattedTime} | Cierre Auto de Rescate: +$12.00`;
             } else {
                 shieldCard.style.display = 'none';
             }
