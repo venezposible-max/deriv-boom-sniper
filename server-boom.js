@@ -81,7 +81,7 @@ let botState = {
     straddleMaxLoss: 3.00,             // Cancelar el que equivoque su rumbo
     straddleTimeoutMs: 240000,         // Vender forzado a los 4 min
     lastDiffersResult: null,           // 'WIN' o 'LOSS' del último Differs en el combo
-    // [v16.8] MULTI-MARKET SCANNER, TWIN FILTER, PREDICTIVE FLASH-MIRROR & GHOST FEED
+    // [v16.9] GLORIA - ATOMIC CLOCK UPDATE (SCANNER, TWIN, FLASH, GHOST & PING)
     currentSymbolIndex: 0,
     scanSymbols: ['R_10', 'R_25', 'R_50', 'R_100'],
     lastTickTime: 0,
@@ -90,8 +90,10 @@ let botState = {
     avgTickInterval: 1000,             
     lastTickReceivedAt: Date.now(),
     digitTransitions: {},              
-    ghostDigit: null,                 // [v16.8] El número que viene del "Futuro" (History Feed)
+    ghostDigit: null,                 
     lastTickEpoch: 0,
+    currentPing: 50,                  // [v16.9] Latencia real de red (RTT)
+    lastPingSentAt: 0,
 };
 
 // ─── CARGAR ESTADO PREVIO ──────────────────────────────────────
@@ -749,6 +751,11 @@ function connectDeriv() {
             }
         }
 
+            // --- [v16.9] PING TRACKER (ATOMIC SYNC) ---
+            if (msg.msg_type === 'ping') {
+                botState.currentPing = Date.now() - botState.lastPingSentAt;
+            }
+
             // --- [v16.8] PROCESAMIENTO GHOST-FEED POLLER ---
             if (msg.msg_type === 'history' && msg.history && msg.history.prices) {
                 const latestPrice = String(msg.history.prices[msg.history.prices.length - 1]);
@@ -1175,7 +1182,7 @@ setInterval(() => {
     console.log(`📊 [STATS] Trades: ${botState.totalTradesSession} | Win Rate: ${wr}% | PnL: $${botState.pnlSession.toFixed(2)} | Balance: $${botState.balance}`);
 }, 60000);
 
-// ─── FLASH-MIRROR PULSE WORKER (v16.8) ─────────────────────────
+// ─── FLASH-MIRROR PULSE WORKER (v16.9 "GLORIA") ─────────────────
 function executeFlashMirrorFire() {
     if (!botState.pendingSignal || !botState.isRunning || botState.isBuying || botState.activeContractId) return;
     const isStraddleActive = botState.straddleUpId || botState.straddleDownId;
@@ -1184,15 +1191,13 @@ function executeFlashMirrorFire() {
     const now = Date.now();
     if ((now - botState.lastTradeTime) < botState.cooldownMs) return;
 
-    // --- [v16.8] LÓGICA DE FUENTE SOMBRA (GHOST FEED) ---
+    // --- [v16.9] LÓGICA ATÓMICA DE FUENTE SOMBRA (GHOST FEED) ---
     let targetBarrier;
     if (botState.ghostDigit !== null && botState.ghostDigit !== botState.lastDigit) {
-        // [VENCER POR DESCARTE] Ya sabemos que el número 'X' está en el servidor.
-        // Diferimos contra CUALQUIER número que NO sea ese 'X'.
-        // Ejemplo: Si viene un 5, apostamos NO-0. Éxito 100%.
+        // [GLORIA] Ya no solo diferimos, usamos el GhostDigit para blindar la entrada
         const futureDigit = botState.ghostDigit;
-        targetBarrier = String((futureDigit + 5) % 10); // Algoritmo de "Distancia de Seguridad"
-        console.log(`\n🕵️‍♂️ GHOST-FEED DETECTADO: El futuro es ${futureDigit} | Operando NO-${targetBarrier}`);
+        targetBarrier = String((futureDigit + 5) % 10); 
+        console.log(`\n💎 [GLORIA] FUTURO ANTICIPADO: ${futureDigit} (Ping: ${botState.currentPing}ms) | DISPARO NO-${targetBarrier}`);
     } else {
         targetBarrier = chooseBestBarrier();
     }
@@ -1212,8 +1217,8 @@ function executeFlashMirrorFire() {
             }
         }));
 
-        console.log(`\n⚡ FLASH-MIRROR PULSE: LANZANDO NO-${targetBarrier} [${botState.currentImpulse}]`);
-        console.log(`🛰️ ANTICIPACIÓN: GHOST-FEED LEAK (Solapamiento OK)`);
+        console.log(`\n⚡ FLASH-MIRROR ATOMIC: LANZANDO NO-${targetBarrier} [${botState.currentImpulse}]`);
+        console.log(`🛰️ SINCRONÍA: Ghost-Leak OK | Latencia de Red compensada.`);
         
         botState.currentContractType = 'ANTIGRAVITY_COMBO';
         botState.lastTradeTime = now;
@@ -1226,15 +1231,18 @@ function executeFlashMirrorFire() {
 setInterval(() => {
     if (!botState.pendingSignal || !botState.isRunning) return;
     
-    // --- [v16.8] HEARTBEAT GHOST POLLER ---
-    // Pedimos el historial cada 100ms para ver si hay un leak de datos
-    if (Date.now() % 100 < 20) {
+    // --- [v16.9] HEARTBEAT GHOST POLLER (ULTRA-FREQ 50ms) ---
+    if (Date.now() % 50 < 20) {
         if (ws && ws.readyState === WebSocket.OPEN) {
-            ws.send(JSON.stringify({
-                ticks_history: SYMBOL,
-                end: 'latest',
-                count: 1
-            }));
+            ws.send(JSON.stringify({ ticks_history: SYMBOL, end: 'latest', count: 1 }));
+        }
+    }
+
+    // --- [v16.9] PING TRACKER (CADA 10s) ---
+    if (Date.now() % 10000 < 20) {
+        if (ws && ws.readyState === WebSocket.OPEN) {
+            botState.lastPingSentAt = Date.now();
+            ws.send(JSON.stringify({ ping: 1 }));
         }
     }
 
@@ -1242,8 +1250,9 @@ setInterval(() => {
     const timeSinceLast = now - botState.lastTickReceivedAt;
     const nextExpected = botState.avgTickInterval;
     
-    // Si faltan 150ms para el próximo tick, disparamos por adelantado
-    if (timeSinceLast >= (nextExpected - 150)) {
+    // [ATOMIC SYNC] Disparamos compensando el PING real de la red
+    const atomicWindow = Math.max(100, botState.currentPing + 20); 
+    if (timeSinceLast >= (nextExpected - atomicWindow)) {
         executeFlashMirrorFire();
     }
 }, 20);
