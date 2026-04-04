@@ -1,6 +1,6 @@
 /**
  * ============================================================
- *  DIFFERS SNIPER ENGINE v18.9 [ATOMIC SYNC]
+ *  DIFFERS SNIPER ENGINE v18.10 [GAIN-SHIELD]
  *  Estrategia: DIFFERS — El último dígito NO será X
  *  Símbolo: R_100 (Sincronía Atómica por cadencia)
  * ============================================================
@@ -21,7 +21,6 @@ const APP_ID = process.env.DERIV_APP_ID || '36544';
 const DERIV_TOKEN_DEMO = process.env.DERIV_TOKEN_DEMO || 'PMIt2RhEjEDbcLD';
 const STATE_FILE = path.join(__dirname, 'persistent-state-differs.json');
 let SYMBOL = 'R_100';
-let TOKEN = process.env.DERIV_TOKEN_DEMO || DERIV_TOKEN_DEMO;
 
 // ─── ESTADO GLOBAL ────────────────────────────────────────────
 let botState = {
@@ -29,7 +28,6 @@ let botState = {
     isConnectedToDeriv: false,
     isRealAccount: false,
     balance: 0,
-    pnlSession: 0,
     winsSession: 0,
     lossesSession: 0,
     totalTradesSession: 0,
@@ -60,7 +58,8 @@ let botState = {
     rsiValues: [],
     lastRSI: 50,
     lastEMA: 0,
-    emaInitialized: false
+    emaInitialized: false,
+    pnlSession: 0
 };
 
 // ─── CARGAR ESTADO ───
@@ -115,7 +114,7 @@ app.post('/differs/control', (req, res) => {
         if (maxDailyLoss) botState.maxDailyLoss = parseFloat(maxDailyLoss);
         if (takeProfit) botState.takeProfit = parseFloat(takeProfit);
         botState.isRunning = true;
-        console.log(`▶️ SNIPER v18.9 INICIADO`);
+        console.log(`▶️ SNIPER v18.10 INICIADO`);
         return res.json({ success: true, isRunning: true });
     }
     if (action === 'STOP') { botState.isRunning = false; return res.json({ success: true, isRunning: false }); }
@@ -192,7 +191,7 @@ function connectDeriv() {
                  if (ws && ws.readyState === WebSocket.OPEN) {
                      ws.send(JSON.stringify({ subscribe: 1, ticks: SYMBOL }));
                      ws.send(JSON.stringify({ balance: 1, subscribe: 1 }));
-                     console.log(`🎯 SNIPER v18.9 ACTIVADO | Analizando Cadencia Atómica...`);
+                     console.log(`🎯 SNIPER v18.10 ACTIVADO | Escudo de Ganancias Activo...`);
                  }
              }, 2000);
         }
@@ -250,7 +249,6 @@ function connectDeriv() {
             const c = msg.proposal_open_contract;
             if (c.is_sold) {
                 const profit = parseFloat(c.profit);
-                botState.pnlSession += profit;
                 
                 if (profit > 0) {
                     botState.winsSession++;
@@ -263,29 +261,40 @@ function connectDeriv() {
                     const lossVal = Math.abs(profit);
                     botState.lossesSession++;
                     botState.dailyLoss += lossVal;
+                    
+                    const netDaily = botState.dailyProfit - botState.dailyLoss;
+
                     if (botState.recoveryActive) {
                         console.log(`🔴 RESCATE FALLIDO: Reseteando para proteger cuenta.`);
                         botState.recoveryActive = false;
                         botState.lastTradeTime = Date.now() + 30000;
                     } else if (botState.isRecoveryEnabled) {
-                        botState.recoveryActive = true;
-                        botState.lastTradeTime = Date.now() + 15000;
-                        console.log(`🛡️ ESCUDO ACTIVADO: Esperando 15s para Rescate x11 ($${(botState.stake * 11).toFixed(2)})`);
+                        // [v18.10] Logica GAIN-SHIELD: Solo rescatar si estamos abajo
+                        if (netDaily <= 0) {
+                            botState.recoveryActive = true;
+                            botState.lastTradeTime = Date.now() + 15000;
+                            console.log(`🛡️ RESCATE ACTIVADO: Saldo diario negativo ($${netDaily.toFixed(2)}). Lanzando x11 en 15s.`);
+                        } else {
+                            botState.recoveryActive = false;
+                            console.log(`🛡️ ESCUDO DE GANANCIA: Saldo positivo (+$${netDaily.toFixed(2)}). Tomando pérdida de $${lossVal} y siguiendo en base.`);
+                            botState.lastTradeTime = Date.now() + 10000; // Un poco de aire tras perdida
+                        }
                     }
                 }
 
                 botState.tradeHistory.unshift({
-                    type: 'DIFFERS', profit, time: new Date().toLocaleTimeString(),
+                    type: 'DIFFERS', profit: parseFloat(profit.toFixed(2)), time: new Date().toLocaleTimeString(),
                     barrier: botState.currentBarrier,
                     result: profit > 0 ? 'WIN ✅' : 'LOSS ❌',
                     lastDigit: botState.lastDigit
                 });
                 if (botState.tradeHistory.length > 50) botState.tradeHistory.pop();
                 
+                botState.pnlSession = botState.dailyProfit - botState.dailyLoss;
                 botState.totalTradesSession++;
                 botState.activeContractId = null;
                 saveState();
-                console.log(`💰 RESULTADO: ${profit > 0 ? 'WIN' : 'LOSS'} ($${profit.toFixed(2)}) | PnL Hoy: $${(botState.dailyProfit - botState.dailyLoss).toFixed(2)}`);
+                console.log(`💰 RESULTADO: ${profit > 0 ? 'WIN' : 'LOSS'} ($${profit.toFixed(2)}) | PnL Hoy: $${botState.pnlSession.toFixed(2)}`);
             }
         }
     });
@@ -342,7 +351,7 @@ setInterval(() => {
 
 const PORT = process.env.PORT || 8080;
 app.listen(PORT, '0.0.0.0', () => {
-    console.log(`🚀 v18.9 ONLINE EN PUERTO ${PORT}`);
+    console.log(`🚀 v18.10 ONLINE EN PUERTO ${PORT}`);
     connectDeriv();
 });
 
