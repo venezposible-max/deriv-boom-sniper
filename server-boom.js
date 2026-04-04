@@ -294,19 +294,25 @@ function connectDeriv() {
                 botState.pnlSession += profit;
                 if (profit > 0) { 
                     botState.winsSession++; botState.dailyProfit += profit; 
+                    // [v18.8] Si ganamos un rescate, volvemos al stake base de inmediato
+                    if (botState.recoveryActive) {
+                        console.log(`✅ RESCATE EXITOSO: Volviendo a Stake Base ($${botState.stake})`);
+                        botState.recoveryActive = false;
+                    }
                 } else { 
                     botState.lossesSession++; botState.dailyLoss += Math.abs(profit); 
-                    // [v18.6] Activar Rescate Matemático x11
-                    botState.recoveryActive = true;
-                    console.log(`🛡️ RESCATE MATEMÁTICO: Siguiente disparo será x11 ($${(botState.stake * 11).toFixed(2)})`);
-                }
-                botState.totalTradesSession++;
-                botState.activeContractId = null;
-                
-                // Si ganamos un rescate, volvemos al stake base de inmediato
-                if (botState.recoveryActive && profit > 0) {
-                    console.log(`✅ RESCATE COMPLETADO: Volviendo a Stake Base ($${botState.stake})`);
-                    botState.recoveryActive = false;
+                    
+                    if (botState.recoveryActive) {
+                        // [v18.8] RESCATE FALLIDO: Apagar rescate para no quemar la cuenta
+                        console.log(`🔴 RESCATE FALLIDO: Aceptando pérdida y volviendo a Stake Base.`);
+                        botState.recoveryActive = false;
+                        botState.lastTradeTime = Date.now() + 30000; // 30s de penalización por pérdida doble
+                    } else {
+                        // [v18.8] Activar Rescate x11 con COOLDOWN de 15s
+                        botState.recoveryActive = true;
+                        botState.lastTradeTime = Date.now() + 15000; // 15s de enfriamiento para el clúster
+                        console.log(`🛡️ ESCUDO ACTIVADO: Esperando 15s para Rescate Matemático x11 ($${(botState.stake * 11).toFixed(2)})`);
+                    }
                 }
 
                 botState.tradeHistory.unshift({
@@ -339,6 +345,12 @@ function executeFlashMirrorFire() {
     const barrier = chooseBestBarrier();
     botState.currentBarrier = barrier;
     botState.isBuying = true;
+
+    // [v18.8] Bloqueo de Rescate por Latencia Crítica
+    if (botState.recoveryActive && botState.currentPing > 150) {
+        console.log(`⚠️ LATENCIA ALTA (${botState.currentPing}ms): Pospiniendo rescate por seguridad...`);
+        return;
+    }
 
     // [v18.6] Calculo de Stake con Martingala Matemático x11
     let finalStake = botState.stake;
