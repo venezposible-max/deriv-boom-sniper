@@ -25,7 +25,7 @@ let SYMBOL = 'R_100';
 
 // ─── ESTADO GLOBAL ────────────────────────────────────────────
 let botState = {
-    isRunning: false,
+    isRunning: true,                  // [v18.2] Auto-Start activado para producción
     isConnectedToDeriv: false,
     isRealAccount: false,
     balance: 0,
@@ -79,7 +79,9 @@ let botState = {
 if (fs.existsSync(STATE_FILE)) {
     try {
         const saved = JSON.parse(fs.readFileSync(STATE_FILE));
-        botState = { ...botState, ...saved.botState, isRunning: false, isBuying: false, isAuthing: false };
+        botState = { ...botState, ...saved.botState, isBuying: false, isAuthing: false };
+        // Si el usuario lo paró manualmente, respetamos el estado; si no, auto-start.
+        if (saved.botState.isRunning === undefined) botState.isRunning = true;
     } catch (e) {}
 }
 
@@ -163,10 +165,12 @@ function connectDeriv() {
              ws.send(JSON.stringify({ forget_all: "ticks" }));
              setTimeout(() => {
                  if (ws && ws.readyState === WebSocket.OPEN) {
+                     console.log(`📡 Suscribiendo a Ticks y Balance en ${SYMBOL}...`);
                      ws.send(JSON.stringify({ subscribe: 1, ticks: SYMBOL }));
                      ws.send(JSON.stringify({ balance: 1, subscribe: 1 }));
+                     console.log(`🎯 SNIPER v18.2 ACTIVADO | Analizando RSI y cadencia de red...`);
                  }
-             }, 2000);
+             }, 3000);
         }
 
         if (msg.error) {
