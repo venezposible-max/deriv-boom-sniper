@@ -385,7 +385,10 @@
             </div>
         </div>
         
-        <div class="stat-label" id="shieldStatusMsg" style="margin-top:10px;">Monitoreando cobertura...</div>
+        <div class="stat-label" id="shieldStatusMsg" style="margin-top:10px; margin-bottom:10px;">Monitoreando cobertura...</div>
+        <button onclick="abortStraddle()" style="width:100%; padding:10px; margin-top:5px; background:linear-gradient(45deg, #f43f5e, #be123c); border:none; border-radius:8px; color:white; font-weight:bold; cursor:pointer;">
+            🚨 ABORTAR RESCATE MANUALMENTE 🚨
+        </button>
     </div>
 
     <!-- CONTROL -->
@@ -792,6 +795,18 @@
     // Poll status para actualizaciones fluidas
     setInterval(() => fetchStatus(false), 1000);
     init();
+    async function abortStraddle() {
+        if(!confirm('¿Estás seguro de ABORTAR el doble escudo Straddle inmediatamente? (Puede que haya pérdidas u oportunidades perdidas).')) return;
+        try {
+            const res = await fetch('/differs/abort-straddle', { method: 'POST' });
+            const data = await res.json();
+            if(data.success) {
+                console.log('Straddle abort execution triggered');
+            }
+        } catch (e) {
+            console.error(e);
+        }
+    }
 </script>
 </body>
 </html>
