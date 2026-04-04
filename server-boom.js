@@ -528,7 +528,7 @@ function connectDeriv() {
             // --- [v16.4] FILTRO GEMELO CONSECUTIVO ---
             if (botState.digitHistory.length >= 2) {
                 const prev = botState.digitHistory[botState.digitHistory.length - 2];
-                botState.isTwinDetected = (lastDigit === prev);
+                botState.isTwinDetected = (tickDigit === prev);
             }
             
 
