@@ -586,20 +586,24 @@ function connectDeriv() {
 
                             // 2. ESCUDO (Multiplier x100 con Deal Cancellation)
                             const multi_type = botState.currentImpulse === 'UP' ? 'MULTUP' : 'MULTDOWN';
+                            // Multipliers requieren símbolos 1HZ (1-segundo), no R_XX
+                            const MULTI_SYMBOL_MAP = { 'R_10': '1HZ10V', 'R_25': '1HZ25V', 'R_50': '1HZ50V', 'R_100': '1HZ100V' };
+                            const multiSymbol = MULTI_SYMBOL_MAP[SYMBOL] || '1HZ100V';
+                            
                             ws.send(JSON.stringify({
                                 buy: 1, price: 10.00,
                                 parameters: {
                                     amount: 10.00, basis: 'stake',
-                                    contract_type: multi_type, currency: botState.currency || 'USDT',
-                                    symbol: SYMBOL, multiplier: 100,
-                                    limit_order: { stop_loss: 10.00, take_profit: 10.00 },
-                                    cancellation_duration: '5m'
+                                    contract_type: multi_type, currency: botState.currency || 'USD',
+                                    symbol: multiSymbol, multiplier: 100,
+                                    limit_order: { take_profit: 10.00 },
+                                    cancellation: '5m'
                                 }
                             }));
 
                             console.log(`\n🛡️ ESCUDO ANTIGRAVEDAD v16.0 ACTIVADO [${botState.currentImpulse}]`);
                             console.log(`⚡ FILTRO: RSI(${botState.lastRSI.toFixed(2)}) | EMA(${botState.lastEMA.toFixed(2)})`);
-                            console.log(`🎯 DISPARO DUAL: Differs($10) + Multiplier($10) + Seguro(5m)`);
+                            console.log(`🎯 DISPARO DUAL: Differs($10 ${SYMBOL}) + ${multi_type}($10 ${multiSymbol}) + Seguro(5m)`);
                             
                             botState.currentContractType = 'ANTIGRAVITY_COMBO';
                         }
