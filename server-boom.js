@@ -70,16 +70,15 @@ let botState = {
     lastRSI: 50,
     lastEMA: 0,
     emaPeriod: 5,                // EMA-5 periodos
-    rsiPeriod: 5,                // RSI-5 periodos
-    emaInitialized: false,       // Controla si la EMA ya fue sembrada
-    currentImpulse: null,        // 'UP' o 'DOWN'
-    // [v16.2] GESTIÓN DE MULTIPLIER (ESCUDO)
-    activeMultiplierContractId: null,  // ID contrato Multiplier activo
-    multiplierOpenTime: 0,             // Timestamp de apertura
-    multiplierProfit: 0,               // P&L actual del multiplier
-    multiplierTakeProfit: 5.00,        // Vender si gana $5+ (dinámico ahora)
-    multiplierMaxLoss: 3.00,           // Cancelar si pierde $3+
-    multiplierTimeoutMs: 240000,       // Vender forzado a los 4 min (antes de que expire el seguro de 5m)
+    // [v16.3] STRADDLE MULTIDIRECCIONAL (Doble Escudo)
+    straddleUpId: null,
+    straddleDownId: null,
+    straddleUpProfit: 0,
+    straddleDownProfit: 0,
+    straddleOpenTime: 0,
+    straddleTP: 12.00,                 // TP general de venta de rescate
+    straddleMaxLoss: 3.00,             // Cancelar el que equivoque su rumbo
+    straddleTimeoutMs: 240000,         // Vender forzado a los 4 min
     lastDiffersResult: null,           // 'WIN' o 'LOSS' del último Differs en el combo
 };
 
@@ -542,8 +541,9 @@ function connectDeriv() {
             }
             
             // 3. DISPARO INTELIGENTE (Si algún gatillo encendió)
-            // BLOQUEO: No disparar si hay un Multiplier abierto (evitar acumular posiciones)
-            if (triggerActive && contractType && botState.isRunning && !botState.isBuying && !botState.activeContractId && !botState.activeMultiplierContractId) {
+            // BLOQUEO: No disparar Differs si hay un Straddle resolviendose (esperar que la tormenta pase)
+            const isStraddleActive = botState.straddleUpId || botState.straddleDownId;
+            if (triggerActive && contractType && botState.isRunning && !botState.isBuying && !botState.activeContractId && !isStraddleActive) {
                 const now = Date.now();
                 // Bloqueo de ráfaga (v9.5): Solo una ráfaga cada 1.5 segundos
                 if (botState.lastBurstTime && (now - botState.lastBurstTime < 1500)) return; 
@@ -583,9 +583,9 @@ function connectDeriv() {
                             botState.currentContractType = 'BINARY_STRIKE';
                             botState.currentBarrier = '0-9';
                         } else if (contractType === 'ANTIGRAVITY_COMBO') {
-                            // --- TRIPLE CAPA ANTIGRAVEDAD v16.0 ---
-                            
-                            // 1. MOTOR (Differs NO al Last Digit)
+                            // --- ESCUDO ANTIGRAVEDAD v16.3 (STRADDLE) ---
+                            // Sólo dispara el motor principal (Differs). 
+                            // El Straddle (doble escudo) se activará SÓLO como rescate si este Differs pierde.
                             ws.send(JSON.stringify({
                                 buy: 1, price: 10.00,
                                 parameters: {
@@ -595,25 +595,9 @@ function connectDeriv() {
                                 }
                             }));
 
-                            // 2. ESCUDO (Multiplier x100 con Deal Cancellation)
-                            const multi_type = botState.currentImpulse === 'UP' ? 'MULTUP' : 'MULTDOWN';
-                            // Multipliers requieren símbolos 1HZ (1-segundo), no R_XX
-                            const MULTI_SYMBOL_MAP = { 'R_10': '1HZ10V', 'R_25': '1HZ25V', 'R_50': '1HZ50V', 'R_100': '1HZ100V' };
-                            const multiSymbol = MULTI_SYMBOL_MAP[SYMBOL] || '1HZ100V';
-                            
-                            ws.send(JSON.stringify({
-                                buy: 1, price: 15.00, // Tope alto para cubrir stake($10) + fee de seguro(~$1.11)
-                                parameters: {
-                                    amount: 10.00, basis: 'stake',
-                                    contract_type: multi_type, currency: botState.currency || 'USD',
-                                    symbol: multiSymbol, multiplier: 100,
-                                    cancellation: '5m'
-                                }
-                            }));
-
-                            console.log(`\n🛡️ ESCUDO ANTIGRAVEDAD v16.0 ACTIVADO [${botState.currentImpulse}]`);
-                            console.log(`⚡ FILTRO: RSI(${botState.lastRSI.toFixed(2)}) | EMA(${botState.lastEMA.toFixed(2)})`);
-                            console.log(`🎯 DISPARO DUAL: Differs($10 ${SYMBOL}) + ${multi_type}($10 ${multiSymbol}) + Seguro(5m)`);
+                            console.log(`\n🛡️ ANTIGRAVEDAD v16.3: LANZANDO DIFFERS [${botState.currentImpulse}]`);
+                            console.log(`⚡ FILTRO VOLATIL: RSI(${botState.lastRSI.toFixed(2)}) | EMA(${botState.lastEMA.toFixed(2)})`);
+                            console.log(`🎯 MOTOR: Differs($10 ${SYMBOL}). (Straddle a la espera)`);
                             
                             botState.currentContractType = 'ANTIGRAVITY_COMBO';
                         }
@@ -637,28 +621,23 @@ function connectDeriv() {
             const openStake = msg.buy.buy_price || 0;
             const contractType = msg.buy.shortcode || '';
             
-            // Detectar si es Multiplier o Differs
-            const isMultiplier = contractType.includes('MULT') || 
-                                 (botState.currentContractType === 'ANTIGRAVITY_COMBO' && !botState.activeContractId && botState.activeMultiplierContractId === null);
-            
-            if (contractType.includes('MULT') || (botState.currentContractType === 'ANTIGRAVITY_COMBO' && botState.activeContractId)) {
-                // Este es el MULTIPLIER (segundo contrato del combo)
-                botState.activeMultiplierContractId = contractId;
-                botState.multiplierOpenTime = Date.now();
-                botState.multiplierProfit = 0;
-                botState.lastDiffersResult = null; // Reiniciamos el resultado para este nuevo combo
-                console.log(`🛡️ ESCUDO ABIERTO [${contractId}] | Tipo: ${contractType.includes('MULTUP') ? 'MULTUP' : 'MULTDOWN'} | Stake: $${openStake}`);
+            if (contractType.includes('MULTUP')) {
+                botState.straddleUpId = contractId;
+                console.log(`🛡️ STRADDLE UP ABIERTO [${contractId}] | Stake: $${openStake}`);
+                ws.send(JSON.stringify({ proposal_open_contract: 1, contract_id: contractId, subscribe: 1 }));
+            } else if (contractType.includes('MULTDOWN')) {
+                botState.straddleDownId = contractId;
+                console.log(`🛡️ STRADDLE DOWN ABIERTO [${contractId}] | Stake: $${openStake}`);
+                ws.send(JSON.stringify({ proposal_open_contract: 1, contract_id: contractId, subscribe: 1 }));
             } else {
-                // Este es el DIFFERS (primer contrato)
+                // Este es el DIFFERS
                 botState.activeContractId = contractId;
                 botState.currentContractId = contractId;
                 console.log(`🎯 DIFFERS ABIERTO [${contractId}] | Stake: $${openStake} | Barrera: NO-${botState.currentBarrier}`);
+                ws.send(JSON.stringify({ proposal_open_contract: 1, contract_id: contractId, subscribe: 1 }));
             }
             
             botState.isBuying = false;
-
-            // Suscribir al resultado del contrato
-            ws.send(JSON.stringify({ proposal_open_contract: 1, contract_id: contractId, subscribe: 1 }));
         }
 
         if (msg.msg_type === 'buy' && msg.error) {
@@ -676,74 +655,66 @@ function connectDeriv() {
             if (!c) return;
             
             const contractId = c.contract_id;
-            const isMultiplier = String(contractId) === String(botState.activeMultiplierContractId);
+            const isStraddleUp = String(contractId) === String(botState.straddleUpId);
+            const isStraddleDown = String(contractId) === String(botState.straddleDownId);
             
-            // ─── MONITOR MULTIPLIER EN VIVO ───
-            if (isMultiplier && !c.is_sold) {
+            // ─── MONITOR STRADDLE EN VIVO ───
+            if ((isStraddleUp || isStraddleDown) && !c.is_sold) {
                 const profit = parseFloat(c.profit || 0);
-                botState.multiplierProfit = profit;
-                const elapsed = Date.now() - botState.multiplierOpenTime;
+                const elapsed = Date.now() - botState.straddleOpenTime;
+                const legName = isStraddleUp ? 'UP' : 'DOWN';
                 
-                // TP Dinámico: 
-                // - Si el Differs ganó velozmente, cerrar el Multiplier con $1.00 de ganancia
-                // - Si el Differs perdió, aguantar el Multiplier hasta $10.50 para recuperar todo
-                // - Si el Differs sigue abierto (raro, 1 tick), usamos el genérico 5.00
-                let dynamicTP = botState.multiplierTakeProfit; 
-                if (botState.lastDiffersResult === 'WIN') dynamicTP = 1.00;
-                if (botState.lastDiffersResult === 'LOSS') dynamicTP = 10.50;
+                if (isStraddleUp) botState.straddleUpProfit = profit;
+                else botState.straddleDownProfit = profit;
                 
-                // REGLA 1: Take Profit Dinámico → Vender
-                if (profit >= dynamicTP) {
-                    console.log(`💰 ESCUDO: Take Profit Dinámico (+${dynamicTP}) alcanzado → VENDIENDO (Differs fue ${botState.lastDiffersResult || '?'})`);
+                // REGLA 1: Take Profit Global para el Pierna Ganadora
+                if (profit >= botState.straddleTP) {
+                    console.log(`💰 STRADDLE ${legName} WIN: Take Profit (+${botState.straddleTP}) alcanzado → VENDIENDO PARA CUBRIR DIFFERS`);
                     ws.send(JSON.stringify({ sell: contractId, price: 0 }));
                 }
-                // REGLA 2: Cancelar si perdiendo $3+ (usar deal cancellation)
-                else if (profit <= -botState.multiplierMaxLoss && c.is_valid_to_cancel) {
-                    console.log(`🛡️ ESCUDO: Pérdida -$${Math.abs(profit).toFixed(2)} → CANCELANDO (Seguro activo)`);
+                // REGLA 2: Cancelar Pierna Perdedora (Guillotina Anti-Sierra)
+                else if (profit <= -botState.straddleMaxLoss && c.is_valid_to_cancel) {
+                    console.log(`🛡️ STRADDLE ${legName} ERROR: Toco-$${botState.straddleMaxLoss} → CANCELANDO (Asegurando stake)`);
                     ws.send(JSON.stringify({ cancel: contractId }));
                 }
                 // REGLA 3: Timeout → Vender antes de que expire el seguro (4 min)
-                else if (elapsed >= botState.multiplierTimeoutMs) {
+                else if (elapsed >= botState.straddleTimeoutMs) {
                     if (c.is_valid_to_cancel && profit < 0) {
-                        console.log(`⏰ ESCUDO: Timeout 4min, pérdida -$${Math.abs(profit).toFixed(2)} → CANCELANDO`);
+                        console.log(`⏰ STRADDLE ${legName} TIMEOUT (4m): Pérdida de -$${Math.abs(profit).toFixed(2)} → CANCELANDO`);
                         ws.send(JSON.stringify({ cancel: contractId }));
                     } else {
-                        console.log(`⏰ ESCUDO: Timeout 4min, profit $${profit.toFixed(2)} → VENDIENDO`);
+                        console.log(`⏰ STRADDLE ${legName} TIMEOUT (4m): Profit $${profit.toFixed(2)} → VENDIENDO`);
                         ws.send(JSON.stringify({ sell: contractId, price: 0 }));
                     }
                 }
-                return; // No procesar como trade finalizado aún
+                return; // No procesar como llegado a su fin todavía
             }
             
             // ─── CONTRATO VENDIDO/CERRADO ───
             if (!c.is_sold) return;
             
-            // Si es el Multiplier que se cerró
-            if (isMultiplier) {
+            // Si es parte de un Straddle que se cerró
+            if (isStraddleUp || isStraddleDown) {
                 const profit = parseFloat(c.profit || 0);
                 const wasCancelled = c.status === 'cancelled';
-                botState.activeMultiplierContractId = null;
+                const legName = isStraddleUp ? 'UP' : 'DOWN';
+                
+                if (isStraddleUp) botState.straddleUpId = null;
+                else botState.straddleDownId = null;
                 
                 if (wasCancelled) {
-                    console.log(`🛡️ ESCUDO CANCELADO → Stake recuperado (fee: ~$${Math.abs(profit).toFixed(2)})`);
+                    console.log(`🛡️ STRADDLE ${legName} CANCELADO → Rescatado (fee: ~$${Math.abs(profit).toFixed(2)})`);
                 } else if (profit >= 0) {
-                    console.log(`💰 ESCUDO VENDIDO → Ganancia: +$${profit.toFixed(2)}`);
+                    console.log(`💰 STRADDLE ${legName} COBRADO → Ganancia: +$${profit.toFixed(2)}`);
                 } else {
-                    console.log(`📉 ESCUDO CERRADO → Pérdida: -$${Math.abs(profit).toFixed(2)}`);
+                    console.log(`📉 STRADDLE ${legName} CERRADO → Pérdida limpia: -$${Math.abs(profit).toFixed(2)}`);
                 }
                 
-                // Registrar en PnL y historial
+                // Actualizar PnL
                 botState.pnlSession += profit;
                 if (profit > 0) { botState.dailyProfit += profit; botState.winsSession++; }
                 else { botState.dailyLoss += Math.abs(profit); botState.lossesSession++; }
                 botState.totalTradesSession++;
-                
-                const timeVE = new Date().toLocaleString('es-VE', { timeZone: 'America/Caracas' });
-                botState.tradeHistory.unshift({
-                    type: wasCancelled ? '🛡️ ESCUDO CANCELADO' : `🛡️ ESCUDO ${profit >= 0 ? 'WIN' : 'LOSS'}`,
-                    profit, time: timeVE, barrier: '-', result: profit >= 0 ? 'WIN ✅' : 'LOSS ❌', lastDigit: '-'
-                });
-                if (botState.tradeHistory.length > 100) botState.tradeHistory.pop();
                 saveState();
                 return;
             }
@@ -846,6 +817,40 @@ function tryFireTrade() {
     ws.send(JSON.stringify(req));
 }
 
+// ─── DISPARAR STRADDLE (RESCATE) ─────────────────────────
+function fireStraddleRescue() {
+    if (!ws) return;
+    botState.straddleOpenTime = Date.now();
+    botState.straddleUpProfit = 0;
+    botState.straddleDownProfit = 0;
+    
+    // Multipliers requieren símbolos 1HZ (1-segundo)
+    const MULTI_SYMBOL_MAP = { 'R_10': '1HZ10V', 'R_25': '1HZ25V', 'R_50': '1HZ50V', 'R_100': '1HZ100V' };
+    const multiSymbol = MULTI_SYMBOL_MAP[SYMBOL] || '1HZ100V';
+
+    console.log(`\n🚨 ¡DIFFERS FALLÓ! LANZANDO STRADDLE MULTIDIRECCIONAL (Doble Escudo en ${multiSymbol})`);
+
+    // Disparar UP
+    ws.send(JSON.stringify({
+        buy: 1, price: 15.00,
+        parameters: {
+            amount: 10.00, basis: 'stake',
+            contract_type: 'MULTUP', currency: botState.currency || 'USD',
+            symbol: multiSymbol, multiplier: 100, cancellation: '5m'
+        }
+    }));
+
+    // Disparar DOWN
+    ws.send(JSON.stringify({
+        buy: 1, price: 15.00,
+        parameters: {
+            amount: 10.00, basis: 'stake',
+            contract_type: 'MULTDOWN', currency: botState.currency || 'USD',
+            symbol: multiSymbol, multiplier: 100, cancellation: '5m'
+        }
+    }));
+}
+
 // ─── FINALIZAR TRADE ─────────────────────────────────────────
 function finalizeTrade(c) {
     const profit = parseFloat(c.profit);
@@ -884,9 +889,9 @@ function finalizeTrade(c) {
         botState.blacklist[badDigit] = Date.now() + (120 * 1000); 
         console.log(`🛡️ Dígito ${badDigit} en Lista Negra por 2 min.`);
 
-        // LÓGICA ONE-SHOT:
-        // LÓGICA DE RESCATE (TÉCNICA: DOBLE DARDO MATCH):
-        if (botState.isRecoveryEnabled) {
+        if (botState.currentContractType === 'ANTIGRAVITY_COMBO') {
+            fireStraddleRescue();
+        } else if (botState.isRecoveryEnabled) {
             if (!botState.recoveryActive) {
                 botState.recoveryActive = true;
                 botState.recoveryStep = 1;

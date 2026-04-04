@@ -369,12 +369,23 @@
         <div class="stat-label">Esperando resultado del tick...</div>
     </div>
 
-    <!-- ACTIVE SHIELD -->
+    <!-- ACTIVE STRADDLE SHIELD -->
     <div class="card shield-active" id="shieldCard" style="display:none; text-align:center;">
-        <div class="stat-label" style="color:#34d399;">🛡️ ESCUDO ACTIVO (MULTIPLIER)</div>
+        <div class="stat-label" style="color:#34d399;">🛡️ RESCATE STRADDLE (DOBLE ESCUDO)</div>
         <div style="font-size:12px; color:#aaa; margin:6px 0;">Seguro activado (5 min)</div>
-        <div style="font-size:2.5rem; font-weight:900; margin:8px 0;" id="shieldProfit">$0.00</div>
-        <div class="stat-label" id="shieldStatusMsg">Monitoreando cobertura...</div>
+        
+        <div style="display:flex; justify-content:space-between; margin-top:15px; background:rgba(0,0,0,0.2); border-radius:10px; padding:10px;">
+            <div style="flex:1; border-right:1px solid rgba(255,255,255,0.1);">
+                <div style="font-size:12px; color:#aaa;">ESCUDO (UP)</div>
+                <div style="font-size:1.8rem; font-weight:900;" id="shieldUpProfit">$0.00</div>
+            </div>
+            <div style="flex:1;">
+                <div style="font-size:12px; color:#aaa;">ESCUDO (DOWN)</div>
+                <div style="font-size:1.8rem; font-weight:900;" id="shieldDownProfit">$0.00</div>
+            </div>
+        </div>
+        
+        <div class="stat-label" id="shieldStatusMsg" style="margin-top:10px;">Monitoreando cobertura...</div>
     </div>
 
     <!-- CONTROL -->
@@ -629,20 +640,25 @@
                 tradeCard.style.display = 'none';
             }
 
-            // Active Shield card
+            // Active Straddle Shield card
             const shieldCard = document.getElementById('shieldCard');
-            if (data.activeMultiplierContractId) {
+            if (data.straddleUpId || data.straddleDownId) {
                 shieldCard.style.display = 'block';
-                const shieldProfit = parseFloat(data.multiplierProfit || 0);
-                const shieldProfitEl = document.getElementById('shieldProfit');
-                shieldProfitEl.innerText = `${shieldProfit >= 0 ? '+' : ''}$${shieldProfit.toFixed(2)}`;
-                shieldProfitEl.style.color = shieldProfit >= 0 ? '#34d399' : '#f87171';
                 
-                const elapsedSecs = Math.floor((Date.now() - (data.multiplierOpenTime || Date.now())) / 1000);
-                let currentTP = 5.00;
-                if (data.lastDiffersResult === 'WIN') currentTP = 1.00;
-                if (data.lastDiffersResult === 'LOSS') currentTP = 10.50;
-                document.getElementById('shieldStatusMsg').innerText = `Tiempo abierto: ${elapsedSecs}s | Cierre Auto en +$${currentTP.toFixed(2)}`;
+                const upProfit = parseFloat(data.straddleUpProfit || 0);
+                const downProfit = parseFloat(data.straddleDownProfit || 0);
+                
+                const upEl = document.getElementById('shieldUpProfit');
+                const downEl = document.getElementById('shieldDownProfit');
+                
+                upEl.innerText = `${upProfit >= 0 ? '+' : ''}$${upProfit.toFixed(2)}`;
+                upEl.style.color = upProfit >= 0 ? '#34d399' : '#f87171';
+                
+                downEl.innerText = `${downProfit >= 0 ? '+' : ''}$${downProfit.toFixed(2)}`;
+                downEl.style.color = downProfit >= 0 ? '#34d399' : '#f87171';
+                
+                const elapsedSecs = Math.floor((Date.now() - (data.straddleOpenTime || Date.now())) / 1000);
+                document.getElementById('shieldStatusMsg').innerText = `Tiempo de rescate: ${elapsedSecs}s | Cierre Auto al cubrir pérdida (+$12.00)`;
             } else {
                 shieldCard.style.display = 'none';
             }
