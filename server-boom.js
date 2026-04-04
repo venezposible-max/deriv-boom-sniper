@@ -362,15 +362,17 @@ function connectDeriv() {
 
     ws.on('open', () => {
         const isReal = botState.isRealAccount;
-        const waitTime = isReal ? 100 : 5000; // Real: Rápido | Demo: Seguro 5s
+        const waitTime = isReal ? 100 : 1000; // Real: Rápido | Demo: 1s (Era 5s, bajado para evitar timeout)
         
         console.log(`🔌 Conexión abierta. Autenticando en ${waitTime/1000}s...`);
 
         setTimeout(() => {
             if (ws && ws.readyState === WebSocket.OPEN) {
-                const token = isReal 
+                const tokenRaw = isReal 
                     ? (process.env.DERIV_TOKEN_REAL || 'oC2QqWbtJZdjauD') 
                     : (process.env.DERIV_TOKEN_DEMO || 'PMIt2RhEjEDbcLD');
+                
+                const token = tokenRaw.trim(); // Limpieza vital
                 
                 console.log(`🔑 Mandando Token del modo: ${isReal ? 'REAL 🔴' : 'DEMO 🔵'} (Token: ${token.substring(0,4)}...)`);
                 ws.send(JSON.stringify({ authorize: token }));
@@ -397,24 +399,28 @@ function connectDeriv() {
              console.log(`✅ Autenticado: ${msg.authorize.fullname} [${isReal ? 'REAL 🔴' : 'DEMO 🔵'}] - Moneda: ${currency}`);
              botState.isConnectedToDeriv = true;
              
-             // Limpieza inicial
-             ws.send(JSON.stringify({ forget_all: "ticks" }));
-             ws.send(JSON.stringify({ forget_all: "proposal_open_contract" }));
+             // Paso 1: Limpieza inicial (con retraso) 
+             setTimeout(() => {
+                 if (ws && ws.readyState === WebSocket.OPEN) {
+                    ws.send(JSON.stringify({ forget_all: "ticks" }));
+                    ws.send(JSON.stringify({ forget_all: "proposal_open_contract" }));
+                 }
+             }, 500);
 
-             // Paso 1: Ticks (Más rápido en Real)
+             // Paso 2: Ticks (Más rápido en Real)
              setTimeout(() => {
                  if (ws && ws.readyState === WebSocket.OPEN) {
                      console.log(`📡 Suscribiendo a Ticks: ${SYMBOL}...`);
                      ws.send(JSON.stringify({ subscribe: 1, ticks: SYMBOL }));
                  }
-             }, isReal ? 1000 : 3000);
+             }, isReal ? 1000 : 3500);
 
-             // Paso 2: Balance (Para ver los $1.64 rápido)
+             // Paso 3: Balance (Para ver los $1.64 rápido)
              setTimeout(() => {
                  if (ws && ws.readyState === WebSocket.OPEN) {
                      ws.send(JSON.stringify({ balance: 1, subscribe: 1 }));
                  }
-             }, isReal ? 2000 : 6000);
+             }, isReal ? 2000 : 7000);
         }
 
         // Errores de Auth
@@ -510,7 +516,11 @@ function connectDeriv() {
                 // Reconectar para suscribirse al nuevo tick stream
                 if (ws) {
                     ws.send(JSON.stringify({ forget_all: "ticks" }));
-                    ws.send(JSON.stringify({ subscribe: 1, ticks: SYMBOL }));
+                    setTimeout(() => {
+                        if (ws && ws.readyState === WebSocket.OPEN) {
+                            ws.send(JSON.stringify({ subscribe: 1, ticks: SYMBOL }));
+                        }
+                    }, 1000); // 1s de respiro para el cambio de mercado
                 }
                 return; 
             }
