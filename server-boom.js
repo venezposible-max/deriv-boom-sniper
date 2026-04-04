@@ -142,9 +142,25 @@ function chooseBestBarrier() {
     let chosenDigit = null;
     let strategyLabel = '';
 
-    // ELEGIR ESTRATEGIA (BLOQUEADO A SOLO FLASH-MIRROR POR PETICIÓN)
-    strategyLabel = '⚡ FLASH-MIRROR';
-    chosenDigit = lastDigit;
+    // --- [v16.7] FLASH-MIRROR PREDICTIVO: Selección por Bigrams ---
+    let bestPredictiveDigit = lastDigit; // Fallback: Anti-Repeat
+    let maxFreq = 0;
+    
+    // Escaneamos la matriz de transiciones para el dígito actual
+    for (let d = 0; d <= 9; d++) {
+        const pair = `${lastDigit}->${d}`;
+        const freq = botState.digitTransitions[pair] || 0;
+        if (freq > maxFreq) {
+            maxFreq = freq;
+            bestPredictiveDigit = d;
+        }
+    }
+
+    strategyLabel = '🎯 FLASH-MIRROR (BIGRAM)';
+    chosenDigit = bestPredictiveDigit; 
+    
+    // Si no tenemos historia de este par, usamos el último por defecto
+    if (maxFreq === 0) chosenDigit = lastDigit;
 
     /* BLOQUEO TEMPORAL DE OTROS MODOS
     const mode = botState.strategyIndex % 4;
@@ -621,6 +637,7 @@ function connectDeriv() {
                             botState.recoveryStep = 0;
                             triggerActive = null;
                             contractType = null;
+                            botState.pendingSignal = null;
                         }
                     } 
                     // === MODO RECOLECTOR (BOT ESCUDO ANTIGRAVEDAD v16.0) ===
@@ -643,9 +660,12 @@ function connectDeriv() {
                             contractType = 'ANTIGRAVITY_COMBO';
                             stakeFinal = 10.00;
                             botState.currentImpulse = impulse; // [v16.4] Guardamos la dirección para el rescate
+                            // [v16.7] Guardar señal para el pulso de Flash-Mirror
+                            botState.pendingSignal = { trigger: triggerActive, type: contractType, stake: stakeFinal, barrier: targetBarrier };
                         } else {
                             triggerActive = null;
                             contractType = null;
+                            botState.pendingSignal = null;
                         }
                     }
                 }
@@ -660,13 +680,11 @@ function connectDeriv() {
                 if (botState.lastBurstTime && (now - botState.lastBurstTime < 1500)) return; 
                 
                 if ((now - botState.lastTradeTime) >= botState.cooldownMs) {
-                    
-
-
                     const netP = botState.dailyProfit - botState.dailyLoss;
                     if (netP < botState.takeProfit && netP > -botState.maxDailyLoss) {
-
-                        if (contractType === 'BINARY_STRIKE') {
+                        if (contractType === 'ANTIGRAVITY_COMBO') {
+                            executeFlashMirrorFire();
+                        } else if (contractType === 'BINARY_STRIKE') {
                             // --- DISPARO DUAL BINARIO (80% Área de Ganancia) ---
                             // Leg 1: DigitUnder (9) -> Gana con 0,1,2,3,4,5,6,7,8
                             ws.send(JSON.stringify({
@@ -1143,6 +1161,55 @@ setInterval(() => {
     const wr = ((botState.winsSession / botState.totalTradesSession) * 100).toFixed(1);
     console.log(`📊 [STATS] Trades: ${botState.totalTradesSession} | Win Rate: ${wr}% | PnL: $${botState.pnlSession.toFixed(2)} | Balance: $${botState.balance}`);
 }, 60000);
+
+// ─── FLASH-MIRROR PULSE WORKER (v16.7) ─────────────────────────
+function executeFlashMirrorFire() {
+    if (!botState.pendingSignal || !botState.isRunning || botState.isBuying || botState.activeContractId) return;
+    const isStraddleActive = botState.straddleUpId || botState.straddleDownId;
+    if (isStraddleActive) return;
+
+    const now = Date.now();
+    if ((now - botState.lastTradeTime) < botState.cooldownMs) return;
+
+    const targetBarrier = chooseBestBarrier();
+    if (!targetBarrier) return;
+
+    const signal = botState.pendingSignal;
+    
+    if (signal.type === 'ANTIGRAVITY_COMBO') {
+        botState.isBuying = true; 
+        ws.send(JSON.stringify({
+            buy: 1, price: 10.00,
+            parameters: {
+                amount: 10.00, basis: 'stake',
+                contract_type: 'DIGITDIFF', currency: botState.currency || 'USD',
+                symbol: SYMBOL, duration: 1, duration_unit: 't', barrier: targetBarrier
+            }
+        }));
+
+        console.log(`\n⚡ FLASH-MIRROR PULSE: LANZANDO NO-${targetBarrier} [${botState.currentImpulse}]`);
+        console.log(`🛰️ ANTICIPACIÓN: 150ms (Solapamiento de Latencia OK)`);
+        
+        botState.currentContractType = 'ANTIGRAVITY_COMBO';
+        botState.lastTradeTime = now;
+        botState.currentBarrier = targetBarrier;
+        botState.pendingSignal = null; // Flush signal
+    }
+}
+
+// Reloj de pulso cada 20ms para cazar la ventana de latencia
+setInterval(() => {
+    if (!botState.pendingSignal || !botState.isRunning) return;
+    
+    const now = Date.now();
+    const timeSinceLast = now - botState.lastTickReceivedAt;
+    const nextExpected = botState.avgTickInterval;
+    
+    // Si faltan 150ms para el próximo tick, disparamos por adelantado
+    if (timeSinceLast >= (nextExpected - 150)) {
+        executeFlashMirrorFire();
+    }
+}, 20);
 
 // ─── INICIAR SERVIDOR ─────────────────────────────────────────
 const PORT = process.env.DIFFERS_PORT || process.env.PORT || 8080;
