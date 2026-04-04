@@ -1,8 +1,8 @@
 /**
  * ============================================================
- *  DIFFERS SNIPER ENGINE v18.12 [ANTI-HOT HAMMER]
+ *  DIFFERS SNIPER ENGINE v18.13 [THE GOLDEN SNIPER]
  *  Estrategia: DIFFERS — El último dígito NO será X
- *  Símbolo: R_100 (Sincronía Atómica por cadencia)
+ *  Símbolo: R_100 (Sincronía Atómica por cadencia Fibonacci)
  * ============================================================
  */
 
@@ -39,7 +39,7 @@ let botState = {
     digitFrequency: {},
     currentBarrier: null,
     stake: 10.00,
-    maxDailyLoss: 20,
+    maxDailyLoss: 200,
     takeProfit: 50,
     dailyLoss: 0,
     dailyProfit: 0,
@@ -75,42 +75,51 @@ if (fs.existsSync(STATE_FILE)) {
 
 const saveState = () => { try { fs.writeFileSync(STATE_FILE, JSON.stringify({ botState })); } catch (e) {} };
 
-// [v18.12] Selección de Barrera por "Frialdad" (Anti-Hot Hammer)
+// [v18.13] FIBONACCI CYCLE ANALYSIS
+const FIBO_SECUENCE = [1, 2, 3, 5, 8, 13, 21];
+
 function chooseBestBarrier() {
     const hist = botState.digitHistory;
-    if (hist.length < 20) return '5';
+    if (hist.length < 25) return '5';
 
-    // Frecuencia en los últimos 40 ticks para detectar "Calientes"
+    let digitScores = Array(10).fill(0);
+
+    // 1. Frecuencia Reciente (Filtro v18.12)
     const freqLast = {};
     hist.slice(-40).forEach(d => freqLast[d] = (freqLast[d] || 0) + 1);
+    for (let d = 0; d <= 9; d++) {
+        digitScores[d] += (freqLast[d] || 0) * 10; // Peso 40%
+    }
 
-    // Encontrar el dígito más FRÍO (El que MENOS ha salido)
-    let coolestDigit = '0';
-    let minFreq = 999;
+    // 2. Transiciones (Filtro v18.8)
+    const lastD = hist[hist.length - 1];
+    for (let d = 0; d <= 9; d++) {
+        const t = botState.digitTransitions[`${lastD}->${d}`] || 0;
+        digitScores[d] += t * 5; // Peso 30%
+    }
+
+    // 3. CICLOS DE FIBONACCI [v18.13]
+    FIBO_SECUENCE.forEach((steps) => {
+        const index = hist.length - 1 - steps;
+        if (index >= 0) {
+            const digitAtFiboPoint = hist[index];
+            digitScores[digitAtFiboPoint] += 25; // Penalización alta por Ciclo de Oro
+        }
+    });
+
+    // Encontrar el dígito con el MENOR SCORE de riesgo
+    let bestDigit = '0';
+    let minScore = 99999;
     
     for (let d = 0; d <= 9; d++) {
-        const f = freqLast[d] || 0;
-        if (f < minFreq) {
-            minFreq = f;
-            coolestDigit = String(d);
+        if (digitScores[d] < minScore) {
+            minScore = digitScores[d];
+            bestDigit = String(d);
         }
     }
 
-    // [v18.12] BLOQUEO DE EMERGENCIA: Si el dígito más frío aun así ha salido > 5 veces en 40 (muy caliente), bajamos la guardia
-    if (minFreq > 6) {
-        // Buscamos otro por transiciones
-        const lastDigit = hist[hist.length - 1];
-        let rareDigit = '0';
-        let minTrans = 999;
-        for (let d = 0; d <= 9; d++) {
-            const t = botState.digitTransitions[`${lastDigit}->${d}`] || 0;
-            if (t < minTrans) { minTrans = t; rareDigit = String(d); }
-        }
-        coolestDigit = rareDigit;
-    }
-
-    botState.currentBarrier = coolestDigit;
-    return coolestDigit;
+    botState.currentBarrier = bestDigit;
+    return bestDigit;
 }
 
 // ─── SERVIDOR WEB (EXPRESS) ───
@@ -130,7 +139,7 @@ app.post('/differs/control', (req, res) => {
         if (maxDailyLoss) botState.maxDailyLoss = parseFloat(maxDailyLoss);
         if (takeProfit) botState.takeProfit = parseFloat(takeProfit);
         botState.isRunning = true;
-        console.log(`▶️ SNIPER v18.12 INICIADO`);
+        console.log(`▶️ SNIPER v18.13 INICIADO [GOLDEN FIBO]`);
         return res.json({ success: true, isRunning: true });
     }
     if (action === 'STOP') { botState.isRunning = false; return res.json({ success: true, isRunning: false }); }
@@ -141,7 +150,6 @@ app.post('/differs/control', (req, res) => {
 app.post('/differs/toggle-recovery', (req, res) => {
     const { enabled } = req.body;
     botState.isRecoveryEnabled = !!enabled;
-    console.log(`🛡️ RECUPERACIÓN ${botState.isRecoveryEnabled ? 'ACTIVADA' : 'DESACTIVADA'}`);
     saveState();
     res.json({ success: true, isRecoveryEnabled: botState.isRecoveryEnabled });
 });
@@ -177,7 +185,6 @@ function connectDeriv() {
     ws = new WebSocket(`wss://ws.derivws.com/websockets/v3?app_id=${APP_ID}`);
 
     ws.on('open', () => {
-        console.log(`🔌 Conexión abierta. Autenticando...`);
         setTimeout(() => {
             if (ws && ws.readyState === WebSocket.OPEN && !botState.isAuthing) {
                 const token = (botState.isRealAccount ? process.env.DERIV_TOKEN_REAL : process.env.DERIV_TOKEN_DEMO) || DERIV_TOKEN_DEMO;
@@ -202,15 +209,9 @@ function connectDeriv() {
                  if (ws && ws.readyState === WebSocket.OPEN) {
                      ws.send(JSON.stringify({ subscribe: 1, ticks: SYMBOL }));
                      ws.send(JSON.stringify({ balance: 1, subscribe: 1 }));
-                     console.log(`🎯 SNIPER v18.12 ACTIVADO | Anti-Hot Hammer Martillando...`);
+                     console.log(`🎯 SNIPER v18.13 ACTIVADO | Armonía Áurea de Fibonacci...`);
                  }
              }, 2000);
-        }
-
-        if (msg.error) {
-            console.error(`⚠️ Error [${msg.error.code}]: ${msg.error.message}`);
-            if (msg.msg_type === 'authorize') { botState.isAuthing = false; ws.terminate(); }
-            return;
         }
 
         if (msg.msg_type === 'tick' && msg.tick) {
@@ -226,13 +227,13 @@ function connectDeriv() {
             const tickPrice = parseFloat(msg.tick.quote);
             botState.lastTickPrice = tickPrice;
             
-            // [v18.12] SIMULACIÓN FANTASMA CON ANTI-HOT
+            // [v18.13] SIMULACIÓN FANTASMA CON FIBONACCI
             if (botState.nextBarrier !== null) {
                 if (tickDigit !== parseInt(botState.nextBarrier)) {
                     botState.ghostStreak++;
                 } else {
                     botState.ghostStreak = 0;
-                    console.log(`👻 GHOST LOSS: El dígito ${tickDigit} apareció. Reseteando...`);
+                    console.log(`👻 GHOST LOSS: Ciclo roto en dígito ${tickDigit}.`);
                 }
             }
             
@@ -256,7 +257,6 @@ function connectDeriv() {
 
         if (msg.msg_type === 'buy' && msg.buy) {
             botState.activeContractId = msg.buy.contract_id;
-            console.log(`🎯 CONTRATO REAL ABIERTO: ${msg.buy.contract_id}`);
             ws.send(JSON.stringify({ proposal_open_contract: 1, contract_id: msg.buy.contract_id, subscribe: 1 }));
             botState.isBuying = false;
         }
@@ -269,28 +269,24 @@ function connectDeriv() {
                     botState.winsSession++;
                     botState.dailyProfit += profit;
                     if (botState.recoveryActive) {
-                        console.log(`✅ RESCATE EXITOSO: Volviendo a Base.`);
+                        console.log(`✅ RESCATE ÁUREO COMPLETADO.`);
                         botState.recoveryActive = false;
                     }
                 } else {
                     const lossVal = Math.abs(profit);
                     botState.lossesSession++;
                     botState.dailyLoss += lossVal;
-                    
                     const netDaily = botState.dailyProfit - botState.dailyLoss;
-
                     if (botState.recoveryActive) {
-                        console.log(`🔴 RESCATE FALLIDO: Cierre de seguridad por pérdida doble.`);
                         botState.recoveryActive = false;
-                        botState.lastTradeTime = Date.now() + 60000; // 1 min de penalizacion total
+                        botState.lastTradeTime = Date.now() + 60000;
                     } else if (botState.isRecoveryEnabled) {
                         if (netDaily <= 0) {
                             botState.recoveryActive = true;
                             botState.lastTradeTime = Date.now() + 15000;
-                            console.log(`🛡️ RESCATE x11 ACTIVADO: Saldo -$${Math.abs(netDaily).toFixed(2)}. Preparando Heavy-Ghost (4 confir)...`);
+                            console.log(`🛡️ RESCATE x11 ACTIVADO: PnL -$${Math.abs(netDaily).toFixed(2)}. Invocando Heavy-Ghost...`);
                         } else {
-                            console.log(`🛡️ ESCUDO DE GANANCIA: PnL +$${netDaily.toFixed(2)}. Sin rescate.`);
-                            botState.recoveryActive = false;
+                            console.log(`🛡️ ESCUDO DE GANANCIA: PnL +$${netDaily.toFixed(2)}. Protegiendo acumulado.`);
                             botState.lastTradeTime = Date.now() + 10000;
                         }
                     }
@@ -303,19 +299,16 @@ function connectDeriv() {
                     lastDigit: botState.lastDigit
                 });
                 if (botState.tradeHistory.length > 50) botState.tradeHistory.pop();
-                
-                botState.pnlSession = botState.dailyProfit - botState.dailyLoss;
                 botState.totalTradesSession++;
                 botState.activeContractId = null;
                 botState.ghostStreak = 0; 
                 saveState();
-                console.log(`💰 RESULTADO FINAL: ${profit > 0 ? 'WIN' : 'LOSS'} ($${profit.toFixed(2)}) | PnL: $${botState.pnlSession.toFixed(2)}`);
+                console.log(`💰 RESULTADO: ${profit > 0 ? 'WIN' : 'LOSS'} | PnL: $${(botState.dailyProfit - botState.dailyLoss).toFixed(2)}`);
             }
         }
     });
 
     ws.on('close', (code) => {
-        console.log(`🔌 Conexión cerrada (${code}). Reconectando...`);
         botState.isConnectedToDeriv = false;
         botState.isBuying = false;
         if (!reconnectTimeout) reconnectTimeout = setTimeout(connectDeriv, 5000);
@@ -326,21 +319,14 @@ function executeFlashMirrorFire() {
     if (!ws || ws.readyState !== WebSocket.OPEN || !botState.pendingSignal || botState.isBuying || botState.activeContractId) return;
     const now = Date.now();
     if (now - botState.lastTradeTime < 1000) return;
-    
-    // [v18.12] REGLA DE GHOST DIFERENCIADA
     const requiredGhost = botState.recoveryActive ? 4 : 2;
     if (botState.ghostStreak < requiredGhost) return;
-
     const barrier = botState.nextBarrier || chooseBestBarrier();
     botState.isBuying = true;
-
     if (botState.currentPing > 150) { botState.isBuying = false; return; }
-
     let finalStake = botState.stake;
     if (botState.recoveryActive) finalStake = botState.stake * 11;
-
-    console.log(`🚀 DISPARO REAL v18.12 | Stake: $${finalStake.toFixed(2)} | NO-${barrier} | Conf: ${botState.ghostStreak}`);
-
+    console.log(`🚀 LANZADO [GOLDEN v18.13] | NO-${barrier} | Fibo-Conf: ${botState.ghostStreak}`);
     ws.send(JSON.stringify({
         buy: 1, price: finalStake,
         parameters: {
@@ -364,8 +350,6 @@ setInterval(() => {
 
 const PORT = process.env.PORT || 8080;
 app.listen(PORT, '0.0.0.0', () => {
-    console.log(`🚀 v18.12 ONLINE EN PUERTO ${PORT}`);
+    console.log(`🚀 v18.13 ONLINE EN PUERTO ${PORT}`);
     connectDeriv();
 });
-
-process.on('uncaughtException', (e) => console.error('🔥 CRASH:', e.message));
