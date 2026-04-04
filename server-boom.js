@@ -76,9 +76,10 @@ let botState = {
     activeMultiplierContractId: null,  // ID contrato Multiplier activo
     multiplierOpenTime: 0,             // Timestamp de apertura
     multiplierProfit: 0,               // P&L actual del multiplier
-    multiplierTakeProfit: 5.00,        // Vender si gana $5+
+    multiplierTakeProfit: 5.00,        // Vender si gana $5+ (dinámico ahora)
     multiplierMaxLoss: 3.00,           // Cancelar si pierde $3+
     multiplierTimeoutMs: 240000,       // Vender forzado a los 4 min (antes de que expire el seguro de 5m)
+    lastDiffersResult: null,           // 'WIN' o 'LOSS' del último Differs en el combo
 };
 
 // ─── CARGAR ESTADO PREVIO ──────────────────────────────────────
@@ -643,6 +644,7 @@ function connectDeriv() {
                 botState.activeMultiplierContractId = contractId;
                 botState.multiplierOpenTime = Date.now();
                 botState.multiplierProfit = 0;
+                botState.lastDiffersResult = null; // Reiniciamos el resultado para este nuevo combo
                 console.log(`🛡️ ESCUDO ABIERTO [${contractId}] | Tipo: ${contractType.includes('MULTUP') ? 'MULTUP' : 'MULTDOWN'} | Stake: $${openStake}`);
             } else {
                 // Este es el DIFFERS (primer contrato)
@@ -680,9 +682,17 @@ function connectDeriv() {
                 botState.multiplierProfit = profit;
                 const elapsed = Date.now() - botState.multiplierOpenTime;
                 
-                // REGLA 1: Take Profit → Vender si ganando $5+
-                if (profit >= botState.multiplierTakeProfit) {
-                    console.log(`💰 ESCUDO: Take Profit +$${profit.toFixed(2)} → VENDIENDO`);
+                // TP Dinámico: 
+                // - Si el Differs ganó velozmente, cerrar el Multiplier con $1.00 de ganancia
+                // - Si el Differs perdió, aguantar el Multiplier hasta $10.50 para recuperar todo
+                // - Si el Differs sigue abierto (raro, 1 tick), usamos el genérico 5.00
+                let dynamicTP = botState.multiplierTakeProfit; 
+                if (botState.lastDiffersResult === 'WIN') dynamicTP = 1.00;
+                if (botState.lastDiffersResult === 'LOSS') dynamicTP = 10.50;
+                
+                // REGLA 1: Take Profit Dinámico → Vender
+                if (profit >= dynamicTP) {
+                    console.log(`💰 ESCUDO: Take Profit Dinámico (+${dynamicTP}) alcanzado → VENDIENDO (Differs fue ${botState.lastDiffersResult || '?'})`);
                     ws.send(JSON.stringify({ sell: contractId, price: 0 }));
                 }
                 // REGLA 2: Cancelar si perdiendo $3+ (usar deal cancellation)
@@ -838,6 +848,9 @@ function tryFireTrade() {
 function finalizeTrade(c) {
     const profit = parseFloat(c.profit);
     const isWin = profit > 0;
+    
+    // Guardar el resultado en el estado global para uso del Multiplier
+    botState.lastDiffersResult = isWin ? 'WIN' : 'LOSS';
 
     botState.pnlSession += profit;
     botState.totalTradesSession++;

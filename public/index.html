@@ -639,7 +639,10 @@
                 shieldProfitEl.style.color = shieldProfit >= 0 ? '#34d399' : '#f87171';
                 
                 const elapsedSecs = Math.floor((Date.now() - (data.multiplierOpenTime || Date.now())) / 1000);
-                document.getElementById('shieldStatusMsg').innerText = `Tiempo abierto: ${elapsedSecs}s | Auto-Sell: ±$5 / TP`;
+                let currentTP = 5.00;
+                if (data.lastDiffersResult === 'WIN') currentTP = 1.00;
+                if (data.lastDiffersResult === 'LOSS') currentTP = 10.50;
+                document.getElementById('shieldStatusMsg').innerText = `Tiempo abierto: ${elapsedSecs}s | Cierre Auto en +$${currentTP.toFixed(2)}`;
             } else {
                 shieldCard.style.display = 'none';
             }
