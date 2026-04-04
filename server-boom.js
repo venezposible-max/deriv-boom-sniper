@@ -167,6 +167,11 @@ function connectDeriv() {
              botState.currency = msg.authorize.currency || 'USD';
              console.log(`✅ Autenticado: ${msg.authorize.fullname}`);
              ws.send(JSON.stringify({ forget_all: "ticks" }));
+
+             // [v18.7] Sincronía Inicial de Ping
+             botState.lastPingSentAt = Date.now();
+             ws.send(JSON.stringify({ ping: 1 }));
+
              setTimeout(() => {
                  if (ws && ws.readyState === WebSocket.OPEN) {
                      console.log(`📡 Suscribiendo a Ticks y Balance en ${SYMBOL}...`);
@@ -231,6 +236,13 @@ function connectDeriv() {
         }
 
         if (msg.msg_type === 'balance') botState.balance = msg.balance.balance;
+        
+        // [v18.7] Procesar Ping de Latencia Real
+        if (msg.msg_type === 'ping') {
+            botState.currentPing = Date.now() - botState.lastPingSentAt;
+            if (botState.currentPing < 5) botState.currentPing = 50; // Fallback
+        }
+
         if (msg.msg_type === 'buy' && msg.buy) {
             botState.activeContractId = msg.buy.contract_id;
             console.log(`🎯 CONTRATO ABIERTO: ${msg.buy.contract_id}`);
@@ -317,7 +329,25 @@ function executeFlashMirrorFire() {
 setInterval(() => {
     if (!botState.isRunning || !ws || ws.readyState !== WebSocket.OPEN) return;
     const now = Date.now();
-    if (now - botState.lastTickReceivedAt >= (botState.avgTickInterval - 130)) { executeFlashMirrorFire(); }
+
+    // [v18.7] Sonda de Ping cada 10s
+    if (now % 10000 < 50) {
+        botState.lastPingSentAt = now;
+        ws.send(JSON.stringify({ ping: 1 }));
+    }
+
+    const timeSinceLast = now - botState.lastTickReceivedAt;
+    const nextExpected = botState.avgTickInterval;
+    
+    // [v18.7] DISPARO DINÁMICO: Solape ajustado al PING REAL (+25ms de gracia)
+    const dynamicLead = Math.min(400, botState.currentPing + 25);
+    
+    // Bloqueo por inestabilidad de red (>300ms de lag)
+    if (botState.currentPing > 300) return;
+
+    if (timeSinceLast >= (nextExpected - dynamicLead)) {
+        executeFlashMirrorFire();
+    }
 }, 50);
 
 const PORT = process.env.PORT || 8080;
