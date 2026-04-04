@@ -1,8 +1,8 @@
 /**
  * ============================================================
- *  DIFFERS SNIPER ENGINE v18.15 [INFINITY RESCUE]
- *  Estrategia: DIFFERS + AIRBAG (Match) — SIN BLOQUEO DE PnL
- *  Símbolo: R_100 (Rescate Total v18.15)
+ *  DIFFERS SNIPER ENGINE v18.16 [CRYSTAL CLEAR AIRBAG]
+ *  Estrategia: DIFFERS + MATCH (Hedge) — Historial Transparente
+ *  Símbolo: R_100 (Sincronía Visual v18.16)
  * ============================================================
  */
 
@@ -111,7 +111,7 @@ app.post('/differs/control', (req, res) => {
     if (action === 'START') {
         if (stake) botState.stake = parseFloat(stake);
         botState.isRunning = true;
-        console.log(`▶️ SNIPER v18.15 INICIADO [INFINITY RESCUE]`);
+        console.log(`▶️ SNIPER v18.16 INICIADO [CRYSTAL CLEAR]`);
         return res.json({ success: true, isRunning: true });
     }
     if (action === 'STOP') { botState.isRunning = false; return res.json({ success: true, isRunning: false }); }
@@ -151,7 +151,7 @@ function connectDeriv() {
              ws.send(JSON.stringify({ subscribe: 1, ticks: SYMBOL }));
              ws.send(JSON.stringify({ balance: 1, subscribe: 1 }));
              ws.send(JSON.stringify({ ping: 1 }));
-             console.log(`🎯 SNIPER v18.15 INFINITY RESCUE ONLINE...`);
+             console.log(`🎯 SNIPER v18.16 ONLINE | Filtro Fibo + Airbag Visible...`);
         }
 
         if (msg.msg_type === 'tick' && msg.tick) {
@@ -200,8 +200,20 @@ function connectDeriv() {
             const c = msg.proposal_open_contract;
             if (c.is_sold && (c.contract_id === botState.activeContractId || c.contract_id === botState.secondaryContractId)) {
                 
-                if (c.contract_id === botState.activeContractId) {
-                    const profit = parseFloat(c.profit);
+                const profit = parseFloat(c.profit);
+                const isDiffer = c.contract_type === 'DIGITDIFF';
+
+                // [v18.16] REGISTRO VISIBLE PARA AMBOS TIPOS
+                botState.tradeHistory.unshift({
+                    type: isDiffer ? 'DIFFERS' : 'MATCH [AIRBAG]', 
+                    profit: parseFloat(profit.toFixed(2)), 
+                    time: new Date().toLocaleTimeString(),
+                    barrier: isDiffer ? botState.currentBarrier : (c.barrier || botState.currentBarrier),
+                    result: profit > 0 ? 'WIN ✅' : 'LOSS ❌'
+                });
+                if (botState.tradeHistory.length > 50) botState.tradeHistory.pop();
+
+                if (isDiffer) {
                     if (profit > 0) {
                         botState.winsSession++;
                         botState.dailyProfit += profit;
@@ -209,32 +221,28 @@ function connectDeriv() {
                     } else {
                         botState.lossesSession++;
                         botState.dailyLoss += Math.abs(profit);
-                        // [v18.15] ACTIVAR RESCATE SIN IMPORTAR PnL
                         if (botState.recoveryActive) {
                             console.log(`🔴 DIFERENTE PERDIDO. ¡Activando Seguro Match Airbag!`);
                             botState.recoveryActive = false;
                         } else if (botState.isRecoveryEnabled) {
                             botState.recoveryActive = true;
                             botState.lastTradeTime = Date.now() + 15000;
-                            console.log(`🛡️ RESCATE x11 INFINITY ACTIVADO...`);
+                            console.log(`🛡️ RESCATE x11 CON AIRBAG VISIBLE...`);
                         }
                     }
-
-                    botState.tradeHistory.unshift({
-                        type: 'DIFFERS', profit: parseFloat(profit.toFixed(2)), time: new Date().toLocaleTimeString(),
-                        barrier: botState.currentBarrier,
-                        result: profit > 0 ? 'WIN ✅' : 'LOSS ❌'
-                    });
-                    if (botState.tradeHistory.length > 50) botState.tradeHistory.pop();
                     botState.activeContractId = null;
-                    botState.secondaryContractId = null;
                     botState.ghostStreak = 0; 
-                    saveState();
-                } 
-                if (c.contract_id === botState.secondaryContractId && parseFloat(c.profit) > 0) {
-                    console.log(`🎯 ¡AIRBAG DISPARADO! Match Ganado: +$${parseFloat(c.profit).toFixed(2)}. Capital Salvado.`);
-                    botState.dailyProfit += parseFloat(c.profit);
+                } else {
+                    // Si es el Airbag
+                    if (profit > 0) {
+                        console.log(`🎯 ¡AIRBAG DISPARADO! Match Ganado: +$${profit.toFixed(2)}. Capital Salvado.`);
+                        botState.dailyProfit += profit;
+                    } else {
+                        botState.dailyLoss += Math.abs(profit);
+                    }
+                    botState.secondaryContractId = null;
                 }
+                saveState();
             }
         }
     });
@@ -253,7 +261,7 @@ function executeFlashMirrorFire() {
     if (botState.recoveryActive) {
         mainStake = botState.stake * 11;
         const airbagStake = (mainStake / 9.1).toFixed(2);
-        console.log(`🛡️ LANZANDO RESCATE INFINITY + AIRBAG: Diff $${mainStake} | Match $${airbagStake}`);
+        console.log(`🛡️ LANZANDO RESCATE CON AIRBAG VISIBLE: Diff $${mainStake} | Match $${airbagStake}`);
         ws.send(JSON.stringify({
             buy: 1, price: airbagStake,
             parameters: { amount: airbagStake, basis: 'stake', contract_type: 'DIGITMATCH', currency: 'USD', symbol: SYMBOL, duration: 1, duration_unit: 't', barrier: barrier }
@@ -278,4 +286,4 @@ setInterval(() => {
 }, 50);
 
 const PORT = process.env.PORT || 8080;
-app.listen(PORT, '0.0.0.0', () => { console.log(`🚀 v18.15 ONLINE [INFINITY RESCUE]`); connectDeriv(); });
+app.listen(PORT, '0.0.0.0', () => { console.log(`🚀 v18.16 ONLINE [AIRBAG VISIBLE]`); connectDeriv(); });
