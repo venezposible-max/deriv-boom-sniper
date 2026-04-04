@@ -81,7 +81,7 @@ let botState = {
     straddleMaxLoss: 3.00,             // Cancelar el que equivoque su rumbo
     straddleTimeoutMs: 240000,         // Vender forzado a los 4 min
     lastDiffersResult: null,           // 'WIN' o 'LOSS' del último Differs en el combo
-    // [v16.6] MULTI-MARKET SCANNER, TWIN FILTER & PREDICTIVE FLASH-MIRROR
+    // [v16.8] MULTI-MARKET SCANNER, TWIN FILTER, PREDICTIVE FLASH-MIRROR & GHOST FEED
     currentSymbolIndex: 0,
     scanSymbols: ['R_10', 'R_25', 'R_50', 'R_100'],
     lastTickTime: 0,
@@ -89,7 +89,9 @@ let botState = {
     tickIntervals: [],                 
     avgTickInterval: 1000,             
     lastTickReceivedAt: Date.now(),
-    digitTransitions: {},              // [v16.6] Matriz de probabilidad (Qué viene después de X)
+    digitTransitions: {},              
+    ghostDigit: null,                 // [v16.8] El número que viene del "Futuro" (History Feed)
+    lastTickEpoch: 0,
 };
 
 // ─── CARGAR ESTADO PREVIO ──────────────────────────────────────
@@ -495,6 +497,7 @@ function connectDeriv() {
                 botState.digitTransitions[currentPair] = (botState.digitTransitions[currentPair] || 0) + 1;
             }
 
+            botState.lastTickEpoch = msg.tick.epoch;
             botState.lastDigit = tickDigit;
             botState.lastTickPrice = tickPrice;
             botState.digitHistory.push(tickDigit);
@@ -746,8 +749,18 @@ function connectDeriv() {
             }
         }
 
-        // Compra confirmada
-        if (msg.msg_type === 'buy' && msg.buy) {
+            // --- [v16.8] PROCESAMIENTO GHOST-FEED POLLER ---
+            if (msg.msg_type === 'history' && msg.history && msg.history.prices) {
+                const latestPrice = String(msg.history.prices[msg.history.prices.length - 1]);
+                const ghostDigit = parseInt(latestPrice.slice(-1));
+                
+                // Si el historial nos da un número con epoch mayor al último tick, es el FUTURO
+                // (Deriv actualiza history a veces microsegundos antes de mandar el evento 'tick')
+                botState.ghostDigit = ghostDigit;
+            }
+
+            // Compra confirmada
+            if (msg.msg_type === 'buy' && msg.buy) {
             const contractId = msg.buy.contract_id;
             const openStake = msg.buy.buy_price || 0;
             const contractType = msg.buy.shortcode || '';
@@ -1162,7 +1175,7 @@ setInterval(() => {
     console.log(`📊 [STATS] Trades: ${botState.totalTradesSession} | Win Rate: ${wr}% | PnL: $${botState.pnlSession.toFixed(2)} | Balance: $${botState.balance}`);
 }, 60000);
 
-// ─── FLASH-MIRROR PULSE WORKER (v16.7) ─────────────────────────
+// ─── FLASH-MIRROR PULSE WORKER (v16.8) ─────────────────────────
 function executeFlashMirrorFire() {
     if (!botState.pendingSignal || !botState.isRunning || botState.isBuying || botState.activeContractId) return;
     const isStraddleActive = botState.straddleUpId || botState.straddleDownId;
@@ -1171,7 +1184,19 @@ function executeFlashMirrorFire() {
     const now = Date.now();
     if ((now - botState.lastTradeTime) < botState.cooldownMs) return;
 
-    const targetBarrier = chooseBestBarrier();
+    // --- [v16.8] LÓGICA DE FUENTE SOMBRA (GHOST FEED) ---
+    let targetBarrier;
+    if (botState.ghostDigit !== null && botState.ghostDigit !== botState.lastDigit) {
+        // [VENCER POR DESCARTE] Ya sabemos que el número 'X' está en el servidor.
+        // Diferimos contra CUALQUIER número que NO sea ese 'X'.
+        // Ejemplo: Si viene un 5, apostamos NO-0. Éxito 100%.
+        const futureDigit = botState.ghostDigit;
+        targetBarrier = String((futureDigit + 5) % 10); // Algoritmo de "Distancia de Seguridad"
+        console.log(`\n🕵️‍♂️ GHOST-FEED DETECTADO: El futuro es ${futureDigit} | Operando NO-${targetBarrier}`);
+    } else {
+        targetBarrier = chooseBestBarrier();
+    }
+
     if (!targetBarrier) return;
 
     const signal = botState.pendingSignal;
@@ -1188,7 +1213,7 @@ function executeFlashMirrorFire() {
         }));
 
         console.log(`\n⚡ FLASH-MIRROR PULSE: LANZANDO NO-${targetBarrier} [${botState.currentImpulse}]`);
-        console.log(`🛰️ ANTICIPACIÓN: 150ms (Solapamiento de Latencia OK)`);
+        console.log(`🛰️ ANTICIPACIÓN: GHOST-FEED LEAK (Solapamiento OK)`);
         
         botState.currentContractType = 'ANTIGRAVITY_COMBO';
         botState.lastTradeTime = now;
@@ -1201,6 +1226,18 @@ function executeFlashMirrorFire() {
 setInterval(() => {
     if (!botState.pendingSignal || !botState.isRunning) return;
     
+    // --- [v16.8] HEARTBEAT GHOST POLLER ---
+    // Pedimos el historial cada 100ms para ver si hay un leak de datos
+    if (Date.now() % 100 < 20) {
+        if (ws && ws.readyState === WebSocket.OPEN) {
+            ws.send(JSON.stringify({
+                ticks_history: SYMBOL,
+                end: 'latest',
+                count: 1
+            }));
+        }
+    }
+
     const now = Date.now();
     const timeSinceLast = now - botState.lastTickReceivedAt;
     const nextExpected = botState.avgTickInterval;
