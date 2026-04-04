@@ -243,14 +243,20 @@ function connectDeriv() {
             if (c.is_sold) {
                 const profit = parseFloat(c.profit);
                 botState.pnlSession += profit;
-                if (profit > 0) { botState.winsSession++; botState.dailyProfit += profit; } 
-                else { botState.lossesSession++; botState.dailyLoss += Math.abs(profit); }
+                if (profit > 0) { 
+                    botState.winsSession++; botState.dailyProfit += profit; 
+                } else { 
+                    botState.lossesSession++; botState.dailyLoss += Math.abs(profit); 
+                    // [v18.5] Activar Cobertura x2
+                    botState.recoveryActive = true;
+                    console.log(`🛡️ COBERTURA ACTIVADA: Siguiente disparo será x2 ($${(botState.stake * 2).toFixed(2)})`);
+                }
                 botState.totalTradesSession++;
                 botState.activeContractId = null;
                 
                 // Si ganamos un rescate, volvemos al stake base de inmediato
                 if (botState.recoveryActive && profit > 0) {
-                    console.log(`🛡️ RESCATE EXITOSO: Volviendo a Stake Base ($${botState.stake})`);
+                    console.log(`✅ RESCATE COMPLETADO: Volviendo a Stake Base ($${botState.stake})`);
                     botState.recoveryActive = false;
                 }
 
@@ -282,9 +288,29 @@ function executeFlashMirrorFire() {
     const now = Date.now();
     if (now - botState.lastTradeTime < botState.cooldownMs) return;
     const barrier = chooseBestBarrier();
-    botState.currentBarrier = barrier; // Actualizamos para la UI
+    botState.currentBarrier = barrier;
     botState.isBuying = true;
-    ws.send(JSON.stringify({ buy: 1, price: botState.stake, parameters: { amount: botState.stake, basis: 'stake', contract_type: 'DIGITDIFF', currency: botState.currency, symbol: SYMBOL, duration: 1, duration_unit: 't', barrier: barrier } }));
+
+    // [v18.5] Calculo de Stake Flexible con Martingala x2
+    let finalStake = botState.stake;
+    if (botState.recoveryActive) finalStake = botState.stake * 2;
+
+    console.log(`🚀 LANZANDO DISPARO | Stake: $${finalStake.toFixed(2)} | Barrera: NO-${barrier}`);
+
+    ws.send(JSON.stringify({ 
+        buy: 1, 
+        price: finalStake, 
+        parameters: { 
+            amount: finalStake, 
+            basis: 'stake', 
+            contract_type: 'DIGITDIFF', 
+            currency: botState.currency, 
+            symbol: SYMBOL, 
+            duration: 1, 
+            duration_unit: 't', 
+            barrier: barrier 
+        } 
+    }));
     botState.pendingSignal = null;
 }
 
