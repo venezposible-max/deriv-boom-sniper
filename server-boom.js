@@ -197,6 +197,7 @@ function connectDeriv() {
             }
             const tickDigit = parseInt(String(msg.tick.quote).slice(-1));
             const tickPrice = parseFloat(msg.tick.quote);
+            botState.lastTickPrice = tickPrice; // [v18.4] Para que se vea el precio en el panel
             if (botState.lastDigit !== null) { botState.digitTransitions[`${botState.lastDigit}->${tickDigit}`] = (botState.digitTransitions[`${botState.lastDigit}->${tickDigit}`] || 0) + 1; }
             botState.lastDigit = tickDigit;
             botState.digitHistory.push(tickDigit);
@@ -247,6 +248,12 @@ function connectDeriv() {
                 botState.totalTradesSession++;
                 botState.activeContractId = null;
                 
+                // Si ganamos un rescate, volvemos al stake base de inmediato
+                if (botState.recoveryActive && profit > 0) {
+                    console.log(`🛡️ RESCATE EXITOSO: Volviendo a Stake Base ($${botState.stake})`);
+                    botState.recoveryActive = false;
+                }
+
                 botState.tradeHistory.unshift({
                     type: 'DIFFERS', profit, time: new Date().toLocaleTimeString(), 
                     barrier: botState.currentBarrier, 
