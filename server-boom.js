@@ -247,9 +247,9 @@ function connectDeriv() {
                     botState.winsSession++; botState.dailyProfit += profit; 
                 } else { 
                     botState.lossesSession++; botState.dailyLoss += Math.abs(profit); 
-                    // [v18.5] Activar Cobertura x2
+                    // [v18.6] Activar Rescate Matemático x11
                     botState.recoveryActive = true;
-                    console.log(`🛡️ COBERTURA ACTIVADA: Siguiente disparo será x2 ($${(botState.stake * 2).toFixed(2)})`);
+                    console.log(`🛡️ RESCATE MATEMÁTICO: Siguiente disparo será x11 ($${(botState.stake * 11).toFixed(2)})`);
                 }
                 botState.totalTradesSession++;
                 botState.activeContractId = null;
@@ -291,9 +291,9 @@ function executeFlashMirrorFire() {
     botState.currentBarrier = barrier;
     botState.isBuying = true;
 
-    // [v18.5] Calculo de Stake Flexible con Martingala x2
+    // [v18.6] Calculo de Stake con Martingala Matemático x11
     let finalStake = botState.stake;
-    if (botState.recoveryActive) finalStake = botState.stake * 2;
+    if (botState.recoveryActive) finalStake = botState.stake * 11;
 
     console.log(`🚀 LANZANDO DISPARO | Stake: $${finalStake.toFixed(2)} | Barrera: NO-${barrier}`);
 
