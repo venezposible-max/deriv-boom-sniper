@@ -50,13 +50,19 @@ let botState = {
     dailyLoss: 0,
     dailyProfit: 0,
     lastTradeTime: 0,
-    cooldownMs: 15000,                // [v17.0] 15s - Sigilo total entre disparos
-    lastGhostPollTime: 0,             // [v17.1] Control de tiempo estricto para evitar bloqueos
+    cooldownMs: 3000,
     isBuying: false,
     activeContractId: null,
     tradeCount: 0,
-    isAuthing: false,                 // [v17.1] Bloqueo de llave para evitar error 1008
-    strategyIndex: 0,          // 0: HOT, 1: COLD, 2: REPEAT
+    isAuthing: false,
+    lastTickReceivedAt: Date.now(),
+    avgTickInterval: 1000,
+    tickIntervals: [],
+    lastTickEpoch: 0,
+    digitTransitions: {},
+    currentPing: 50,
+    lastPingSentAt: 0,
+    strategyIndex: 0,
     strategyName: 'HOT-SNIPER',
     blacklist: {},             // Registro de dígitos en 'enfriamiento'
     isRecoveryEnabled: false,   // true: Intentar recuperar tras pérdida
@@ -1187,7 +1193,7 @@ setInterval(() => {
     console.log(`📊 [STATS] Trades: ${botState.totalTradesSession} | Win Rate: ${wr}% | PnL: $${botState.pnlSession.toFixed(2)} | Balance: $${botState.balance}`);
 }, 60000);
 
-// ─── FLASH-MIRROR PULSE WORKER (v16.9 "GLORIA") ─────────────────
+// ─── FLASH-MIRROR PULSE WORKER (v17.2 "GHOST-CLEAN") ───────────
 function executeFlashMirrorFire() {
     if (!ws || ws.readyState !== WebSocket.OPEN) return;
     if (!botState.pendingSignal || !botState.isRunning || botState.isBuying || botState.activeContractId) return;
@@ -1197,17 +1203,8 @@ function executeFlashMirrorFire() {
     const now = Date.now();
     if ((now - botState.lastTradeTime) < botState.cooldownMs) return;
 
-    // --- [v16.9] LÓGICA ATÓMICA DE FUENTE SOMBRA (GHOST FEED) ---
-    let targetBarrier;
-    if (botState.ghostDigit !== null && botState.ghostDigit !== botState.lastDigit) {
-        // [GLORIA] Ya no solo diferimos, usamos el GhostDigit para blindar la entrada
-        const futureDigit = botState.ghostDigit;
-        targetBarrier = String((futureDigit + 5) % 10); 
-        console.log(`\n💎 [GLORIA] FUTURO ANTICIPADO: ${futureDigit} (Ping: ${botState.currentPing}ms) | DISPARO NO-${targetBarrier}`);
-    } else {
-        targetBarrier = chooseBestBarrier();
-    }
-
+    // --- [v17.2] LÓGICA DE PULSO ESTADÍSTICO (Anti-Ban) ---
+    const targetBarrier = chooseBestBarrier();
     if (!targetBarrier) return;
 
     const signal = botState.pendingSignal;
@@ -1224,8 +1221,7 @@ function executeFlashMirrorFire() {
         }));
 
         console.log(`\n⚡ FLASH-MIRROR ATOMIC: LANZANDO NO-${targetBarrier} [${botState.currentImpulse}]`);
-        console.log(`🛰️ SINCRONÍA: Ghost-Leak OK | Frecuencia de red calibrada.`);
-        console.log(`🛡️ SIGILO: Entrando en periodo de análisis (15s)...`);
+        console.log(`🛰️ SINCRONÍA: Atomic-Sync OK | Latencia detectada: ${botState.currentPing}ms`);
         
         botState.currentContractType = 'ANTIGRAVITY_COMBO';
         botState.lastTradeTime = now;
@@ -1238,12 +1234,6 @@ function executeFlashMirrorFire() {
 setInterval(() => {
     if (!botState.isRunning || !ws || ws.readyState !== WebSocket.OPEN) return;
     const now = Date.now();
-
-    // --- [v17.1] GHOST POLLER ANTI-BAN (Throttled 1.5s) ---
-    if (botState.pendingSignal && (now - botState.lastGhostPollTime >= 1500)) {
-        ws.send(JSON.stringify({ ticks_history: SYMBOL, end: 'latest', count: 1 }));
-        botState.lastGhostPollTime = now;
-    }
 
     if (now % 10000 < 20) {
         botState.lastPingSentAt = now;
