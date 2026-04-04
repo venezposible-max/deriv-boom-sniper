@@ -68,6 +68,9 @@ let botState = {
     emaValues: [],
     lastRSI: 50,
     lastEMA: 0,
+    emaPeriod: 5,                // EMA-5 periodos
+    rsiPeriod: 5,                // RSI-5 periodos
+    emaInitialized: false,       // Controla si la EMA ya fue sembrada
     currentImpulse: null,        // 'UP' o 'DOWN'
 };
 
@@ -86,6 +89,12 @@ if (fs.existsSync(STATE_FILE)) {
             botState.dailyLoss = 0; // Forzamos limpieza para que no arranque congelado
             botState.dailyProfit = 0;
             botState.recoveryActive = false;
+            
+            // 🔧 RESET INDICADORES para recalcular con datos frescos
+            botState.emaInitialized = false;
+            botState.lastEMA = 0;
+            botState.lastRSI = 50;
+            botState.rsiValues = [];
         }
         console.log(`📂 Estado Differs cargado y RE-INICIALIZADO.`);
     } catch (e) {
@@ -404,24 +413,34 @@ function connectDeriv() {
             if (botState.digitHistory.length > 50) botState.digitHistory.shift();
 
             // [FRANKLIN v16.0] CALCULADORA ANTIGRAVEDAD (RSI-5 + EMA-5)
-            // EMA calculation
-            if (!botState.lastEMA) botState.lastEMA = tickPrice;
-            const k = 2 / (botState.emaPeriod + 1);
-            botState.lastEMA = (tickPrice * k) + (botState.lastEMA * (1 - k));
+            // ═══ EMA-5 CALCULATION (FIXED) ═══
+            const emaPeriod = botState.emaPeriod || 5;
+            if (!botState.emaInitialized) {
+                // Sembramos la EMA con el primer precio real
+                botState.lastEMA = tickPrice;
+                botState.emaInitialized = true;
+            } else {
+                const k = 2 / (emaPeriod + 1); // k = 0.3333 para EMA-5
+                botState.lastEMA = (tickPrice * k) + (botState.lastEMA * (1 - k));
+            }
             
-            // RSI calculation
+            // ═══ RSI-5 CALCULATION (FIXED) ═══
+            const rsiPeriod = botState.rsiPeriod || 5;
             const prices = botState.rsiValues || [];
             prices.push(tickPrice);
-            if (prices.length > 10) prices.shift();
+            // Mantener ventana de rsiPeriod + 1 precios (necesitamos rsiPeriod diferencias)
+            if (prices.length > rsiPeriod + 1) prices.shift();
             botState.rsiValues = prices;
 
-            if (prices.length >= 6) {
+            if (prices.length >= rsiPeriod + 1) {
                 let gains = 0, losses = 0;
                 for (let i = 1; i < prices.length; i++) {
-                    const diff = prices[i] - prices[i-1];
+                    const diff = prices[i] - prices[i - 1];
                     if (diff >= 0) gains += diff; else losses -= diff;
                 }
-                const rs = gains / (losses || 0.001);
+                const avgGain = gains / rsiPeriod;
+                const avgLoss = losses / rsiPeriod;
+                const rs = avgGain / (avgLoss || 0.0001);
                 botState.lastRSI = 100 - (100 / (1 + rs));
             }
             
