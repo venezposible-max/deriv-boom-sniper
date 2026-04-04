@@ -596,7 +596,6 @@ function connectDeriv() {
                                     amount: 10.00, basis: 'stake',
                                     contract_type: multi_type, currency: botState.currency || 'USD',
                                     symbol: multiSymbol, multiplier: 100,
-                                    limit_order: { take_profit: 10.00 },
                                     cancellation: '5m'
                                 }
                             }));
