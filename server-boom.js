@@ -81,14 +81,15 @@ let botState = {
     straddleMaxLoss: 3.00,             // Cancelar el que equivoque su rumbo
     straddleTimeoutMs: 240000,         // Vender forzado a los 4 min
     lastDiffersResult: null,           // 'WIN' o 'LOSS' del último Differs en el combo
-    // [v16.4] MULTI-MARKET SCANNER, TWIN FILTER & FLASH-MIRROR
+    // [v16.6] MULTI-MARKET SCANNER, TWIN FILTER & PREDICTIVE FLASH-MIRROR
     currentSymbolIndex: 0,
     scanSymbols: ['R_10', 'R_25', 'R_50', 'R_100'],
     lastTickTime: 0,
     isTwinDetected: false,
-    tickIntervals: [],                 // [v16.5] Historial de cadencia de red
-    avgTickInterval: 1000,             // Por defecto 1 segundo
+    tickIntervals: [],                 
+    avgTickInterval: 1000,             
     lastTickReceivedAt: Date.now(),
+    digitTransitions: {},              // [v16.6] Matriz de probabilidad (Qué viene después de X)
 };
 
 // ─── CARGAR ESTADO PREVIO ──────────────────────────────────────
@@ -472,6 +473,12 @@ function connectDeriv() {
             const prevPrice = botState.lastTickPrice || tickPrice;
             const priceJump = Math.abs(tickPrice - prevPrice);
             
+            // --- [v16.6] FLASH-MIRROR: ANALISIS DE TRANSICIÓN (PREDICTIVO) ---
+            if (botState.lastDigit !== null) {
+                const currentPair = `${botState.lastDigit}->${tickDigit}`;
+                botState.digitTransitions[currentPair] = (botState.digitTransitions[currentPair] || 0) + 1;
+            }
+
             botState.lastDigit = tickDigit;
             botState.lastTickPrice = tickPrice;
             botState.digitHistory.push(tickDigit);
@@ -976,14 +983,21 @@ function fireStraddleRescue() {
     botState.straddleUpProfit = 0;
     botState.straddleDownProfit = 0;
     
-    // Multipliers requieren símbolos 1HZ (1-segundo)
-    const MULTI_SYMBOL_MAP = { 'R_10': '1HZ10V', 'R_25': '1HZ25V', 'R_50': '1HZ50V', 'R_100': '1HZ100V' };
-    const multiSymbol = MULTI_SYMBOL_MAP[SYMBOL] || '1HZ100V';
+    // --- [v16.6] CONFIGURACIÓN QUIRÚRGICA DE MULTIPLICADORES ---
+    const MULTI_CONFIG_MAP = { 
+        'R_10':  { sym: '1HZ10V',  mult: 200 }, 
+        'R_25':  { sym: '1HZ25V',  mult: 400 }, 
+        'R_50':  { sym: '1HZ50V',  mult: 200 }, 
+        'R_100': { sym: '1HZ100V', mult: 200 } 
+    };
+    const config = MULTI_CONFIG_MAP[SYMBOL] || { sym: '1HZ100V', mult: 200 };
+    const multiSymbol = config.sym;
+    const finalMultiplier = config.mult;
 
     const impulse = botState.currentImpulse || (botState.lastRSI > 50 ? 'UP' : 'DOWN');
     const multiContractType = impulse === 'UP' ? 'MULTUP' : 'MULTDOWN';
 
-    console.log(`\n🚨 ¡DIFFERS FALLÓ! LANZANDO RESCATE DIRECCIONAL A FAVOR DE TENDENCIA (${multiContractType} en ${multiSymbol})`);
+    console.log(`\n🚨 ¡DIFFERS FALLÓ! LANZANDO RESCATE DIRECCIONAL (${multiContractType} en ${multiSymbol} x${finalMultiplier})`);
 
     try {
         botState.isBuying = true; // LOCK DE RESCATE
@@ -992,7 +1006,7 @@ function fireStraddleRescue() {
             parameters: {
                 amount: 10.00, basis: 'stake',
                 contract_type: multiContractType, currency: botState.currency || 'USD',
-                symbol: multiSymbol, multiplier: 200, cancellation: '5m'
+                symbol: multiSymbol, multiplier: finalMultiplier, cancellation: '5m'
             }
         }));
     } catch (err) {
