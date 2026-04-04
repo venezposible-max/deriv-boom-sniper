@@ -622,7 +622,7 @@ function connectDeriv() {
                             triggerActive = `ANTIGRAVEDAD (${impulse})`;
                             contractType = 'ANTIGRAVITY_COMBO';
                             stakeFinal = 10.00;
-                            botState.currentImpulse = impulse;
+                            botState.currentImpulse = impulse; // [v16.4] Guardamos la dirección para el rescate
                         } else {
                             triggerActive = null;
                             contractType = null;
@@ -633,7 +633,7 @@ function connectDeriv() {
             
             // 3. DISPARO INTELIGENTE (Si algún gatillo encendió)
             // BLOQUEO: No disparar Differs si hay un Straddle resolviendose (esperar que la tormenta pase)
-            const isStraddleActive = botState.straddleUpId || botState.straddleDownId;
+            const isStraddleActive = botState.straddleUpId || botState.straddleDownId || botState.isBuying;
             if (triggerActive && contractType && botState.isRunning && !botState.isBuying && !botState.activeContractId && !isStraddleActive) {
                 const now = Date.now();
                 // Bloqueo de ráfaga (v9.5): Solo una ráfaga cada 1.5 segundos
@@ -674,21 +674,23 @@ function connectDeriv() {
                             botState.currentContractType = 'BINARY_STRIKE';
                             botState.currentBarrier = '0-9';
                         } else if (contractType === 'ANTIGRAVITY_COMBO') {
-                            // --- ESCUDO ANTIGRAVEDAD v16.3 (STRADDLE) ---
+                            // --- ESCUDO ANTIGRAVEDAD v16.4 (STRADDLE) ---
                             // Sólo dispara el motor principal (Differs). 
                             // El Straddle (doble escudo) se activará SÓLO como rescate si este Differs pierde.
+                            botState.isBuying = true; // LOCK ANTES DE ENVIAR
+                            
                             ws.send(JSON.stringify({
                                 buy: 1, price: 10.00,
                                 parameters: {
                                     amount: 10.00, basis: 'stake',
-                                    contract_type: 'DIGITDIFF', currency: botState.currency || 'USDT',
+                                    contract_type: 'DIGITDIFF', currency: botState.currency || 'USD',
                                     symbol: SYMBOL, duration: 1, duration_unit: 't', barrier: targetBarrier
                                 }
                             }));
 
-                            console.log(`\n🛡️ ANTIGRAVEDAD v16.3: LANZANDO DIFFERS [${botState.currentImpulse}]`);
+                            console.log(`\n🛡️ ANTIGRAVEDAD v16.4: LANZANDO DIFFERS [${botState.currentImpulse}]`);
                             console.log(`⚡ FILTRO VOLATIL: RSI(${botState.lastRSI.toFixed(2)}) | EMA(${botState.lastEMA.toFixed(2)})`);
-                            console.log(`🎯 MOTOR: Differs($10 ${SYMBOL}). (Straddle a la espera)`);
+                            console.log(`🎯 MOTOR: Differs($10 ${SYMBOL}). (Escudo en Standby)`);
                             
                             botState.currentContractType = 'ANTIGRAVITY_COMBO';
                         }
@@ -965,20 +967,25 @@ function fireStraddleRescue() {
     const MULTI_SYMBOL_MAP = { 'R_10': '1HZ10V', 'R_25': '1HZ25V', 'R_50': '1HZ50V', 'R_100': '1HZ100V' };
     const multiSymbol = MULTI_SYMBOL_MAP[SYMBOL] || '1HZ100V';
 
-    const impulse = botState.currentImpulse; // 'UP' o 'DOWN'
+    const impulse = botState.currentImpulse || (botState.lastRSI > 50 ? 'UP' : 'DOWN');
     const multiContractType = impulse === 'UP' ? 'MULTUP' : 'MULTDOWN';
 
-    console.log(`\n🚨 ¡DIFFERS FALLÓ EN TENDENCIA LIMPIA! LANZANDO RESCATE DIRECCIONAL A FAVOR DE TENDENCIA (${multiContractType} en ${multiSymbol})`);
+    console.log(`\n🚨 ¡DIFFERS FALLÓ! LANZANDO RESCATE DIRECCIONAL A FAVOR DE TENDENCIA (${multiContractType} en ${multiSymbol})`);
 
-    // Disparar ÚNICA PIERNA (MULTUP o MULTDOWN) hacia donde dicta el impulso
-    ws.send(JSON.stringify({
-        buy: 1, price: 15.00,
-        parameters: {
-            amount: 10.00, basis: 'stake',
-            contract_type: multiContractType, currency: botState.currency || 'USD',
-            symbol: multiSymbol, multiplier: 100, cancellation: '5m'
-        }
-    }));
+    try {
+        botState.isBuying = true; // LOCK DE RESCATE
+        ws.send(JSON.stringify({
+            buy: 1, price: 15.00,
+            parameters: {
+                amount: 10.00, basis: 'stake',
+                contract_type: multiContractType, currency: botState.currency || 'USD',
+                symbol: multiSymbol, multiplier: 100, cancellation: '5m'
+            }
+        }));
+    } catch (err) {
+        console.error("❌ ERROR FATAL AL ENVIAR RESCATE:", err.message);
+        botState.isBuying = false;
+    }
 }
 
 // ─── FINALIZAR TRADE ─────────────────────────────────────────
