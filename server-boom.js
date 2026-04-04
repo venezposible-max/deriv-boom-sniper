@@ -303,6 +303,36 @@ app.post('/differs/switch-market', (req, res) => {
     res.status(400).json({ success: false, error: 'Símbolo no soportado' });
 });
 
+// API: Abortar Rescate Manualmente
+app.post('/differs/abort-straddle', (req, res) => {
+    if (!ws) return res.json({ success: false });
+    
+    console.log("🚨 BOTÓN DE PÁNICO PRESIONADO: Cerrando Escudo manual.");
+    
+    // Abort UP
+    if (botState.straddleUpId) {
+        if (botState.straddleUpProfit < 0) {
+            ws.send(JSON.stringify({ cancel: botState.straddleUpId }));
+            console.log(`🗡️ Cortando UP manual (cancel)`);
+        } else {
+            ws.send(JSON.stringify({ sell: botState.straddleUpId, price: 0 }));
+            console.log(`💰 Vendiendo UP manual (sell)`);
+        }
+    }
+    // Abort DOWN
+    if (botState.straddleDownId) {
+        if (botState.straddleDownProfit < 0) {
+            ws.send(JSON.stringify({ cancel: botState.straddleDownId }));
+            console.log(`🗡️ Cortando DOWN manual (cancel)`);
+        } else {
+            ws.send(JSON.stringify({ sell: botState.straddleDownId, price: 0 }));
+            console.log(`💰 Vendiendo DOWN manual (sell)`);
+        }
+    }
+    
+    res.json({ success: true });
+});
+
 // API: Historial
 app.get('/differs/history', (req, res) => {
     res.json({ success: true, history: botState.tradeHistory.slice(0, 30) });
