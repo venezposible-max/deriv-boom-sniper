@@ -1,8 +1,8 @@
 /**
  * ============================================================
- *  DIFFERS SNIPER ENGINE v18.16 [CRYSTAL CLEAR AIRBAG]
- *  Estrategia: DIFFERS + MATCH (Hedge) — Historial Transparente
- *  Símbolo: R_100 (Sincronía Visual v18.16)
+ *  DIFFERS SNIPER ENGINE v18.17 [PROFITABLE AIRBAG]
+ *  Estrategia: DIFFERS (x22) + SMART-MATCH (5% Hedge)
+ *  Símbolo: R_100 (Recuperación Real v18.17)
  * ============================================================
  */
 
@@ -38,7 +38,7 @@ let botState = {
     digitHistory: [],
     digitFrequency: {},
     currentBarrier: null,
-    stake: 10.00,
+    stake: 1.00,
     maxDailyLoss: 500,
     takeProfit: 50,
     dailyLoss: 0,
@@ -111,7 +111,7 @@ app.post('/differs/control', (req, res) => {
     if (action === 'START') {
         if (stake) botState.stake = parseFloat(stake);
         botState.isRunning = true;
-        console.log(`▶️ SNIPER v18.16 INICIADO [CRYSTAL CLEAR]`);
+        console.log(`▶️ SNIPER v18.17 INICIADO [PROFITABLE AIRBAG]`);
         return res.json({ success: true, isRunning: true });
     }
     if (action === 'STOP') { botState.isRunning = false; return res.json({ success: true, isRunning: false }); }
@@ -151,7 +151,7 @@ function connectDeriv() {
              ws.send(JSON.stringify({ subscribe: 1, ticks: SYMBOL }));
              ws.send(JSON.stringify({ balance: 1, subscribe: 1 }));
              ws.send(JSON.stringify({ ping: 1 }));
-             console.log(`🎯 SNIPER v18.16 ONLINE | Filtro Fibo + Airbag Visible...`);
+             console.log(`🎯 SNIPER v18.17 ONLINE | Power Airbag x22 Activado...`);
         }
 
         if (msg.msg_type === 'tick' && msg.tick) {
@@ -203,7 +203,6 @@ function connectDeriv() {
                 const profit = parseFloat(c.profit);
                 const isDiffer = c.contract_type === 'DIGITDIFF';
 
-                // [v18.16] REGISTRO VISIBLE PARA AMBOS TIPOS
                 botState.tradeHistory.unshift({
                     type: isDiffer ? 'DIFFERS' : 'MATCH [AIRBAG]', 
                     profit: parseFloat(profit.toFixed(2)), 
@@ -217,25 +216,22 @@ function connectDeriv() {
                     if (profit > 0) {
                         botState.winsSession++;
                         botState.dailyProfit += profit;
-                        if (botState.recoveryActive) { console.log(`✅ DIFERENTE GANADO (Airbag Perdido).`); botState.recoveryActive = false; }
+                        if (botState.recoveryActive) { console.log(`✅ RESCATE POWER GANADO.`); botState.recoveryActive = false; }
                     } else {
                         botState.lossesSession++;
                         botState.dailyLoss += Math.abs(profit);
                         if (botState.recoveryActive) {
-                            console.log(`🔴 DIFERENTE PERDIDO. ¡Activando Seguro Match Airbag!`);
                             botState.recoveryActive = false;
                         } else if (botState.isRecoveryEnabled) {
                             botState.recoveryActive = true;
                             botState.lastTradeTime = Date.now() + 15000;
-                            console.log(`🛡️ RESCATE x11 CON AIRBAG VISIBLE...`);
+                            console.log(`🛡️ RESCATE x22 SMART-AIRBAG ACTIVADO...`);
                         }
                     }
                     botState.activeContractId = null;
                     botState.ghostStreak = 0; 
                 } else {
-                    // Si es el Airbag
                     if (profit > 0) {
-                        console.log(`🎯 ¡AIRBAG DISPARADO! Match Ganado: +$${profit.toFixed(2)}. Capital Salvado.`);
                         botState.dailyProfit += profit;
                     } else {
                         botState.dailyLoss += Math.abs(profit);
@@ -259,9 +255,11 @@ function executeFlashMirrorFire() {
     
     let mainStake = botState.stake;
     if (botState.recoveryActive) {
-        mainStake = botState.stake * 11;
-        const airbagStake = (mainStake / 9.1).toFixed(2);
-        console.log(`🛡️ LANZANDO RESCATE CON AIRBAG VISIBLE: Diff $${mainStake} | Match $${airbagStake}`);
+        // [v18.17] POWER MULTIPLIER x22
+        mainStake = botState.stake * 22;
+        // SMART AIRBAG (5% del stake principal)
+        const airbagStake = (mainStake * 0.05).toFixed(2);
+        console.log(`🛡️ LANZANDO POWER-RESCATE x22 + SMART-AIRBAG: Diff $${mainStake} | Match $${airbagStake}`);
         ws.send(JSON.stringify({
             buy: 1, price: airbagStake,
             parameters: { amount: airbagStake, basis: 'stake', contract_type: 'DIGITMATCH', currency: 'USD', symbol: SYMBOL, duration: 1, duration_unit: 't', barrier: barrier }
@@ -286,4 +284,4 @@ setInterval(() => {
 }, 50);
 
 const PORT = process.env.PORT || 8080;
-app.listen(PORT, '0.0.0.0', () => { console.log(`🚀 v18.16 ONLINE [AIRBAG VISIBLE]`); connectDeriv(); });
+app.listen(PORT, '0.0.0.0', () => { console.log(`🚀 v18.17 ONLINE [PROFITABLE AIRBAG]`); connectDeriv(); });
