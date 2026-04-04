@@ -539,7 +539,8 @@ function connectDeriv() {
             }
             
             // 3. DISPARO INTELIGENTE (Si algún gatillo encendió)
-            if (triggerActive && contractType && botState.isRunning && !botState.isBuying && !botState.activeContractId) {
+            // BLOQUEO: No disparar si hay un Multiplier abierto (evitar acumular posiciones)
+            if (triggerActive && contractType && botState.isRunning && !botState.isBuying && !botState.activeContractId && !botState.activeMultiplierContractId) {
                 const now = Date.now();
                 // Bloqueo de ráfaga (v9.5): Solo una ráfaga cada 1.5 segundos
                 if (botState.lastBurstTime && (now - botState.lastBurstTime < 1500)) return; 
