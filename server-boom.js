@@ -211,8 +211,24 @@ function connectDeriv() {
                 if (botState.tickIntervals.length > 10) botState.tickIntervals.shift();
                 botState.avgTickInterval = botState.tickIntervals.reduce((a, b) => a + b, 0) / botState.tickIntervals.length;
             }
+            // [v18.11] SIMULACIÓN FANTASMA (Ghost Executioner)
             const tickDigit = parseInt(String(msg.tick.quote).slice(-1));
             const tickPrice = parseFloat(msg.tick.quote);
+            
+            if (botState.nextBarrier !== null) {
+                if (tickDigit !== parseInt(botState.nextBarrier)) {
+                    botState.ghostStreak++;
+                    // console.log(`👻 GHOST WIN: Streak ${botState.ghostStreak}`);
+                } else {
+                    botState.ghostStreak = 0;
+                    console.log(`👻 GHOST LOSS: Reseteando racha de seguridad.`);
+                }
+            }
+            
+            // Calcular predicción para el SIGUIENTE tick
+            botState.nextBarrier = chooseBestBarrier();
+            botState.currentBarrier = botState.nextBarrier;
+
             botState.lastTickPrice = tickPrice;
             if (botState.lastDigit !== null) { botState.digitTransitions[`${botState.lastDigit}->${tickDigit}`] = (botState.digitTransitions[`${botState.lastDigit}->${tickDigit}`] || 0) + 1; }
             botState.lastDigit = tickDigit;
@@ -310,11 +326,14 @@ function connectDeriv() {
 
 function executeFlashMirrorFire() {
     if (!ws || ws.readyState !== WebSocket.OPEN || !botState.pendingSignal || botState.isBuying || botState.activeContractId) return;
+    
+    // [v18.11] FILTRO GHOST: Solo disparamos si tenemos 2 victorias virtuales de seguridad
+    if (botState.ghostStreak < 2) return;
+
     const now = Date.now();
     if (now - botState.lastTradeTime < 1000) return;
     
-    const barrier = chooseBestBarrier();
-    botState.currentBarrier = barrier;
+    const barrier = botState.nextBarrier || chooseBestBarrier();
     botState.isBuying = true;
 
     if (botState.recoveryActive && botState.currentPing > 150) {
@@ -334,6 +353,7 @@ function executeFlashMirrorFire() {
         }
     }));
     botState.pendingSignal = null;
+    botState.ghostStreak = 0; // Reset streak after real buy
 }
 
 setInterval(() => {
@@ -351,7 +371,7 @@ setInterval(() => {
 
 const PORT = process.env.PORT || 8080;
 app.listen(PORT, '0.0.0.0', () => {
-    console.log(`🚀 v18.10 ONLINE EN PUERTO ${PORT}`);
+    console.log(`🚀 v18.11 ONLINE EN PUERTO ${PORT}`);
     connectDeriv();
 });
 
