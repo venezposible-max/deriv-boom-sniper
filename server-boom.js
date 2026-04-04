@@ -598,7 +598,7 @@ function connectDeriv() {
                             const multiSymbol = MULTI_SYMBOL_MAP[SYMBOL] || '1HZ100V';
                             
                             ws.send(JSON.stringify({
-                                buy: 1, price: 10.00,
+                                buy: 1, price: 15.00, // Tope alto para cubrir stake($10) + fee de seguro(~$1.11)
                                 parameters: {
                                     amount: 10.00, basis: 'stake',
                                     contract_type: multi_type, currency: botState.currency || 'USD',
