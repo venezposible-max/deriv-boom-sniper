@@ -401,7 +401,9 @@ function connectDeriv() {
         if (msg.msg_type === 'tick' && msg.tick) {
             const quote = msg.tick.quote;
             const tickPrice = parseFloat(quote);
-            const tickDigit = parseInt(String(tickPrice.toFixed(3)).slice(-1));
+            // Usar el string original de Deriv para extraer el último dígito real
+            const quoteStr = String(quote);
+            const tickDigit = parseInt(quoteStr[quoteStr.length - 1]);
             
             // 1. Calcular volatilidad y actualizar historial (Memoria del bot)
             const prevPrice = botState.lastTickPrice || tickPrice;
