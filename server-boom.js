@@ -38,7 +38,7 @@ let botState = {
     digitHistory: [],
     digitFrequency: {},
     currentBarrier: null,
-    stake: 1,
+    stake: 10.00,
     maxDailyLoss: 20,
     takeProfit: 50,
     dailyLoss: 0,
@@ -89,7 +89,10 @@ const saveState = () => { try { fs.writeFileSync(STATE_FILE, JSON.stringify({ bo
 
 function chooseBestBarrier() {
     const hist = botState.digitHistory;
-    if (hist.length < 15) return '5';
+    if (hist.length < 15) {
+        botState.currentBarrier = '5';
+        return '5';
+    }
     const lastDigit = hist[hist.length - 1];
     let bestDigit = lastDigit;
     let maxFreq = 0;
@@ -104,6 +107,7 @@ function chooseBestBarrier() {
         hist.slice(-100).forEach(d => freq[d] = (freq[d] || 0) + 1);
         bestDigit = Object.keys(freq).sort((a,b) => freq[a] - freq[b])[0];
     }
+    botState.currentBarrier = String(bestDigit);
     return String(bestDigit);
 }
 
@@ -197,6 +201,11 @@ function connectDeriv() {
             botState.lastDigit = tickDigit;
             botState.digitHistory.push(tickDigit);
             if (botState.digitHistory.length > 100) botState.digitHistory.shift();
+
+            // Actualizar Frecuencia
+            const freq = {};
+            botState.digitHistory.forEach(d => freq[d] = (freq[d] || 0) + 1);
+            botState.digitFrequency = freq;
             
             // RSI/EMA
             const prices = botState.rsiValues;
@@ -237,6 +246,15 @@ function connectDeriv() {
                 else { botState.lossesSession++; botState.dailyLoss += Math.abs(profit); }
                 botState.totalTradesSession++;
                 botState.activeContractId = null;
+                
+                botState.tradeHistory.unshift({
+                    type: 'DIFFERS', profit, time: new Date().toLocaleTimeString(), 
+                    barrier: botState.currentBarrier, 
+                    result: profit > 0 ? 'WIN ✅' : 'LOSS ❌', 
+                    lastDigit: botState.lastDigit 
+                });
+                if (botState.tradeHistory.length > 50) botState.tradeHistory.pop();
+
                 saveState();
                 console.log(`💰 RESULTADO: ${profit > 0 ? 'WIN' : 'LOSS'} ($${profit})`);
             }
@@ -257,6 +275,7 @@ function executeFlashMirrorFire() {
     const now = Date.now();
     if (now - botState.lastTradeTime < botState.cooldownMs) return;
     const barrier = chooseBestBarrier();
+    botState.currentBarrier = barrier; // Actualizamos para la UI
     botState.isBuying = true;
     ws.send(JSON.stringify({ buy: 1, price: botState.stake, parameters: { amount: botState.stake, basis: 'stake', contract_type: 'DIGITDIFF', currency: botState.currency, symbol: SYMBOL, duration: 1, duration_unit: 't', barrier: barrier } }));
     botState.pendingSignal = null;
