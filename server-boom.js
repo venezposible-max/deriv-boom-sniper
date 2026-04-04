@@ -1,6 +1,6 @@
 /**
  * ============================================================
- *  DIFFERS SNIPER ENGINE v18.1 [CLEAN & STABLE]
+ *  DIFFERS SNIPER ENGINE v18.9 [ATOMIC SYNC]
  *  Estrategia: DIFFERS — El último dígito NO será X
  *  Símbolo: R_100 (Sincronía Atómica por cadencia)
  * ============================================================
@@ -12,7 +12,6 @@ import { fileURLToPath } from 'url';
 import express from 'express';
 import cors from 'cors';
 import WebSocket from 'ws';
-import crypto from 'crypto';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -22,10 +21,11 @@ const APP_ID = process.env.DERIV_APP_ID || '36544';
 const DERIV_TOKEN_DEMO = process.env.DERIV_TOKEN_DEMO || 'PMIt2RhEjEDbcLD';
 const STATE_FILE = path.join(__dirname, 'persistent-state-differs.json');
 let SYMBOL = 'R_100';
+let TOKEN = process.env.DERIV_TOKEN_DEMO || DERIV_TOKEN_DEMO;
 
 // ─── ESTADO GLOBAL ────────────────────────────────────────────
 let botState = {
-    isRunning: true,                  // [v18.2] Auto-Start activado para producción
+    isRunning: true,
     isConnectedToDeriv: false,
     isRealAccount: false,
     balance: 0,
@@ -33,7 +33,7 @@ let botState = {
     winsSession: 0,
     lossesSession: 0,
     totalTradesSession: 0,
-    isRecoveryEnabled: true,   // [v18.7.1] Asegurar que existe en el estado base
+    isRecoveryEnabled: true,
     recoveryActive: false,
     tradeHistory: [],
     lastDigit: null,
@@ -56,25 +56,11 @@ let botState = {
     digitTransitions: {},
     currentPing: 50,
     lastPingSentAt: 0,
-    strategyName: 'ESPERANDO...',
-    isRecoveryEnabled: false,
-    recoveryActive: false,
-    recoveryStep: 0,
-    lastLosingDigit: null,
-    secondaryTarget: null,
+    lastTickPrice: 0,
     rsiValues: [],
-    emaValues: [],
     lastRSI: 50,
     lastEMA: 0,
-    emaPeriod: 5,
-    straddleUpId: null,
-    straddleDownId: null,
-    straddleOpenTime: 0,
-    straddleTP: 12.00,
-    straddleMaxLoss: 3.00,
-    straddleTimeoutMs: 240000,
-    scanSymbols: ['R_10', 'R_25', 'R_50', 'R_100'],
-    currentSymbolIndex: 3,
+    emaInitialized: false
 };
 
 // ─── CARGAR ESTADO ───
@@ -82,7 +68,6 @@ if (fs.existsSync(STATE_FILE)) {
     try {
         const saved = JSON.parse(fs.readFileSync(STATE_FILE));
         botState = { ...botState, ...saved.botState, isBuying: false, isAuthing: false };
-        // Si el usuario lo paró manualmente, respetamos el estado; si no, auto-start.
         if (saved.botState.isRunning === undefined) botState.isRunning = true;
     } catch (e) {}
 }
@@ -130,11 +115,11 @@ app.post('/differs/control', (req, res) => {
         if (maxDailyLoss) botState.maxDailyLoss = parseFloat(maxDailyLoss);
         if (takeProfit) botState.takeProfit = parseFloat(takeProfit);
         botState.isRunning = true;
-        console.log(`▶️ SNIPER v18.1 INICIADO`);
+        console.log(`▶️ SNIPER v18.9 INICIADO`);
         return res.json({ success: true, isRunning: true });
     }
     if (action === 'STOP') { botState.isRunning = false; return res.json({ success: true, isRunning: false }); }
-    if (action === 'RESET_DAY') { botState.dailyLoss = 0; botState.dailyProfit = 0; botState.tradeHistory = []; return res.json({ success: true }); }
+    if (action === 'RESET_DAY') { botState.dailyLoss = 0; botState.dailyProfit = 0; botState.tradeHistory = []; saveState(); return res.json({ success: true }); }
     res.status(400).json({ success: false });
 });
 
@@ -154,9 +139,7 @@ app.post('/differs/switch-market', (req, res) => {
         console.log(`🌐 CAMBIANDO MERCADO A: ${symbol}`);
         if (ws && ws.readyState === WebSocket.OPEN) {
             ws.send(JSON.stringify({ forget_all: 'ticks' }));
-            setTimeout(() => {
-                ws.send(JSON.stringify({ ticks: symbol }));
-            }, 1000);
+            setTimeout(() => { ws.send(JSON.stringify({ subscribe: 1, ticks: SYMBOL })); }, 1000);
         }
     }
     res.json({ success: true, symbol: SYMBOL });
@@ -164,12 +147,9 @@ app.post('/differs/switch-market', (req, res) => {
 
 app.post('/differs/switch-account', (req, res) => {
     const { isReal } = req.body;
-    TOKEN = isReal ? process.env.DERIV_TOKEN_REAL : process.env.DERIV_TOKEN_DEMO;
     botState.isRealAccount = !!isReal;
     console.log(`🔑 CAMBIANDO A CUENTA: ${isReal ? 'REAL 🔴' : 'DEMO 🔵'}`);
-    if (ws) {
-        ws.close(); // Esto disparará la reconexión con el nuevo token
-    }
+    if (ws) { ws.close(); }
     res.json({ success: true, isRealAccount: botState.isRealAccount });
 });
 
@@ -184,14 +164,14 @@ function connectDeriv() {
     ws = new WebSocket(`wss://ws.derivws.com/websockets/v3?app_id=${APP_ID}`);
 
     ws.on('open', () => {
-        console.log(`🔌 Conexión abierta. Autenticando en 3s...`);
+        console.log(`🔌 Conexión abierta. Autenticando...`);
         setTimeout(() => {
             if (ws && ws.readyState === WebSocket.OPEN && !botState.isAuthing) {
                 const token = (botState.isRealAccount ? process.env.DERIV_TOKEN_REAL : process.env.DERIV_TOKEN_DEMO) || DERIV_TOKEN_DEMO;
                 botState.isAuthing = true;
                 ws.send(JSON.stringify({ authorize: token.trim() }));
             }
-        }, 3000);
+        }, 2000);
     });
 
     ws.on('message', (raw) => {
@@ -201,30 +181,25 @@ function connectDeriv() {
         if (msg.msg_type === 'authorize' && msg.authorize) {
              botState.isAuthing = false;
              botState.isConnectedToDeriv = true;
-             botState.currency = msg.authorize.currency || 'USD';
+             botState.balance = parseFloat(msg.authorize.balance || 0);
              console.log(`✅ Autenticado: ${msg.authorize.fullname}`);
              ws.send(JSON.stringify({ forget_all: "ticks" }));
 
-             // [v18.7] Sincronía Inicial de Ping
              botState.lastPingSentAt = Date.now();
              ws.send(JSON.stringify({ ping: 1 }));
 
              setTimeout(() => {
                  if (ws && ws.readyState === WebSocket.OPEN) {
-                     console.log(`📡 Suscribiendo a Ticks y Balance en ${SYMBOL}...`);
                      ws.send(JSON.stringify({ subscribe: 1, ticks: SYMBOL }));
                      ws.send(JSON.stringify({ balance: 1, subscribe: 1 }));
-                     console.log(`🎯 SNIPER v18.2 ACTIVADO | Analizando RSI y cadencia de red...`);
+                     console.log(`🎯 SNIPER v18.9 ACTIVADO | Analizando Cadencia Atómica...`);
                  }
-             }, 3000);
+             }, 2000);
         }
 
         if (msg.error) {
             console.error(`⚠️ Error [${msg.error.code}]: ${msg.error.message}`);
-            if (msg.msg_type === 'authorize') {
-                botState.isAuthing = false;
-                if (msg.error.code === 'PolicyViolation' || msg.error.code === 'WrongResponse') { ws.terminate(); }
-            }
+            if (msg.msg_type === 'authorize') { botState.isAuthing = false; ws.terminate(); }
             return;
         }
 
@@ -239,99 +214,85 @@ function connectDeriv() {
             }
             const tickDigit = parseInt(String(msg.tick.quote).slice(-1));
             const tickPrice = parseFloat(msg.tick.quote);
-            botState.lastTickPrice = tickPrice; // [v18.4] Para que se vea el precio en el panel
+            botState.lastTickPrice = tickPrice;
             if (botState.lastDigit !== null) { botState.digitTransitions[`${botState.lastDigit}->${tickDigit}`] = (botState.digitTransitions[`${botState.lastDigit}->${tickDigit}`] || 0) + 1; }
             botState.lastDigit = tickDigit;
             botState.digitHistory.push(tickDigit);
             if (botState.digitHistory.length > 100) botState.digitHistory.shift();
 
-            // Actualizar Frecuencia
+            // Frecuencia
             const freq = {};
             botState.digitHistory.forEach(d => freq[d] = (freq[d] || 0) + 1);
             botState.digitFrequency = freq;
             
-            // RSI/EMA
-            const prices = botState.rsiValues;
-            prices.push(tickPrice);
-            if (prices.length > 6) prices.shift();
+            // RSI/EMA simplificado para Filtro
+            botState.rsiValues.push(tickPrice);
+            if (botState.rsiValues.length > 14) botState.rsiValues.shift();
             if (!botState.emaInitialized) { botState.lastEMA = tickPrice; botState.emaInitialized = true; }
-            else { botState.lastEMA = (tickPrice * 0.33) + (botState.lastEMA * 0.67); }
-            if (prices.length >= 6) {
-                let g = 0, l = 0;
-                for (let i = 1; i < 6; i++) {
-                    const d = prices[i] - prices[i-1];
-                    if (d>=0) g+=d; else l-=d;
-                }
-                botState.lastRSI = 100 - (100 / (1 + (g/(l||0.0001))));
-            }
+            else { botState.lastEMA = (tickPrice * 0.2) + (botState.lastEMA * 0.8); }
 
             if (botState.isRunning && !botState.isBuying && !botState.activeContractId) {
-                if ((botState.lastRSI > 70 && tickPrice > botState.lastEMA) || (botState.lastRSI < 30 && tickPrice < botState.lastEMA)) {
-                    botState.pendingSignal = { type: 'DIFFERS' };
-                }
+                botState.pendingSignal = { type: 'DIFFERS' };
             }
         }
 
         if (msg.msg_type === 'balance') botState.balance = msg.balance.balance;
-        
-        // [v18.7] Procesar Ping de Latencia Real
-        if (msg.msg_type === 'ping') {
-            botState.currentPing = Date.now() - botState.lastPingSentAt;
-            if (botState.currentPing < 5) botState.currentPing = 50; // Fallback
-        }
+        if (msg.msg_type === 'ping') { botState.currentPing = Date.now() - botState.lastPingSentAt; }
 
         if (msg.msg_type === 'buy' && msg.buy) {
             botState.activeContractId = msg.buy.contract_id;
             console.log(`🎯 CONTRATO ABIERTO: ${msg.buy.contract_id}`);
             ws.send(JSON.stringify({ proposal_open_contract: 1, contract_id: msg.buy.contract_id, subscribe: 1 }));
             botState.isBuying = false;
-            botState.lastTradeTime = Date.now();
         }
+
         if (msg.msg_type === 'proposal_open_contract' && msg.proposal_open_contract) {
             const c = msg.proposal_open_contract;
             if (c.is_sold) {
                 const profit = parseFloat(c.profit);
                 botState.pnlSession += profit;
-                if (profit > 0) { 
-                    botState.winsSession++; botState.dailyProfit += profit; 
-                    // [v18.8] Si ganamos un rescate, volvemos al stake base de inmediato
+                
+                if (profit > 0) {
+                    botState.winsSession++;
+                    botState.dailyProfit += profit;
                     if (botState.recoveryActive) {
-                        console.log(`✅ RESCATE EXITOSO: Volviendo a Stake Base ($${botState.stake})`);
+                        console.log(`✅ RESCATE EXITOSO: Volviendo a Base.`);
                         botState.recoveryActive = false;
                     }
-                } else { 
-                    botState.lossesSession++; botState.dailyLoss += Math.abs(profit); 
-                    
+                } else {
+                    const lossVal = Math.abs(profit);
+                    botState.lossesSession++;
+                    botState.dailyLoss += lossVal;
                     if (botState.recoveryActive) {
-                        // [v18.8] RESCATE FALLIDO: Apagar rescate para no quemar la cuenta
-                        console.log(`🔴 RESCATE FALLIDO: Aceptando pérdida y volviendo a Stake Base.`);
+                        console.log(`🔴 RESCATE FALLIDO: Reseteando para proteger cuenta.`);
                         botState.recoveryActive = false;
-                        botState.lastTradeTime = Date.now() + 30000; // 30s de penalización por pérdida doble
-                    } else {
-                        // [v18.8] Activar Rescate x11 con COOLDOWN de 15s
+                        botState.lastTradeTime = Date.now() + 30000;
+                    } else if (botState.isRecoveryEnabled) {
                         botState.recoveryActive = true;
-                        botState.lastTradeTime = Date.now() + 15000; // 15s de enfriamiento para el clúster
-                        console.log(`🛡️ ESCUDO ACTIVADO: Esperando 15s para Rescate Matemático x11 ($${(botState.stake * 11).toFixed(2)})`);
+                        botState.lastTradeTime = Date.now() + 15000;
+                        console.log(`🛡️ ESCUDO ACTIVADO: Esperando 15s para Rescate x11 ($${(botState.stake * 11).toFixed(2)})`);
                     }
                 }
 
                 botState.tradeHistory.unshift({
-                    type: 'DIFFERS', profit, time: new Date().toLocaleTimeString(), 
-                    barrier: botState.currentBarrier, 
-                    result: profit > 0 ? 'WIN ✅' : 'LOSS ❌', 
-                    lastDigit: botState.lastDigit 
+                    type: 'DIFFERS', profit, time: new Date().toLocaleTimeString(),
+                    barrier: botState.currentBarrier,
+                    result: profit > 0 ? 'WIN ✅' : 'LOSS ❌',
+                    lastDigit: botState.lastDigit
                 });
                 if (botState.tradeHistory.length > 50) botState.tradeHistory.pop();
-
+                
+                botState.totalTradesSession++;
+                botState.activeContractId = null;
                 saveState();
-                console.log(`💰 RESULTADO: ${profit > 0 ? 'WIN' : 'LOSS'} ($${profit})`);
+                console.log(`💰 RESULTADO: ${profit > 0 ? 'WIN' : 'LOSS'} ($${profit.toFixed(2)}) | PnL Hoy: $${(botState.dailyProfit - botState.dailyLoss).toFixed(2)}`);
             }
         }
     });
 
     ws.on('close', (code) => {
-        const wait = (code === 1008) ? 60000 : 5000;
-        console.log(`🔌 Conexión cerrada (${code}). Reconectando en ${wait/1000}s...`);
+        const wait = 5000;
+        console.log(`🔌 Conexión cerrada (${code}). Reconectando...`);
         botState.isConnectedToDeriv = false;
         botState.isBuying = false;
         if (!reconnectTimeout) reconnectTimeout = setTimeout(connectDeriv, wait);
@@ -339,38 +300,29 @@ function connectDeriv() {
 }
 
 function executeFlashMirrorFire() {
-    if (!ws || ws.readyState !== WebSocket.OPEN || !botState.pendingSignal || botState.isBuying) return;
+    if (!ws || ws.readyState !== WebSocket.OPEN || !botState.pendingSignal || botState.isBuying || botState.activeContractId) return;
     const now = Date.now();
-    if (now - botState.lastTradeTime < botState.cooldownMs) return;
+    if (now - botState.lastTradeTime < 1000) return;
+    
     const barrier = chooseBestBarrier();
     botState.currentBarrier = barrier;
     botState.isBuying = true;
 
-    // [v18.8] Bloqueo de Rescate por Latencia Crítica
     if (botState.recoveryActive && botState.currentPing > 150) {
-        console.log(`⚠️ LATENCIA ALTA (${botState.currentPing}ms): Pospiniendo rescate por seguridad...`);
+        console.log(`⚠️ LATENCIA ALTA (${botState.currentPing}ms): Pospiniendo rescate...`);
+        botState.isBuying = false;
         return;
     }
 
-    // [v18.6] Calculo de Stake con Martingala Matemático x11
     let finalStake = botState.stake;
     if (botState.recoveryActive) finalStake = botState.stake * 11;
 
-    console.log(`🚀 LANZANDO DISPARO | Stake: $${finalStake.toFixed(2)} | Barrera: NO-${barrier}`);
-
-    ws.send(JSON.stringify({ 
-        buy: 1, 
-        price: finalStake, 
-        parameters: { 
-            amount: finalStake, 
-            basis: 'stake', 
-            contract_type: 'DIGITDIFF', 
-            currency: botState.currency, 
-            symbol: SYMBOL, 
-            duration: 1, 
-            duration_unit: 't', 
-            barrier: barrier 
-        } 
+    ws.send(JSON.stringify({
+        buy: 1, price: finalStake,
+        parameters: {
+            amount: finalStake, basis: 'stake', contract_type: 'DIGITDIFF',
+            currency: 'USD', symbol: SYMBOL, duration: 1, duration_unit: 't', barrier: barrier
+        }
     }));
     botState.pendingSignal = null;
 }
@@ -378,30 +330,19 @@ function executeFlashMirrorFire() {
 setInterval(() => {
     if (!botState.isRunning || !ws || ws.readyState !== WebSocket.OPEN) return;
     const now = Date.now();
-
-    // [v18.7] Sonda de Ping cada 10s
-    if (now % 10000 < 50) {
-        botState.lastPingSentAt = now;
-        ws.send(JSON.stringify({ ping: 1 }));
-    }
+    if (now % 10000 < 50) { botState.lastPingSentAt = now; ws.send(JSON.stringify({ ping: 1 })); }
 
     const timeSinceLast = now - botState.lastTickReceivedAt;
     const nextExpected = botState.avgTickInterval;
-    
-    // [v18.7] DISPARO DINÁMICO: Solape ajustado al PING REAL (+25ms de gracia)
     const dynamicLead = Math.min(400, botState.currentPing + 25);
     
-    // Bloqueo por inestabilidad de red (>300ms de lag)
     if (botState.currentPing > 300) return;
-
-    if (timeSinceLast >= (nextExpected - dynamicLead)) {
-        executeFlashMirrorFire();
-    }
+    if (timeSinceLast >= (nextExpected - dynamicLead)) { executeFlashMirrorFire(); }
 }, 50);
 
 const PORT = process.env.PORT || 8080;
 app.listen(PORT, '0.0.0.0', () => {
-    console.log(`🚀 v18.1 ONLINE EN PUERTO ${PORT}`);
+    console.log(`🚀 v18.9 ONLINE EN PUERTO ${PORT}`);
     connectDeriv();
 });
 
