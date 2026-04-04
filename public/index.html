@@ -147,6 +147,16 @@
             to   { box-shadow: 0 0 30px rgba(167,139,250,0.4); }
         }
 
+        /* ── ACTIVE SHIELD (MULTIPLIER) ── */
+        .shield-active {
+            border: 1px solid rgba(52,211,153,0.4) !important;
+            animation: pulse-border-shield 2s infinite alternate;
+        }
+        @keyframes pulse-border-shield {
+            from { box-shadow: 0 0 10px rgba(52,211,153,0.1); }
+            to   { box-shadow: 0 0 30px rgba(52,211,153,0.4); }
+        }
+
         /* ── BUTTONS ── */
         .btn-main {
             width: 100%; padding: 18px; border-radius: 15px; border: none;
@@ -357,6 +367,14 @@
         <div style="font-size:14px; font-weight:900; color:#a78bfa; margin:6px 0;" id="activeBarrierLabel">NO-?</div>
         <div style="font-size:2rem; font-weight:900; margin:8px 0;" id="tradeProfit">$0.00</div>
         <div class="stat-label">Esperando resultado del tick...</div>
+    </div>
+
+    <!-- ACTIVE SHIELD -->
+    <div class="card shield-active" id="shieldCard" style="display:none; text-align:center;">
+        <div class="stat-label" style="color:#34d399;">🛡️ ESCUDO ACTIVO (MULTIPLIER)</div>
+        <div style="font-size:12px; color:#aaa; margin:6px 0;">Seguro activado (5 min)</div>
+        <div style="font-size:2.5rem; font-weight:900; margin:8px 0;" id="shieldProfit">$0.00</div>
+        <div class="stat-label" id="shieldStatusMsg">Monitoreando cobertura...</div>
     </div>
 
     <!-- CONTROL -->
@@ -609,6 +627,21 @@
                 document.getElementById('activeBarrierLabel').innerText = `Diferir de dígito: NO-${barrier}`;
             } else {
                 tradeCard.style.display = 'none';
+            }
+
+            // Active Shield card
+            const shieldCard = document.getElementById('shieldCard');
+            if (data.activeMultiplierContractId) {
+                shieldCard.style.display = 'block';
+                const shieldProfit = parseFloat(data.multiplierProfit || 0);
+                const shieldProfitEl = document.getElementById('shieldProfit');
+                shieldProfitEl.innerText = `${shieldProfit >= 0 ? '+' : ''}$${shieldProfit.toFixed(2)}`;
+                shieldProfitEl.style.color = shieldProfit >= 0 ? '#34d399' : '#f87171';
+                
+                const elapsedSecs = Math.floor((Date.now() - (data.multiplierOpenTime || Date.now())) / 1000);
+                document.getElementById('shieldStatusMsg').innerText = `Tiempo abierto: ${elapsedSecs}s | Auto-Sell: ±$5 / TP`;
+            } else {
+                shieldCard.style.display = 'none';
             }
 
             // Toggle button
