@@ -81,11 +81,14 @@ let botState = {
     straddleMaxLoss: 3.00,             // Cancelar el que equivoque su rumbo
     straddleTimeoutMs: 240000,         // Vender forzado a los 4 min
     lastDiffersResult: null,           // 'WIN' o 'LOSS' del último Differs en el combo
-    // [v16.4] MULTI-MARKET SCANNER & TWIN FILTER
+    // [v16.4] MULTI-MARKET SCANNER, TWIN FILTER & FLASH-MIRROR
     currentSymbolIndex: 0,
     scanSymbols: ['R_10', 'R_25', 'R_50', 'R_100'],
     lastTickTime: 0,
     isTwinDetected: false,
+    tickIntervals: [],                 // [v16.5] Historial de cadencia de red
+    avgTickInterval: 1000,             // Por defecto 1 segundo
+    lastTickReceivedAt: Date.now(),
 };
 
 // ─── CARGAR ESTADO PREVIO ──────────────────────────────────────
@@ -449,6 +452,16 @@ function connectDeriv() {
         // Tick recibido → SMART DIFFERS (3 Gatillos IA)
         // [FRANKLIN v7.0] MOTOR MULTIMODAL HÍBRIDO
         if (msg.msg_type === 'tick' && msg.tick) {
+            // --- [v16.5] FLASH-MIRROR: RASTREO DE CADENCIA DE RED ---
+            const nowTime = Date.now();
+            const lastInterval = nowTime - botState.lastTickReceivedAt;
+            botState.lastTickReceivedAt = nowTime;
+            if (lastInterval > 100 && lastInterval < 3000) {
+                botState.tickIntervals.push(lastInterval);
+                if (botState.tickIntervals.length > 10) botState.tickIntervals.shift();
+                botState.avgTickInterval = botState.tickIntervals.reduce((a, b) => a + b, 0) / botState.tickIntervals.length;
+            }
+
             const quote = msg.tick.quote;
             const tickPrice = parseFloat(quote);
             // Usar el string original de Deriv para extraer el último dígito real
@@ -979,7 +992,7 @@ function fireStraddleRescue() {
             parameters: {
                 amount: 10.00, basis: 'stake',
                 contract_type: multiContractType, currency: botState.currency || 'USD',
-                symbol: multiSymbol, multiplier: 100, cancellation: '5m'
+                symbol: multiSymbol, multiplier: 200, cancellation: '5m'
             }
         }));
     } catch (err) {
