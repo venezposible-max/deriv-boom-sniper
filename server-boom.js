@@ -718,6 +718,19 @@ function connectDeriv() {
                 if (profit > 0) { botState.dailyProfit += profit; botState.winsSession++; }
                 else { botState.dailyLoss += Math.abs(profit); botState.lossesSession++; }
                 botState.totalTradesSession++;
+                
+                // Registrar en el historial de la UI
+                const timeVE = new Date().toLocaleString('es-VE', { timeZone: 'America/Caracas' });
+                botState.tradeHistory.unshift({
+                    type: wasCancelled ? `🛡️ STRADDLE ${legName} CANCEL` : `🛡️ STRADDLE ${legName}`,
+                    profit: profit, 
+                    time: timeVE, 
+                    barrier: '-', 
+                    result: profit >= 0 ? (wasCancelled ? 'REFUND' : 'WIN ✅') : 'LOSS ❌', 
+                    lastDigit: '-'
+                });
+                if (botState.tradeHistory.length > 100) botState.tradeHistory.pop();
+                
                 saveState();
                 return;
             }
