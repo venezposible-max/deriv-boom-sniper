@@ -72,6 +72,13 @@ let botState = {
     rsiPeriod: 5,                // RSI-5 periodos
     emaInitialized: false,       // Controla si la EMA ya fue sembrada
     currentImpulse: null,        // 'UP' o 'DOWN'
+    // [v16.2] GESTIÓN DE MULTIPLIER (ESCUDO)
+    activeMultiplierContractId: null,  // ID contrato Multiplier activo
+    multiplierOpenTime: 0,             // Timestamp de apertura
+    multiplierProfit: 0,               // P&L actual del multiplier
+    multiplierTakeProfit: 5.00,        // Vender si gana $5+
+    multiplierMaxLoss: 3.00,           // Cancelar si pierde $3+
+    multiplierTimeoutMs: 240000,       // Vender forzado a los 4 min (antes de que expire el seguro de 5m)
 };
 
 // ─── CARGAR ESTADO PREVIO ──────────────────────────────────────
@@ -622,14 +629,31 @@ function connectDeriv() {
 
         // Compra confirmada
         if (msg.msg_type === 'buy' && msg.buy) {
-            botState.activeContractId = msg.buy.contract_id;
-            botState.currentContractId = msg.buy.contract_id;
-            botState.isBuying = false;
+            const contractId = msg.buy.contract_id;
             const openStake = msg.buy.buy_price || 0;
-            console.log(`🎯 CONTRATO ABIERTO [${msg.buy.contract_id}] | Stake: $${openStake} | Barrera: ${botState.currentBarrier}`);
+            const contractType = msg.buy.shortcode || '';
+            
+            // Detectar si es Multiplier o Differs
+            const isMultiplier = contractType.includes('MULT') || 
+                                 (botState.currentContractType === 'ANTIGRAVITY_COMBO' && !botState.activeContractId && botState.activeMultiplierContractId === null);
+            
+            if (contractType.includes('MULT') || (botState.currentContractType === 'ANTIGRAVITY_COMBO' && botState.activeContractId)) {
+                // Este es el MULTIPLIER (segundo contrato del combo)
+                botState.activeMultiplierContractId = contractId;
+                botState.multiplierOpenTime = Date.now();
+                botState.multiplierProfit = 0;
+                console.log(`🛡️ ESCUDO ABIERTO [${contractId}] | Tipo: ${contractType.includes('MULTUP') ? 'MULTUP' : 'MULTDOWN'} | Stake: $${openStake}`);
+            } else {
+                // Este es el DIFFERS (primer contrato)
+                botState.activeContractId = contractId;
+                botState.currentContractId = contractId;
+                console.log(`🎯 DIFFERS ABIERTO [${contractId}] | Stake: $${openStake} | Barrera: NO-${botState.currentBarrier}`);
+            }
+            
+            botState.isBuying = false;
 
-            // Suscribir al resultado
-            ws.send(JSON.stringify({ proposal_open_contract: 1, contract_id: msg.buy.contract_id, subscribe: 1 }));
+            // Suscribir al resultado del contrato
+            ws.send(JSON.stringify({ proposal_open_contract: 1, contract_id: contractId, subscribe: 1 }));
         }
 
         if (msg.msg_type === 'buy' && msg.error) {
@@ -641,11 +665,77 @@ function connectDeriv() {
             }
         }
 
-        // Resultado del contrato
+        // Resultado del contrato (LIVE MONITORING)
         if (msg.msg_type === 'proposal_open_contract') {
             const c = msg.proposal_open_contract;
-            if (!c || !c.is_sold) return;
+            if (!c) return;
+            
+            const contractId = c.contract_id;
+            const isMultiplier = String(contractId) === String(botState.activeMultiplierContractId);
+            
+            // ─── MONITOR MULTIPLIER EN VIVO ───
+            if (isMultiplier && !c.is_sold) {
+                const profit = parseFloat(c.profit || 0);
+                botState.multiplierProfit = profit;
+                const elapsed = Date.now() - botState.multiplierOpenTime;
+                
+                // REGLA 1: Take Profit → Vender si ganando $5+
+                if (profit >= botState.multiplierTakeProfit) {
+                    console.log(`💰 ESCUDO: Take Profit +$${profit.toFixed(2)} → VENDIENDO`);
+                    ws.send(JSON.stringify({ sell: contractId, price: 0 }));
+                }
+                // REGLA 2: Cancelar si perdiendo $3+ (usar deal cancellation)
+                else if (profit <= -botState.multiplierMaxLoss && c.is_valid_to_cancel) {
+                    console.log(`🛡️ ESCUDO: Pérdida -$${Math.abs(profit).toFixed(2)} → CANCELANDO (Seguro activo)`);
+                    ws.send(JSON.stringify({ cancel: contractId }));
+                }
+                // REGLA 3: Timeout → Vender antes de que expire el seguro (4 min)
+                else if (elapsed >= botState.multiplierTimeoutMs) {
+                    if (c.is_valid_to_cancel && profit < 0) {
+                        console.log(`⏰ ESCUDO: Timeout 4min, pérdida -$${Math.abs(profit).toFixed(2)} → CANCELANDO`);
+                        ws.send(JSON.stringify({ cancel: contractId }));
+                    } else {
+                        console.log(`⏰ ESCUDO: Timeout 4min, profit $${profit.toFixed(2)} → VENDIENDO`);
+                        ws.send(JSON.stringify({ sell: contractId, price: 0 }));
+                    }
+                }
+                return; // No procesar como trade finalizado aún
+            }
+            
+            // ─── CONTRATO VENDIDO/CERRADO ───
+            if (!c.is_sold) return;
+            
+            // Si es el Multiplier que se cerró
+            if (isMultiplier) {
+                const profit = parseFloat(c.profit || 0);
+                const wasCancelled = c.status === 'cancelled';
+                botState.activeMultiplierContractId = null;
+                
+                if (wasCancelled) {
+                    console.log(`🛡️ ESCUDO CANCELADO → Stake recuperado (fee: ~$${Math.abs(profit).toFixed(2)})`);
+                } else if (profit >= 0) {
+                    console.log(`💰 ESCUDO VENDIDO → Ganancia: +$${profit.toFixed(2)}`);
+                } else {
+                    console.log(`📉 ESCUDO CERRADO → Pérdida: -$${Math.abs(profit).toFixed(2)}`);
+                }
+                
+                // Registrar en PnL y historial
+                botState.pnlSession += profit;
+                if (profit > 0) { botState.dailyProfit += profit; botState.winsSession++; }
+                else { botState.dailyLoss += Math.abs(profit); botState.lossesSession++; }
+                botState.totalTradesSession++;
+                
+                const timeVE = new Date().toLocaleString('es-VE', { timeZone: 'America/Caracas' });
+                botState.tradeHistory.unshift({
+                    type: wasCancelled ? '🛡️ ESCUDO CANCELADO' : `🛡️ ESCUDO ${profit >= 0 ? 'WIN' : 'LOSS'}`,
+                    profit, time: timeVE, barrier: '-', result: profit >= 0 ? 'WIN ✅' : 'LOSS ❌', lastDigit: '-'
+                });
+                if (botState.tradeHistory.length > 100) botState.tradeHistory.pop();
+                saveState();
+                return;
+            }
 
+            // Si es el Differs que se cerró
             finalizeTrade(c);
         }
     });
