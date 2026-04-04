@@ -1,6 +1,6 @@
 /**
  * ============================================================
- *  DIFFERS SNIPER ENGINE v18.10 [GAIN-SHIELD]
+ *  DIFFERS SNIPER ENGINE v18.12 [ANTI-HOT HAMMER]
  *  Estrategia: DIFFERS — El último dígito NO será X
  *  Símbolo: R_100 (Sincronía Atómica por cadencia)
  * ============================================================
@@ -59,7 +59,9 @@ let botState = {
     lastRSI: 50,
     lastEMA: 0,
     emaInitialized: false,
-    pnlSession: 0
+    pnlSession: 0,
+    ghostStreak: 0,
+    nextBarrier: null
 };
 
 // ─── CARGAR ESTADO ───
@@ -73,28 +75,42 @@ if (fs.existsSync(STATE_FILE)) {
 
 const saveState = () => { try { fs.writeFileSync(STATE_FILE, JSON.stringify({ botState })); } catch (e) {} };
 
+// [v18.12] Selección de Barrera por "Frialdad" (Anti-Hot Hammer)
 function chooseBestBarrier() {
     const hist = botState.digitHistory;
-    if (hist.length < 15) {
-        botState.currentBarrier = '5';
-        return '5';
-    }
-    const lastDigit = hist[hist.length - 1];
-    let bestDigit = lastDigit;
-    let maxFreq = 0;
+    if (hist.length < 20) return '5';
+
+    // Frecuencia en los últimos 40 ticks para detectar "Calientes"
+    const freqLast = {};
+    hist.slice(-40).forEach(d => freqLast[d] = (freqLast[d] || 0) + 1);
+
+    // Encontrar el dígito más FRÍO (El que MENOS ha salido)
+    let coolestDigit = '0';
+    let minFreq = 999;
+    
     for (let d = 0; d <= 9; d++) {
-        const freq = botState.digitTransitions[`${lastDigit}->${d}`] || 0;
-        if (freq > maxFreq) { maxFreq = freq; bestDigit = d; }
+        const f = freqLast[d] || 0;
+        if (f < minFreq) {
+            minFreq = f;
+            coolestDigit = String(d);
+        }
     }
-    const last10 = hist.slice(-10);
-    const count = last10.filter(d => d === parseInt(bestDigit)).length;
-    if (count >= 4) {
-        const freq = {};
-        hist.slice(-100).forEach(d => freq[d] = (freq[d] || 0) + 1);
-        bestDigit = Object.keys(freq).sort((a,b) => freq[a] - freq[b])[0];
+
+    // [v18.12] BLOQUEO DE EMERGENCIA: Si el dígito más frío aun así ha salido > 5 veces en 40 (muy caliente), bajamos la guardia
+    if (minFreq > 6) {
+        // Buscamos otro por transiciones
+        const lastDigit = hist[hist.length - 1];
+        let rareDigit = '0';
+        let minTrans = 999;
+        for (let d = 0; d <= 9; d++) {
+            const t = botState.digitTransitions[`${lastDigit}->${d}`] || 0;
+            if (t < minTrans) { minTrans = t; rareDigit = String(d); }
+        }
+        coolestDigit = rareDigit;
     }
-    botState.currentBarrier = String(bestDigit);
-    return String(bestDigit);
+
+    botState.currentBarrier = coolestDigit;
+    return coolestDigit;
 }
 
 // ─── SERVIDOR WEB (EXPRESS) ───
@@ -114,7 +130,7 @@ app.post('/differs/control', (req, res) => {
         if (maxDailyLoss) botState.maxDailyLoss = parseFloat(maxDailyLoss);
         if (takeProfit) botState.takeProfit = parseFloat(takeProfit);
         botState.isRunning = true;
-        console.log(`▶️ SNIPER v18.10 INICIADO`);
+        console.log(`▶️ SNIPER v18.12 INICIADO`);
         return res.json({ success: true, isRunning: true });
     }
     if (action === 'STOP') { botState.isRunning = false; return res.json({ success: true, isRunning: false }); }
@@ -135,7 +151,6 @@ app.post('/differs/switch-market', (req, res) => {
     if (symbol) {
         SYMBOL = symbol;
         botState.symbol = symbol;
-        console.log(`🌐 CAMBIANDO MERCADO A: ${symbol}`);
         if (ws && ws.readyState === WebSocket.OPEN) {
             ws.send(JSON.stringify({ forget_all: 'ticks' }));
             setTimeout(() => { ws.send(JSON.stringify({ subscribe: 1, ticks: SYMBOL })); }, 1000);
@@ -147,7 +162,6 @@ app.post('/differs/switch-market', (req, res) => {
 app.post('/differs/switch-account', (req, res) => {
     const { isReal } = req.body;
     botState.isRealAccount = !!isReal;
-    console.log(`🔑 CAMBIANDO A CUENTA: ${isReal ? 'REAL 🔴' : 'DEMO 🔵'}`);
     if (ws) { ws.close(); }
     res.json({ success: true, isRealAccount: botState.isRealAccount });
 });
@@ -181,17 +195,14 @@ function connectDeriv() {
              botState.isAuthing = false;
              botState.isConnectedToDeriv = true;
              botState.balance = parseFloat(msg.authorize.balance || 0);
-             console.log(`✅ Autenticado: ${msg.authorize.fullname}`);
              ws.send(JSON.stringify({ forget_all: "ticks" }));
-
              botState.lastPingSentAt = Date.now();
              ws.send(JSON.stringify({ ping: 1 }));
-
              setTimeout(() => {
                  if (ws && ws.readyState === WebSocket.OPEN) {
                      ws.send(JSON.stringify({ subscribe: 1, ticks: SYMBOL }));
                      ws.send(JSON.stringify({ balance: 1, subscribe: 1 }));
-                     console.log(`🎯 SNIPER v18.10 ACTIVADO | Escudo de Ganancias Activo...`);
+                     console.log(`🎯 SNIPER v18.12 ACTIVADO | Anti-Hot Hammer Martillando...`);
                  }
              }, 2000);
         }
@@ -211,40 +222,29 @@ function connectDeriv() {
                 if (botState.tickIntervals.length > 10) botState.tickIntervals.shift();
                 botState.avgTickInterval = botState.tickIntervals.reduce((a, b) => a + b, 0) / botState.tickIntervals.length;
             }
-            // [v18.11] SIMULACIÓN FANTASMA (Ghost Executioner)
             const tickDigit = parseInt(String(msg.tick.quote).slice(-1));
             const tickPrice = parseFloat(msg.tick.quote);
+            botState.lastTickPrice = tickPrice;
             
+            // [v18.12] SIMULACIÓN FANTASMA CON ANTI-HOT
             if (botState.nextBarrier !== null) {
                 if (tickDigit !== parseInt(botState.nextBarrier)) {
                     botState.ghostStreak++;
-                    // console.log(`👻 GHOST WIN: Streak ${botState.ghostStreak}`);
                 } else {
                     botState.ghostStreak = 0;
-                    console.log(`👻 GHOST LOSS: Reseteando racha de seguridad.`);
+                    console.log(`👻 GHOST LOSS: El dígito ${tickDigit} apareció. Reseteando...`);
                 }
             }
             
-            // Calcular predicción para el SIGUIENTE tick
             botState.nextBarrier = chooseBestBarrier();
-            botState.currentBarrier = botState.nextBarrier;
-
-            botState.lastTickPrice = tickPrice;
             if (botState.lastDigit !== null) { botState.digitTransitions[`${botState.lastDigit}->${tickDigit}`] = (botState.digitTransitions[`${botState.lastDigit}->${tickDigit}`] || 0) + 1; }
             botState.lastDigit = tickDigit;
             botState.digitHistory.push(tickDigit);
             if (botState.digitHistory.length > 100) botState.digitHistory.shift();
 
-            // Frecuencia
             const freq = {};
             botState.digitHistory.forEach(d => freq[d] = (freq[d] || 0) + 1);
             botState.digitFrequency = freq;
-            
-            // RSI/EMA simplificado para Filtro
-            botState.rsiValues.push(tickPrice);
-            if (botState.rsiValues.length > 14) botState.rsiValues.shift();
-            if (!botState.emaInitialized) { botState.lastEMA = tickPrice; botState.emaInitialized = true; }
-            else { botState.lastEMA = (tickPrice * 0.2) + (botState.lastEMA * 0.8); }
 
             if (botState.isRunning && !botState.isBuying && !botState.activeContractId) {
                 botState.pendingSignal = { type: 'DIFFERS' };
@@ -256,7 +256,7 @@ function connectDeriv() {
 
         if (msg.msg_type === 'buy' && msg.buy) {
             botState.activeContractId = msg.buy.contract_id;
-            console.log(`🎯 CONTRATO ABIERTO: ${msg.buy.contract_id}`);
+            console.log(`🎯 CONTRATO REAL ABIERTO: ${msg.buy.contract_id}`);
             ws.send(JSON.stringify({ proposal_open_contract: 1, contract_id: msg.buy.contract_id, subscribe: 1 }));
             botState.isBuying = false;
         }
@@ -265,7 +265,6 @@ function connectDeriv() {
             const c = msg.proposal_open_contract;
             if (c.is_sold) {
                 const profit = parseFloat(c.profit);
-                
                 if (profit > 0) {
                     botState.winsSession++;
                     botState.dailyProfit += profit;
@@ -281,19 +280,18 @@ function connectDeriv() {
                     const netDaily = botState.dailyProfit - botState.dailyLoss;
 
                     if (botState.recoveryActive) {
-                        console.log(`🔴 RESCATE FALLIDO: Reseteando para proteger cuenta.`);
+                        console.log(`🔴 RESCATE FALLIDO: Cierre de seguridad por pérdida doble.`);
                         botState.recoveryActive = false;
-                        botState.lastTradeTime = Date.now() + 30000;
+                        botState.lastTradeTime = Date.now() + 60000; // 1 min de penalizacion total
                     } else if (botState.isRecoveryEnabled) {
-                        // [v18.10] Logica GAIN-SHIELD: Solo rescatar si estamos abajo
                         if (netDaily <= 0) {
                             botState.recoveryActive = true;
                             botState.lastTradeTime = Date.now() + 15000;
-                            console.log(`🛡️ RESCATE ACTIVADO: Saldo diario negativo ($${netDaily.toFixed(2)}). Lanzando x11 en 15s.`);
+                            console.log(`🛡️ RESCATE x11 ACTIVADO: Saldo -$${Math.abs(netDaily).toFixed(2)}. Preparando Heavy-Ghost (4 confir)...`);
                         } else {
+                            console.log(`🛡️ ESCUDO DE GANANCIA: PnL +$${netDaily.toFixed(2)}. Sin rescate.`);
                             botState.recoveryActive = false;
-                            console.log(`🛡️ ESCUDO DE GANANCIA: Saldo positivo (+$${netDaily.toFixed(2)}). Tomando pérdida de $${lossVal} y siguiendo en base.`);
-                            botState.lastTradeTime = Date.now() + 10000; // Un poco de aire tras perdida
+                            botState.lastTradeTime = Date.now() + 10000;
                         }
                     }
                 }
@@ -309,41 +307,39 @@ function connectDeriv() {
                 botState.pnlSession = botState.dailyProfit - botState.dailyLoss;
                 botState.totalTradesSession++;
                 botState.activeContractId = null;
+                botState.ghostStreak = 0; 
                 saveState();
-                console.log(`💰 RESULTADO: ${profit > 0 ? 'WIN' : 'LOSS'} ($${profit.toFixed(2)}) | PnL Hoy: $${botState.pnlSession.toFixed(2)}`);
+                console.log(`💰 RESULTADO FINAL: ${profit > 0 ? 'WIN' : 'LOSS'} ($${profit.toFixed(2)}) | PnL: $${botState.pnlSession.toFixed(2)}`);
             }
         }
     });
 
     ws.on('close', (code) => {
-        const wait = 5000;
         console.log(`🔌 Conexión cerrada (${code}). Reconectando...`);
         botState.isConnectedToDeriv = false;
         botState.isBuying = false;
-        if (!reconnectTimeout) reconnectTimeout = setTimeout(connectDeriv, wait);
+        if (!reconnectTimeout) reconnectTimeout = setTimeout(connectDeriv, 5000);
     });
 }
 
 function executeFlashMirrorFire() {
     if (!ws || ws.readyState !== WebSocket.OPEN || !botState.pendingSignal || botState.isBuying || botState.activeContractId) return;
-    
-    // [v18.11] FILTRO GHOST: Solo disparamos si tenemos 2 victorias virtuales de seguridad
-    if (botState.ghostStreak < 2) return;
-
     const now = Date.now();
     if (now - botState.lastTradeTime < 1000) return;
     
+    // [v18.12] REGLA DE GHOST DIFERENCIADA
+    const requiredGhost = botState.recoveryActive ? 4 : 2;
+    if (botState.ghostStreak < requiredGhost) return;
+
     const barrier = botState.nextBarrier || chooseBestBarrier();
     botState.isBuying = true;
 
-    if (botState.recoveryActive && botState.currentPing > 150) {
-        console.log(`⚠️ LATENCIA ALTA (${botState.currentPing}ms): Pospiniendo rescate...`);
-        botState.isBuying = false;
-        return;
-    }
+    if (botState.currentPing > 150) { botState.isBuying = false; return; }
 
     let finalStake = botState.stake;
     if (botState.recoveryActive) finalStake = botState.stake * 11;
+
+    console.log(`🚀 DISPARO REAL v18.12 | Stake: $${finalStake.toFixed(2)} | NO-${barrier} | Conf: ${botState.ghostStreak}`);
 
     ws.send(JSON.stringify({
         buy: 1, price: finalStake,
@@ -353,25 +349,22 @@ function executeFlashMirrorFire() {
         }
     }));
     botState.pendingSignal = null;
-    botState.ghostStreak = 0; // Reset streak after real buy
 }
 
 setInterval(() => {
     if (!botState.isRunning || !ws || ws.readyState !== WebSocket.OPEN) return;
     const now = Date.now();
     if (now % 10000 < 50) { botState.lastPingSentAt = now; ws.send(JSON.stringify({ ping: 1 })); }
-
     const timeSinceLast = now - botState.lastTickReceivedAt;
     const nextExpected = botState.avgTickInterval;
     const dynamicLead = Math.min(400, botState.currentPing + 25);
-    
     if (botState.currentPing > 300) return;
     if (timeSinceLast >= (nextExpected - dynamicLead)) { executeFlashMirrorFire(); }
 }, 50);
 
 const PORT = process.env.PORT || 8080;
 app.listen(PORT, '0.0.0.0', () => {
-    console.log(`🚀 v18.11 ONLINE EN PUERTO ${PORT}`);
+    console.log(`🚀 v18.12 ONLINE EN PUERTO ${PORT}`);
     connectDeriv();
 });
 
