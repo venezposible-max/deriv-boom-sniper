@@ -390,7 +390,7 @@ function connectDeriv() {
 
     ws.on('open', () => {
         const isReal = botState.isRealAccount;
-        const waitTime = isReal ? 100 : 1000; // Real: Rápido | Demo: 1s (Era 5s, bajado para evitar timeout)
+        const waitTime = isReal ? 500 : 2000; // [SAFE-MODE] 2s para Demo evita WrongResponse
         
         console.log(`🔌 Conexión abierta. Autenticando en ${waitTime/1000}s...`);
 
@@ -415,6 +415,22 @@ function connectDeriv() {
         // Silenciar y responder a ping de Deriv
         if (msg.ping || msg.msg_type === 'ping') {
             ws.send(JSON.stringify({ ping: 1 }));
+            return;
+        }
+
+        // Auth Error -> Manejo inteligente
+        if (msg.msg_type === 'authorize' && msg.error) {
+            console.error(`❌ ERROR DE TOKEN: ${msg.error.message} (${msg.error.code})`);
+            
+            if (msg.error.code === 'WrongResponse' || msg.error.code === 'RateLimit') {
+                console.log(`🔄 Re-intentando conexión en 3s por error temporal de Deriv...`);
+                if (ws) {
+                    ws.terminate(); // Esto gatilla automáticamente el reconectar del .on('close')
+                    ws = null;
+                }
+            } else {
+                botState.isConnectedToDeriv = false;
+            }
             return;
         }
 
