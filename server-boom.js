@@ -720,26 +720,6 @@ function connectDeriv() {
                             
                             botState.currentContractType = 'BINARY_STRIKE';
                             botState.currentBarrier = '0-9';
-                        } else if (contractType === 'ANTIGRAVITY_COMBO') {
-                            // --- ESCUDO ANTIGRAVEDAD v16.4 (STRADDLE) ---
-                            // Sólo dispara el motor principal (Differs). 
-                            // El Straddle (doble escudo) se activará SÓLO como rescate si este Differs pierde.
-                            botState.isBuying = true; // LOCK ANTES DE ENVIAR
-                            
-                            ws.send(JSON.stringify({
-                                buy: 1, price: 10.00,
-                                parameters: {
-                                    amount: 10.00, basis: 'stake',
-                                    contract_type: 'DIGITDIFF', currency: botState.currency || 'USD',
-                                    symbol: SYMBOL, duration: 1, duration_unit: 't', barrier: targetBarrier
-                                }
-                            }));
-
-                            console.log(`\n🛡️ ANTIGRAVEDAD v16.4: LANZANDO DIFFERS [${botState.currentImpulse}]`);
-                            console.log(`⚡ FILTRO VOLATIL: RSI(${botState.lastRSI.toFixed(2)}) | EMA(${botState.lastEMA.toFixed(2)})`);
-                            console.log(`🎯 MOTOR: Differs($10 ${SYMBOL}). (Escudo en Standby)`);
-                            
-                            botState.currentContractType = 'ANTIGRAVITY_COMBO';
                         }
 
 
@@ -994,7 +974,7 @@ function tryFireTrade() {
 
 // ─── DISPARAR ESCUDO DIRECCIONAL (RESCATE) ─────────────────────────
 function fireStraddleRescue() {
-    if (!ws) return;
+    if (!botState.isRunning || !ws || ws.readyState !== WebSocket.OPEN) return;
     
     // --- FILTRO DE VOLATILIDAD 5-TICKS (ANTI-SIERRA) ---
     // Analizamos los últimos 5 precios. Queremos ver un rally continuado, no un serrucho.
@@ -1188,6 +1168,7 @@ setInterval(() => {
 
 // ─── FLASH-MIRROR PULSE WORKER (v16.9 "GLORIA") ─────────────────
 function executeFlashMirrorFire() {
+    if (!ws || ws.readyState !== WebSocket.OPEN) return;
     if (!botState.pendingSignal || !botState.isRunning || botState.isBuying || botState.activeContractId) return;
     const isStraddleActive = botState.straddleUpId || botState.straddleDownId;
     if (isStraddleActive) return;
