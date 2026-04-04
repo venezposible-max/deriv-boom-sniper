@@ -38,6 +38,7 @@ let botState = {
     tradeHistory: [],
     currentContractId: null,
     lastTickPrice: 0,
+    priceHistory: [], // [v16.3] Historial de precios para anti-sierra
     lastDigit: null,
     digitHistory: [],         // Historial de últimos 50 dígitos vistos
     digitFrequency: {},        // Frecuencia de aparición de cada dígito
@@ -420,7 +421,9 @@ function connectDeriv() {
             botState.lastDigit = tickDigit;
             botState.lastTickPrice = tickPrice;
             botState.digitHistory.push(tickDigit);
+            botState.priceHistory.push(tickPrice);
             if (botState.digitHistory.length > 50) botState.digitHistory.shift();
+            if (botState.priceHistory.length > 5) botState.priceHistory.shift();
 
             // [FRANKLIN v16.0] CALCULADORA ANTIGRAVEDAD (RSI-5 + EMA-5)
             // ═══ EMA-5 CALCULATION (FIXED) ═══
@@ -820,6 +823,32 @@ function tryFireTrade() {
 // ─── DISPARAR STRADDLE (RESCATE) ─────────────────────────
 function fireStraddleRescue() {
     if (!ws) return;
+    
+    // --- FILTRO DE VOLATILIDAD 5-TICKS (ANTI-SIERRA) ---
+    // Analizamos los últimos 5 precios. Queremos ver un rally continuado, no un serrucho.
+    const prices = botState.priceHistory;
+    if (prices.length >= 5) {
+        let directionChanges = 0;
+        let lastDirection = null; // 'UP' o 'DOWN'
+        
+        for (let i = 1; i < prices.length; i++) {
+            const diff = prices[i] - prices[i-1];
+            if (diff === 0) continue;
+            const currentDir = diff > 0 ? 'UP' : 'DOWN';
+            if (lastDirection !== null && currentDir !== lastDirection) {
+                directionChanges++;
+            }
+            lastDirection = currentDir;
+        }
+
+        // Si el precio cambió de dirección 2 o más veces en 5 ticks, es un mercado picado (sierra)
+        if (directionChanges >= 2) {
+            console.log(`\n🚨 ¡DIFFERS FALLÓ! MERCADO PICADO DETECTADO (${directionChanges} rebotes en 5 ticks).`);
+            console.log(`🛡️ ABORTANDO RESCATE STRADDLE PARA EVITAR DOBLE PÉRDIDA EN CONSOLIDACIÓN.`);
+            return; // Nos comemos la pérdida del Differs, pero salvamos $20 de dobles escudos
+        }
+    }
+
     botState.straddleOpenTime = Date.now();
     botState.straddleUpProfit = 0;
     botState.straddleDownProfit = 0;
@@ -828,7 +857,7 @@ function fireStraddleRescue() {
     const MULTI_SYMBOL_MAP = { 'R_10': '1HZ10V', 'R_25': '1HZ25V', 'R_50': '1HZ50V', 'R_100': '1HZ100V' };
     const multiSymbol = MULTI_SYMBOL_MAP[SYMBOL] || '1HZ100V';
 
-    console.log(`\n🚨 ¡DIFFERS FALLÓ! LANZANDO STRADDLE MULTIDIRECCIONAL (Doble Escudo en ${multiSymbol})`);
+    console.log(`\n🚨 ¡DIFFERS FALLÓ EN TENDENCIA LIMPIA! LANZANDO STRADDLE MULTIDIRECCIONAL (Doble Escudo en ${multiSymbol})`);
 
     // Disparar UP
     ws.send(JSON.stringify({
