@@ -833,7 +833,7 @@ function tryFireTrade() {
     ws.send(JSON.stringify(req));
 }
 
-// ─── DISPARAR STRADDLE (RESCATE) ─────────────────────────
+// ─── DISPARAR ESCUDO DIRECCIONAL (RESCATE) ─────────────────────────
 function fireStraddleRescue() {
     if (!ws) return;
     
@@ -857,8 +857,8 @@ function fireStraddleRescue() {
         // Si el precio cambió de dirección 2 o más veces en 5 ticks, es un mercado picado (sierra)
         if (directionChanges >= 2) {
             console.log(`\n🚨 ¡DIFFERS FALLÓ! MERCADO PICADO DETECTADO (${directionChanges} rebotes en 5 ticks).`);
-            console.log(`🛡️ ABORTANDO RESCATE STRADDLE PARA EVITAR DOBLE PÉRDIDA EN CONSOLIDACIÓN.`);
-            return; // Nos comemos la pérdida del Differs, pero salvamos $20 de dobles escudos
+            console.log(`🛡️ ABORTANDO RESCATE DIRECCIONAL PARA EVITAR DOBLE PÉRDIDA EN CONSOLIDACIÓN.`);
+            return; // Nos comemos la pérdida del Differs, pero salvamos el seguro.
         }
     }
 
@@ -870,24 +870,17 @@ function fireStraddleRescue() {
     const MULTI_SYMBOL_MAP = { 'R_10': '1HZ10V', 'R_25': '1HZ25V', 'R_50': '1HZ50V', 'R_100': '1HZ100V' };
     const multiSymbol = MULTI_SYMBOL_MAP[SYMBOL] || '1HZ100V';
 
-    console.log(`\n🚨 ¡DIFFERS FALLÓ EN TENDENCIA LIMPIA! LANZANDO STRADDLE MULTIDIRECCIONAL (Doble Escudo en ${multiSymbol})`);
+    const impulse = botState.currentImpulse; // 'UP' o 'DOWN'
+    const multiContractType = impulse === 'UP' ? 'MULTUP' : 'MULTDOWN';
 
-    // Disparar UP
+    console.log(`\n🚨 ¡DIFFERS FALLÓ EN TENDENCIA LIMPIA! LANZANDO RESCATE DIRECCIONAL A FAVOR DE TENDENCIA (${multiContractType} en ${multiSymbol})`);
+
+    // Disparar ÚNICA PIERNA (MULTUP o MULTDOWN) hacia donde dicta el impulso
     ws.send(JSON.stringify({
         buy: 1, price: 15.00,
         parameters: {
             amount: 10.00, basis: 'stake',
-            contract_type: 'MULTUP', currency: botState.currency || 'USD',
-            symbol: multiSymbol, multiplier: 100, cancellation: '5m'
-        }
-    }));
-
-    // Disparar DOWN
-    ws.send(JSON.stringify({
-        buy: 1, price: 15.00,
-        parameters: {
-            amount: 10.00, basis: 'stake',
-            contract_type: 'MULTDOWN', currency: botState.currency || 'USD',
+            contract_type: multiContractType, currency: botState.currency || 'USD',
             symbol: multiSymbol, multiplier: 100, cancellation: '5m'
         }
     }));
