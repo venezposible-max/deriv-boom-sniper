@@ -384,7 +384,7 @@ function executeFlashMirrorFire() {
 
         ws.send(JSON.stringify({
             buy: 1, price: botState.stake,
-            parameters: { amount: botState.stake, basis: 'stake', contract_type: 'DIGITDIFF', currency: curr, symbol: SYMBOL, duration: 1, duration_unit: 't', barrier: `+${barrier}` }
+            parameters: { amount: botState.stake, basis: 'stake', contract_type: 'DIGITDIFF', currency: curr, symbol: SYMBOL, duration: 1, duration_unit: 't', barrier: barrier }
         }));
         botState.pendingSignal = null;
     }
