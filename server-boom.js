@@ -197,6 +197,9 @@ function connectDeriv() {
             console.log(`📡 [TICK R_100] Digit: ${tickDigit} | Streak: ${botState.ghostStreak} | Next Prediction: ${botState.nextBarrier}`);
 
             botState.nextBarrier = chooseBestBarrier();
+            if (botState.lastDigit !== null) { 
+                botState.digitTransitions[`${botState.lastDigit}->${tickDigit}`] = (botState.digitTransitions[`${botState.lastDigit}->${tickDigit}`] || 0) + 1; 
+            }
             botState.lastDigit = tickDigit;
             botState.digitHistory.push(tickDigit);
             if (botState.digitHistory.length > 100) botState.digitHistory.shift();
@@ -209,7 +212,7 @@ function connectDeriv() {
             botState.digitHistory.forEach(d => freq[d] = (freq[d] || 0) + 1);
             botState.digitFrequency = freq;
 
-            // [FRANKLIN DIRECT-FIRE] No esperamos interval, disparamos apenas se cumple la condición
+            // [FRANKLIN DIRECT-FIRE] Disparo inmediato apenas llega el dato
             if (botState.isRunning && !botState.isBuying && !botState.activeContractId && !botState.secondaryContractId) {
                 botState.pendingSignal = { type: 'RABBIT' };
                 executeFlashMirrorFire();
@@ -222,8 +225,7 @@ function connectDeriv() {
         if (msg.msg_type === 'buy') {
             if (msg.buy) {
                 console.log(`🛒 [ORDER SENT] Contract ID: ${msg.buy.contract_id}`);
-                const cType = msg.echo_req.parameters.contract_type;
-                if (cType === 'DIGITDIFF') {
+                if (msg.echo_req.parameters.contract_type === 'DIGITDIFF') {
                     botState.activeContractId = msg.buy.contract_id;
                 } else {
                     botState.secondaryContractId = msg.buy.contract_id;
@@ -239,21 +241,19 @@ function connectDeriv() {
 
         if (msg.msg_type === 'proposal_open_contract' && msg.proposal_open_contract) {
             const c = msg.proposal_open_contract;
-            const ids = [botState.activeContractId, botState.secondaryContractId];
-            
             if (c.status === 'won' || c.status === 'lost') {
                 const profit = parseFloat(c.profit);
                 const isDiffer = c.contract_type === 'DIGITDIFF';
 
                 let displayBarrier = '';
                 if (isDiffer) {
-                    displayBarrier = `NO-${c.barrier}`;
+                    displayBarrier = `🎯 NO [${c.barrier}]`;
                 } else {
-                    displayBarrier = c.contract_type === 'DIGITUNDER' ? '0-8' : '1-9';
+                    displayBarrier = c.contract_type === 'DIGITUNDER' ? '🐇 ESQUIVO [9]' : '🐇 ESQUIVO [0]';
                 }
 
                 botState.tradeHistory.unshift({
-                    type: isDiffer ? 'DIFFERS' : `RESCUE [${c.contract_type === 'DIGITUNDER' ? 'U9' : 'O0'}]`, 
+                    type: isDiffer ? 'DIFFERS' : 'SMART-RECOVERY', 
                     profit: parseFloat(profit.toFixed(2)), 
                     time: new Date().toLocaleTimeString(),
                     barrier: displayBarrier,
@@ -266,14 +266,12 @@ function connectDeriv() {
                         botState.winsSession++;
                         botState.dailyProfit += profit;
                         botState.recoveryActive = false;
-                        botState.waitingForRecovery = false;
                     } else {
                         botState.lossesSession++;
                         botState.dailyLoss += Math.abs(profit);
                         if (botState.isRecoveryEnabled) {
                             botState.recoveryActive = true;
-                            botState.waitingForRecovery = false;
-                            botState.lastTradeTime = Date.now() + 10000;
+                            botState.lastTradeTime = Date.now() + 5000;
                             console.log(`🐇 [RECOVERY] SMART-RABBIT ACTIVADO...`);
                         }
                     }
@@ -282,11 +280,11 @@ function connectDeriv() {
                 } else {
                     if (profit > 0) {
                         botState.dailyProfit += profit;
-                        console.log(`✅ ¡RESCATE EXITOSO! Escudo ${displayBarrier} funcionó.`);
+                        console.log(`✅ ¡RESCATE EXITOSO! Evitamos el dígito prohibido.`);
                         botState.recoveryActive = false;
                     } else {
                         botState.dailyLoss += Math.abs(profit);
-                        console.log(`❌ RESCATE FALLIDO. Perforamos el Escudo ${displayBarrier}.`);
+                        console.log(`❌ RESCATE FALLIDO. El dígito prohibido apareció.`);
                     }
                     botState.secondaryContractId = null;
                     botState.waitingForRecovery = false; 
@@ -313,23 +311,20 @@ function executeFlashMirrorFire() {
 
     if (isRecovery) {
         botState.waitingForRecovery = true; 
-        process.nextTick(() => { 
-            const hole = getOptimalRabbitHole();
-            const rabbitStake = 10.00; 
-            console.log(`🐇 [FIRE RECOVERY] Lanzando ${hole.label} | Stake: $${rabbitStake}`);
-            
-            ws.send(JSON.stringify({
-                buy: 1, price: rabbitStake,
-                parameters: { amount: rabbitStake, basis: 'stake', contract_type: hole.type, currency: 'USD', symbol: SYMBOL, duration: 1, duration_unit: 't', barrier: hole.barrier }
-            }));
-            
-            botState.pendingSignal = null;
-            botState.lastTradeTime = Date.now();
-            botState.ghostStreak = 0;
-        });
+        const hole = getOptimalRabbitHole();
+        const rabbitStake = 10.00; 
+        console.log(`🐇 [FIRE RECOVERY] Evitando el dídito: ${hole.barrier} | Stake: $${rabbitStake}`);
+        
+        ws.send(JSON.stringify({
+            buy: 1, price: rabbitStake,
+            parameters: { amount: rabbitStake, basis: 'stake', contract_type: hole.type, currency: 'USD', symbol: SYMBOL, duration: 1, duration_unit: 't', barrier: hole.barrier }
+        }));
+        botState.pendingSignal = null;
+        botState.lastTradeTime = Date.now();
+        botState.ghostStreak = 0;
     } else {
         const barrier = botState.nextBarrier || chooseBestBarrier();
-        console.log(`🎯 [FIRE NORMAL] Comprando Differ NO-${barrier} | Stake: $${botState.stake}`);
+        console.log(`🎯 [FIRE NORMAL] Comprando Differ NO [${barrier}] | Stake: $${botState.stake}`);
         ws.send(JSON.stringify({
             buy: 1, price: botState.stake,
             parameters: { amount: botState.stake, basis: 'stake', contract_type: 'DIGITDIFF', currency: 'USD', symbol: SYMBOL, duration: 1, duration_unit: 't', barrier: barrier }
@@ -338,26 +333,6 @@ function executeFlashMirrorFire() {
         botState.lastTradeTime = Date.now();
     }
 }
-
-setInterval(() => {
-    if (!botState.isRunning || !ws || ws.readyState !== WebSocket.OPEN) return;
-    const now = Date.now();
-    const dynamicLead = Math.min(400, botState.currentPing + 25);
-    
-    // [DEBUG LOG CRÍTICO] Ver si el loop de disparo intenta ejecutarse
-    if (now % 2000 < 50) {
-        // Log cada 2 segundos para no saturar
-        // console.log(`⏳ [SYNC CHECK] Ticks recibidos: ${botState.digitHistory.length} | Comprando: ${botState.isBuying} | Señal: ${!!botState.pendingSignal}`);
-    }
-
-    if (now - botState.lastTickReceivedAt < 3000 && (now - botState.lastTickReceivedAt) >= (botState.avgTickInterval - dynamicLead)) {
-        if (botState.recoveryActive) {
-            setImmediate(executeFlashMirrorFire);
-        } else {
-            executeFlashMirrorFire();
-        }
-    }
-}, 50);
 
 const PORT = process.env.PORT || 8080;
 app.listen(PORT, '0.0.0.0', () => { console.log(`🚀 v20.10 ONLINE [SMART-RABBIT]`); connectDeriv(); });
