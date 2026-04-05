@@ -75,40 +75,55 @@ const FIBO_SECUENCE = [1, 2, 3, 5, 8, 13, 21];
 
 function chooseBestBarrier() {
     const hist = botState.digitHistory;
-    // Si no tenemos suficientes datos, rotar entre números seguros para no quedarse pegado
-    if (hist.length < 25) {
-        const fallbacks = ['5', '8', '2', '4', '7'];
-        return fallbacks[hist.length % fallbacks.length];
+    
+    // Con pocos datos, elegir el dígito MENOS visto en lo que tenemos
+    if (hist.length < 10) {
+        // Rotación inteligente basada en totalTrades para no repetir
+        const rotation = ['3', '7', '1', '8', '4', '6', '2', '9', '0', '5'];
+        const idx = (botState.winsSession + botState.lossesSession) % rotation.length;
+        const pick = rotation[idx];
+        console.log(`🎯 [BARRIER] Rotación inicial: NO-${pick} (trade #${idx})`);
+        botState.currentBarrier = pick;
+        return pick;
     }
     
+    // ─── ANÁLISIS DE FRECUENCIA (últimos 40 ticks) ───
     let digitScores = Array(10).fill(0);
+    const window = Math.min(hist.length, 40);
+    const recentHist = hist.slice(-window);
     const freqLast = {};
-    hist.slice(-40).forEach(d => freqLast[d] = (freqLast[d] || 0) + 1);
+    recentHist.forEach(d => freqLast[d] = (freqLast[d] || 0) + 1);
+    
+    // MÁS frecuente = MÁS probable que salga = MEJOR para Differs (queremos que NO salga)
+    // Buscamos el dígito MÁS frecuente para apostar DIFFERS contra él
     for (let d = 0; d <= 9; d++) digitScores[d] += (freqLast[d] || 0) * 10;
     
-    // Transiciones: Castigamos dígitos que suelen seguir al actual
+    // ─── TRANSICIONES: Qué dígito suele SEGUIR al actual ───
     const lastD = hist[hist.length - 1];
     for (let d = 0; d <= 9; d++) {
         const t = botState.digitTransitions[`${lastD}->${d}`] || 0;
-        digitScores[d] += t * 15; // Más peso a la transición
+        digitScores[d] += t * 15;
     }
 
-    // Fibo
+    // ─── FIBONACCI: Patrones de repetición ───
     FIBO_SECUENCE.forEach((steps) => {
         const index = hist.length - 1 - steps;
         if (index >= 0) digitScores[hist[index]] += 30;
     });
 
+    // ─── SELECCIÓN: Elegimos el dígito con MENOR score (menos probable) ───
+    // Para DIFFERS queremos apostar que NO saldrá → elegimos el MENOS frecuente
     let bestDigit = '5';
     let minScore = 99999;
     for (let d = 0; d <= 9; d++) {
-        // Añadimos un pequeño factor aleatorio si los puntajes son iguales para evitar estancamiento
-        const noise = Math.random() * 2; 
+        const noise = Math.random() * 3; // Ruido para romper empates
         if ((digitScores[d] + noise) < minScore) { 
             minScore = digitScores[d] + noise; 
             bestDigit = String(d); 
         }
     }
+    
+    console.log(`🎯 [BARRIER] Análisis: NO-${bestDigit} | Scores: [${digitScores.map((s,i) => `${i}:${s}`).join(', ')}]`);
     botState.currentBarrier = bestDigit;
     return bestDigit;
 }
@@ -269,15 +284,18 @@ function connectDeriv() {
             
             console.log(`📡 [TICK ${SYMBOL}] Digit: ${tickDigit} | Streak: ${botState.ghostStreak} | 📊 Goal: $${netProfit.toFixed(2)} / $${botState.takeProfit} (${progressRatio}%) ${statusLabel}`);
 
-            if (botState.nextBarrier !== null) {
-                if (Number(tickDigit) !== Number(botState.nextBarrier)) {
-                    botState.ghostStreak++;
-                } else {
-                    botState.ghostStreak = 0;
-                    console.log(`🎯 [STREAK RESET] Predicción cumplida con el dígito: ${tickDigit}`);
-                }
-            } else {
+            // Recalcular barrera si no existe
+            if (botState.nextBarrier === null) {
                 botState.nextBarrier = chooseBestBarrier();
+            }
+            
+            if (Number(tickDigit) !== Number(botState.nextBarrier)) {
+                botState.ghostStreak++;
+            } else {
+                botState.ghostStreak = 0;
+                // [ADAPTATIVO] Cuando la predicción se cumple, recalcular barrera
+                botState.nextBarrier = chooseBestBarrier();
+                console.log(`🎯 [STREAK RESET] Dígito ${tickDigit} coincidió → Nueva barrera: NO-${botState.nextBarrier}`);
             }
             if (botState.lastDigit !== null) { 
                 botState.digitTransitions[`${botState.lastDigit}->${tickDigit}`] = (botState.digitTransitions[`${botState.lastDigit}->${tickDigit}`] || 0) + 1; 
@@ -357,6 +375,10 @@ function connectDeriv() {
                 botState.secondaryContractId = null;
                 botState.ghostStreak = 0;
                 botState.isBuying = false;
+                
+                // [ADAPTATIVO] Recalcular barrera después de cada trade
+                botState.nextBarrier = chooseBestBarrier();
+                console.log(`🔄 [POST-TRADE] Nueva barrera calculada: NO-${botState.nextBarrier}`);
                 
                 // [FRANKLIN REAL-TIME GUARDIAN] Verificación inmediata al cerrar contrato
                 const netProfit = botState.dailyProfit - botState.dailyLoss;
