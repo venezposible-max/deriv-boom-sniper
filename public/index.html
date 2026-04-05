@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>🐇 SMART-RABBIT v20.10 - Pata de Conejo Inteligente</title>
+    <title>🐇 La Pata del Conejo - Deriv Sniper Engine</title>
     <link rel="manifest" href="/manifest.json">
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;700;900&display=swap');
@@ -27,7 +27,9 @@
         .header h1 {
             font-size: 26px; font-weight: 900; margin: 0;
             background: linear-gradient(135deg, #34d399, #059669);
-            -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+            -webkit-background-clip: text;
+            background-clip: text;
+            -webkit-text-fill-color: transparent;
             text-shadow: none;
             filter: drop-shadow(0 0 18px rgba(52,211,153,0.5));
         }
@@ -252,15 +254,10 @@
 <body>
 <div class="container">
 
-    <!-- HEADER -->
-    <div class="header">
-        <h1>🐇 SNIPER v20.10</h1>
-        <p id="subTitle">SMART-RABBIT · R_100 ACTIVE</p>
-    </div>
-
     <div class="header" id="mainHeader">
-        <h1>DIFFERS SNIPER</h1>
-        <p>Expert Analysis Engine</p>
+        <h1>🐾 La Pata del Conejo</h1>
+        <p id="subTitle">SMART-RABBIT · R_100 ACTIVE</p>
+        <div id="sessionTimer" style="font-size: 13px; color: #a78bfa; font-weight: 700; margin-top: 8px; letter-spacing: 2px;">--:--:--</div>
     </div>
 
     <!-- ACCOUNT TOGGLE -->
@@ -429,7 +426,7 @@
         </div>
 
         <button id="btnToggle" class="btn-main btn-start" onclick="toggleBot()">
-             🎲 Iniciar Differs Sniper
+             🎲 Iniciar La Pata del Conejo
         </button>
     </div>
 
@@ -671,8 +668,8 @@
 
             // Toggle button
             const btn = document.getElementById('btnToggle');
-            const startText = currentStrategy === 'DIFFERS' ? '🎲 Iniciar Differs Sniper' : '🔥 Iniciar Over/Under Sniper';
-            btn.innerText = isRunning ? '⏸️ Detener Sniper' : startText;
+            const startText = currentStrategy === 'DIFFERS' ? '🎲 Activar La Pata del Conejo' : '🔥 Activar La Pata del Conejo';
+            btn.innerText = isRunning ? '⏸️ Soltar La Pata del Conejo' : startText;
             btn.className = `btn-main ${isRunning ? 'btn-stop' : 'btn-start'}`;
 
             // History

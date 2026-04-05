@@ -136,7 +136,12 @@ app.use(cors({ origin: '*' }));
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
 
-app.get('/differs/status', (req, res) => res.json({ success: true, data: botState }));
+app.get('/differs/status', (req, res) => {
+    const total = botState.winsSession + botState.lossesSession;
+    const winRate = total > 0 ? ((botState.winsSession / total) * 100).toFixed(1) : '0.0';
+    const pnlSession = botState.dailyProfit - botState.dailyLoss;
+    res.json({ success: true, data: { ...botState, winRate, pnlSession, totalTradesSession: total, symbol: SYMBOL } });
+});
 
 app.post('/api/config', (req, res) => {
     const { stake, takeProfit, maxDailyLoss } = req.body;
@@ -172,14 +177,23 @@ app.post('/differs/control', (req, res) => {
         console.log(`⏸️ SNIPER DETENIDO POR USUARIO`);
         saveState();
         res.json({ success: true, action: 'STOPPED' });
-    } else if (action === 'RESET') {
+    } else if (action === 'RESET' || action === 'RESET_DAY') {
         botState.dailyProfit = 0;
         botState.dailyLoss = 0;
+        botState.winsSession = 0;
+        botState.lossesSession = 0;
+        botState.totalTradesSession = 0;
+        botState.pnlSession = 0;
+        botState.tradeHistory = [];
+        botState.ghostStreak = 0;
+        botState.digitHistory = [];
+        botState.digitFrequency = {};
+        botState.digitTransitions = {};
+        botState.recoveryActive = false;
+        botState.waitingForRecovery = false;
+        botState.startTime = null;
         botState.results = [];
-        botState.startTime = null; // [RELOJ] Reset completo
-        console.log(`🧹 ESTADÍSTICAS RESETEADAS`);
-        botState.tradeHistory = []; botState.ghostStreak = 0;
-        console.log(`🧹 ESTADÍSTICAS RESETEADAS`);
+        console.log(`🧹 [RESET COMPLETO] Estadísticas, historial, dígitos y recuperación LIMPIADOS`);
         saveState();
         res.json({ success: true });
     } else {
@@ -359,7 +373,20 @@ function connectDeriv() {
         }
     });
 
-    ws.on('close', () => { botState.isConnectedToDeriv = false; if (!reconnectTimeout) reconnectTimeout = setTimeout(connectDeriv, 5000); });
+    ws.on('error', (err) => {
+        console.log(`⚠️ [WS ERROR] ${err.message}`);
+    });
+
+    ws.on('close', () => {
+        botState.isConnectedToDeriv = false;
+        console.log('🔌 [WS CLOSED] Reconectando en 5s...');
+        if (!reconnectTimeout) {
+            reconnectTimeout = setTimeout(() => {
+                reconnectTimeout = null;
+                connectDeriv();
+            }, 5000);
+        }
+    });
 }
 
 function executeFlashMirrorFire() {
