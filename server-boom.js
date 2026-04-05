@@ -212,7 +212,9 @@ function connectDeriv() {
                 botState.nextBarrier = chooseBestBarrier();
             }
             
-            console.log(`📡 [TICK R_100] Digit: ${tickDigit} | Streak: ${botState.ghostStreak} | Next Prediction: ${botState.nextBarrier}`);
+            const netProfit = botState.dailyProfit - botState.dailyLoss;
+            const progress = botState.takeProfit > 0 ? ((netProfit / botState.takeProfit) * 100).toFixed(1) : 0;
+            console.log(`📡 [TICK R_100] Digit: ${tickDigit} | Streak: ${botState.ghostStreak} | 📊 Goal: $${netProfit.toFixed(2)} / $${botState.takeProfit} (${progress}%)`);
 
             botState.nextBarrier = chooseBestBarrier();
             if (botState.lastDigit !== null) { 
