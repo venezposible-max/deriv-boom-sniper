@@ -1,8 +1,8 @@
 /**
  * ============================================================
- *  DIFFERS SNIPER ENGINE v20.00 [THE RABBIT'S FOOT]
- *  Estrategia: DIFFERS ($1) + UNDER-9 RECOVERY ($10 Total)
- *  Símbolo: R_100 (Recuperación Real v20.00)
+ *  DIFFERS SNIPER ENGINE v20.10 [SMART-RABBIT]
+ *  Estrategia: DIFFERS ($1) + ADAPTIVE RABBIT RECOVERY ($10)
+ *  Símbolo: R_100 (Recuperación Inteligente v20.10)
  * ============================================================
  */
 
@@ -55,7 +55,6 @@ let botState = {
     tickIntervals: [],
     digitTransitions: {},
     currentPing: 50,
-    lastPingSentAt: 0,
     lastTickPrice: 0,
     pnlSession: 0,
     ghostStreak: 0,
@@ -99,6 +98,23 @@ function chooseBestBarrier() {
     return bestDigit;
 }
 
+// [v20.10] Analiza si es más seguro usar Under-9 (Excluye 9) o Over-0 (Excluye 0)
+function getOptimalRabbitHole() {
+    const hist = botState.digitHistory;
+    const lastSeen0 = hist.lastIndexOf(0) === -1 ? 999 : (hist.length - 1 - hist.lastIndexOf(0));
+    const lastSeen9 = hist.lastIndexOf(9) === -1 ? 999 : (hist.length - 1 - hist.lastIndexOf(9));
+    
+    const freq0 = hist.slice(-30).filter(d => d === 0).length;
+    const freq9 = hist.slice(-30).filter(d => d === 9).length;
+
+    // Priorizamos el que tenga MENOS frecuencia y MÁS tiempo sin salir (Dormancia)
+    if (lastSeen9 > lastSeen0 && freq9 <= freq0) {
+        return { type: 'DIGITUNDER', barrier: '9', label: 'UNDER-9 (0-8)' };
+    } else {
+        return { type: 'DIGITOVER', barrier: '0', label: 'OVER-0 (1-9)' };
+    }
+}
+
 // ─── SERVIDOR WEB ───
 const app = express();
 app.use(cors({ origin: '*' }));
@@ -112,7 +128,7 @@ app.post('/differs/control', (req, res) => {
     if (action === 'START') {
         if (stake) botState.stake = parseFloat(stake);
         botState.isRunning = true;
-        console.log(`▶️ SNIPER v20.00 INICIADO [THE RABBIT'S FOOT]`);
+        console.log(`▶️ SNIPER v20.10 INICIADO [SMART-RABBIT]`);
         return res.json({ success: true, isRunning: true });
     }
     if (action === 'STOP') { botState.isRunning = false; return res.json({ success: true, isRunning: false }); }
@@ -152,7 +168,7 @@ function connectDeriv() {
              ws.send(JSON.stringify({ subscribe: 1, ticks: SYMBOL }));
              ws.send(JSON.stringify({ balance: 1, subscribe: 1 }));
              ws.send(JSON.stringify({ ping: 1 }));
-             console.log(`🎯 SNIPER v20.00 ONLINE | Rabbit Hunter Activado...`);
+             console.log(`🎯 SNIPER v20.10 ONLINE | Smart-Rabbit Activado...`);
         }
 
         if (msg.msg_type === 'tick' && msg.tick) {
@@ -314,4 +330,4 @@ setInterval(() => {
 }, 50);
 
 const PORT = process.env.PORT || 8080;
-app.listen(PORT, '0.0.0.0', () => { console.log(`🚀 v19.00 ONLINE [DOUBLE-SNIPER HUNTER]`); connectDeriv(); });
+app.listen(PORT, '0.0.0.0', () => { console.log(`🚀 v20.10 ONLINE [SMART-RABBIT]`); connectDeriv(); });
