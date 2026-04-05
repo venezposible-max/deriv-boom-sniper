@@ -195,12 +195,12 @@ function connectDeriv() {
         }
 
         if (msg.msg_type === 'tick' && msg.tick) {
+            botState.lastTickPrice = msg.tick.quote;
+            // Sincronización de precisión para Vol 100: Forzamos 2 decimales para evitar el "cero fantasma"
+            const tickDigit = parseInt(parseFloat(botState.lastTickPrice).toFixed(2).slice(-1));
             const now = Date.now();
             botState.lastTickReceivedAt = now;
-            botState.lastTickPrice = msg.tick.quote;
-            const tickDigit = parseInt(String(msg.tick.quote).slice(-1));
             
-            // [SYNC] Actualizamos el Ghost Streak basado en la predicción previa
             if (botState.nextBarrier !== null) {
                 if (tickDigit !== parseInt(botState.nextBarrier)) {
                     botState.ghostStreak++;
@@ -259,8 +259,8 @@ function connectDeriv() {
             if (c.status === 'won' || c.status === 'lost') {
                 const profit = parseFloat(c.profit);
                 const isDiffer = c.contract_type === 'DIGITDIFF';
-                // Extracting EXACT digit from the DISPLAY string (e.g. "987.50" -> "0")
-                const exitDigit = c.exit_tick_display_value ? String(c.exit_tick_display_value).slice(-1) : '?';
+                // Extracting EXACT digit with 2-decimal precision for Vol 100
+                const exitDigit = c.exit_tick_display_value ? String(parseFloat(c.exit_tick_display_value).toFixed(2)).slice(-1) : '?';
 
                 let displayBarrier = '';
                 if (isDiffer) {
