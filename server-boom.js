@@ -138,6 +138,17 @@ app.use(express.static(path.join(__dirname, 'public')));
 
 app.get('/differs/status', (req, res) => res.json({ success: true, data: botState }));
 
+app.post('/api/config', (req, res) => {
+    const { stake, takeProfit, maxDailyLoss } = req.body;
+    if (stake) botState.stake = parseFloat(stake);
+    if (takeProfit) botState.takeProfit = parseFloat(takeProfit);
+    if (maxDailyLoss) botState.maxDailyLoss = parseFloat(maxDailyLoss);
+    
+    console.log(`⚙️ [CONFIG UPDATE] New Meta: $${botState.takeProfit} | New SL: $${botState.maxDailyLoss} | New Stake: $${botState.stake}`);
+    saveState();
+    res.json({ success: true, config: { stake: botState.stake, takeProfit: botState.takeProfit, maxDailyLoss: botState.maxDailyLoss } });
+});
+
 app.post('/differs/control', (req, res) => {
     const { action, stake } = req.body;
     if (action === 'START') {
@@ -195,13 +206,15 @@ function connectDeriv() {
         }
 
         if (msg.msg_type === 'tick' && msg.tick) {
+            // [STEALTH MODE] Solo procesamos ticks si el bot está encendido
+            if (!botState.isRunning) return; 
+
             botState.lastTickPrice = msg.tick.quote;
             const tickDigit = parseInt(parseFloat(botState.lastTickPrice).toFixed(2).slice(-1));
             const now = Date.now();
             botState.lastTickReceivedAt = now;
             
             if (botState.nextBarrier !== null) {
-                // [TYPE-SAFE RESET] Forzamos comparación numérica para evitar rachas infinitas
                 if (Number(tickDigit) !== Number(botState.nextBarrier)) {
                     botState.ghostStreak++;
                 } else {
