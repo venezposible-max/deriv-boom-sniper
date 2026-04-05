@@ -75,24 +75,39 @@ const FIBO_SECUENCE = [1, 2, 3, 5, 8, 13, 21];
 
 function chooseBestBarrier() {
     const hist = botState.digitHistory;
-    if (hist.length < 25) return '5';
+    // Si no tenemos suficientes datos, rotar entre números seguros para no quedarse pegado
+    if (hist.length < 25) {
+        const fallbacks = ['5', '8', '2', '4', '7'];
+        return fallbacks[hist.length % fallbacks.length];
+    }
+    
     let digitScores = Array(10).fill(0);
     const freqLast = {};
     hist.slice(-40).forEach(d => freqLast[d] = (freqLast[d] || 0) + 1);
     for (let d = 0; d <= 9; d++) digitScores[d] += (freqLast[d] || 0) * 10;
+    
+    // Transiciones: Castigamos dígitos que suelen seguir al actual
     const lastD = hist[hist.length - 1];
     for (let d = 0; d <= 9; d++) {
         const t = botState.digitTransitions[`${lastD}->${d}`] || 0;
-        digitScores[d] += t * 5;
+        digitScores[d] += t * 15; // Más peso a la transición
     }
+
+    // Fibo
     FIBO_SECUENCE.forEach((steps) => {
         const index = hist.length - 1 - steps;
-        if (index >= 0) digitScores[hist[index]] += 25;
+        if (index >= 0) digitScores[hist[index]] += 30;
     });
-    let bestDigit = '0';
+
+    let bestDigit = '5';
     let minScore = 99999;
     for (let d = 0; d <= 9; d++) {
-        if (digitScores[d] < minScore) { minScore = digitScores[d]; bestDigit = String(d); }
+        // Añadimos un pequeño factor aleatorio si los puntajes son iguales para evitar estancamiento
+        const noise = Math.random() * 2; 
+        if ((digitScores[d] + noise) < minScore) { 
+            minScore = digitScores[d] + noise; 
+            bestDigit = String(d); 
+        }
     }
     botState.currentBarrier = bestDigit;
     return bestDigit;
