@@ -195,7 +195,7 @@ function connectDeriv() {
     ws = new WebSocket(process.env.DERIV_WS_URL || `wss://ws.derivws.com/websockets/v3?app_id=${APP_ID}`);
 
     ws.on('open', () => {
-        console.log("🚀 v20.43 ONLINE [FIXED-BARRERA]");
+        console.log("🚀 v20.44 ONLINE [LIGHTNING-RECOVERY]");
         const token = process.env.DERIV_TOKEN_DEMO || process.env.DERIV_TOKEN_REAL || DERIV_TOKEN_DEMO;
         ws.send(JSON.stringify({ authorize: token }));
     });
@@ -342,18 +342,20 @@ function connectDeriv() {
 function executeFlashMirrorFire() {
     if (!ws || ws.readyState !== WebSocket.OPEN || !botState.pendingSignal) return;
     
-    const isRecovery = botState.recoveryActive;
+    const isRecovery = botState.isRecoveryEnabled && botState.recoveryActive;
     if (isRecovery && botState.waitingForRecovery) return;
 
-    const requiredGhost = isRecovery ? 8 : 2; // [MÁS AGRESIVO] Bajamos de 12 a 8 para disparar más rápido
+    const requiredGhost = isRecovery ? 0 : 2; // [LLAMARADA] Rescate inmediato (0 o 1)
     
-    if (botState.ghostStreak < requiredGhost) {
-        // [HEARTBEAT] Log cada 5 segundos para que el usuario sepa que acecha
-        if (Date.now() % 5000 < 100) {
-            console.log(`🔭 [STALKING] Esperando racha segura (${botState.ghostStreak}/${requiredGhost})...`);
-        }
-        return;
+    // [EMERGENCY UNLOCK] Si el bot se queda acechando más de 10 ticks sin disparar, desbloqueamos a la fuerza
+    if (botState.ghostStreak > 10 && (botState.activeContractId || botState.secondaryContractId || botState.isBuying)) {
+        console.log("🛠️ [REPARACIÓN] Forzando liberación de gatillo por racha larga...");
+        botState.activeContractId = null;
+        botState.secondaryContractId = null;
+        botState.isBuying = false;
     }
+
+    if (botState.ghostStreak < requiredGhost) return;
     
     botState.isBuying = true;
     botState.lastTradeTime = Date.now();
