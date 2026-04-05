@@ -159,6 +159,7 @@ app.post('/differs/toggle-recovery', (req, res) => {
 
 // ─── CONEXIÓN A DERIV ───
 let ws = null;
+let reconnectTimeout = null;
 
 function connectDeriv() {
     if (ws) ws.terminate();
@@ -174,11 +175,13 @@ function connectDeriv() {
 
         if (msg.msg_type === 'authorize') {
              botState.isConnectedToDeriv = true;
+             console.log(`✅ AUTH SUCCESS: ${msg.authorize.loginid}`);
              botState.activeContractId = null;
              botState.secondaryContractId = null;
              botState.isBuying = false;
              botState.waitingForRecovery = false;
-
+             botState.pendingSignal = null;
+             
              ws.send(JSON.stringify({ subscribe: 1, ticks: SYMBOL }));
              ws.send(JSON.stringify({ balance: 1, subscribe: 1 }));
              setInterval(() => { if (ws && ws.readyState === WebSocket.OPEN) { botState.lastPingSentAt = Date.now(); ws.send(JSON.stringify({ ping: 1 })); } }, 30000);
@@ -187,6 +190,8 @@ function connectDeriv() {
         if (msg.msg_type === 'tick' && msg.tick) {
             botState.lastTickPrice = msg.tick.quote;
             const tickDigit = parseInt(parseFloat(botState.lastTickPrice).toFixed(2).slice(-1));
+            const now = Date.now();
+            botState.lastTickReceivedAt = now;
             
             if (botState.nextBarrier !== null) {
                 if (tickDigit !== botState.nextBarrier) {
@@ -194,6 +199,8 @@ function connectDeriv() {
                 } else {
                     botState.ghostStreak = 0;
                 }
+            } else {
+                botState.nextBarrier = chooseBestBarrier();
             }
             
             console.log(`📡 [TICK R_100] Digit: ${tickDigit} | Streak: ${botState.ghostStreak} | Next Prediction: ${botState.nextBarrier}`);
@@ -206,9 +213,6 @@ function connectDeriv() {
             botState.digitHistory.push(tickDigit);
             if (botState.digitHistory.length > 100) botState.digitHistory.shift();
 
-            botState.lastEMA = botState.lastTickPrice; 
-            botState.lastRSI = (botState.ghostStreak * 10) % 100;
-
             const freq = {};
             botState.digitHistory.forEach(d => freq[d] = (freq[d] || 0) + 1);
             botState.digitFrequency = freq;
@@ -220,15 +224,21 @@ function connectDeriv() {
         }
 
         if (msg.msg_type === 'balance') botState.balance = msg.balance.balance;
+        if (msg.msg_type === 'ping') { botState.currentPing = Date.now() - botState.lastPingSentAt; }
 
         if (msg.msg_type === 'buy') {
             if (msg.buy) {
+                console.log(`🛒 [ORDER SENT] Contract ID: ${msg.buy.contract_id}`);
                 if (msg.echo_req.parameters.contract_type === 'DIGITDIFF') {
                     botState.activeContractId = msg.buy.contract_id;
                 } else {
                     botState.secondaryContractId = msg.buy.contract_id;
                 }
                 ws.send(JSON.stringify({ proposal_open_contract: 1, contract_id: msg.buy.contract_id, subscribe: 1 }));
+            } else if (msg.error) {
+                console.error(`❌ [BUY ERROR] ${msg.error.code}: ${msg.error.message}`);
+                botState.isBuying = false;
+                botState.pendingSignal = null;
             }
             botState.isBuying = false; 
         }
@@ -274,15 +284,28 @@ function connectDeriv() {
                     botState.waitingForRecovery = false; 
                 }
                 botState.ghostStreak = 0;
+                botState.isBuying = false;
                 saveState();
             }
         }
     });
+
+    ws.on('close', () => { botState.isConnectedToDeriv = false; if (!reconnectTimeout) reconnectTimeout = setTimeout(connectDeriv, 5000); });
 }
 
 function executeFlashMirrorFire() {
-    if (!ws || ws.readyState !== WebSocket.OPEN || !botState.pendingSignal || botState.isBuying || botState.activeContractId || botState.secondaryContractId) return;
+    if (!ws || ws.readyState !== WebSocket.OPEN || !botState.pendingSignal) return;
     
+    if (botState.isBuying && (Date.now() - botState.lastTradeTime > 15000)) {
+        console.warn(`🕒 [WATCHDOG] Limpiando gatillo trabado...`);
+        botState.isBuying = false;
+    }
+
+    if (botState.isBuying || botState.activeContractId || botState.secondaryContractId) {
+        if (Date.now() % 10000 < 50) console.log("⚠️ [LOCK] Esperando cierre de contrato o liberación de gatillo...");
+        return;
+    }
+
     const hasReachedTP = botState.takeProfit > 0 && botState.dailyProfit >= botState.takeProfit;
     const hasReachedSL = botState.maxDailyLoss > 0 && botState.dailyLoss >= botState.maxDailyLoss;
     if (hasReachedTP || hasReachedSL) {
@@ -297,6 +320,7 @@ function executeFlashMirrorFire() {
     if (botState.ghostStreak < requiredGhost) return;
     
     botState.isBuying = true;
+    botState.lastTradeTime = Date.now();
 
     if (isRecovery) {
         botState.waitingForRecovery = true; 
@@ -308,15 +332,8 @@ function executeFlashMirrorFire() {
         }));
         botState.pendingSignal = null;
     } else {
-        const barrier = botState.nextBarrier || chooseBestBarrier();
+        const barrier = botState.nextBarrier;
         
-        if (String(barrier) === String(botState.lastBarrierUsed)) {
-            botState.consecutiveBarrierCount++;
-        } else {
-            botState.lastBarrierUsed = String(barrier);
-            botState.consecutiveBarrierCount = 1;
-        }
-
         ws.send(JSON.stringify({
             buy: 1, price: botState.stake,
             parameters: { amount: botState.stake, basis: 'stake', contract_type: 'DIGITDIFF', currency: 'USD', symbol: SYMBOL, duration: 1, duration_unit: 't', barrier: barrier }
@@ -326,4 +343,4 @@ function executeFlashMirrorFire() {
 }
 
 const PORT = process.env.PORT || 8080;
-app.listen(PORT, '0.0.0.0', () => { console.log(`🚀 v20.26 ONLINE [SMART-RABBIT]`); connectDeriv(); });
+app.listen(PORT, '0.0.0.0', () => { console.log(`🚀 v20.27 ONLINE [SMART-RABBIT]`); connectDeriv(); });
