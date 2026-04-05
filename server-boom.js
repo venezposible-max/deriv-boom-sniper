@@ -111,19 +111,20 @@ function chooseBestBarrier() {
         if (index >= 0) digitScores[hist[index]] += 30;
     });
 
-    // ─── SELECCIÓN: Elegimos el dígito con MENOR score (menos probable) ───
-    // Para DIFFERS queremos apostar que NO saldrá → elegimos el MENOS frecuente
+    // ─── SELECCIÓN: Elegimos el dígito con MAYOR score (más frecuente/probable) ───
+    // Para DIFFERS: apostamos que NO saldrá este dígito
+    // Si un dígito sale mucho → alta probabilidad de repetir → pero 90% de que NO sea exactamente ÉL
     let bestDigit = '5';
-    let minScore = 99999;
+    let maxScore = -1;
     for (let d = 0; d <= 9; d++) {
         const noise = Math.random() * 3; // Ruido para romper empates
-        if ((digitScores[d] + noise) < minScore) { 
-            minScore = digitScores[d] + noise; 
+        if ((digitScores[d] + noise) > maxScore) { 
+            maxScore = digitScores[d] + noise; 
             bestDigit = String(d); 
         }
     }
     
-    console.log(`🎯 [BARRIER] Análisis: NO-${bestDigit} | Scores: [${digitScores.map((s,i) => `${i}:${s}`).join(', ')}]`);
+    console.log(`🎯 [BARRIER] Análisis: NO-${bestDigit} (más frecuente) | Scores: [${digitScores.map((s,i) => `${i}:${s}`).join(', ')}]`);
     botState.currentBarrier = bestDigit;
     return bestDigit;
 }
@@ -429,8 +430,8 @@ function executeFlashMirrorFire() {
 
     if (isRecovery && botState.waitingForRecovery) return;
 
-    // [MODO AMETRALLADORA] Racha 1 para todos (Rescate y Normal)
-    const requiredGhost = 1; 
+    // [MODO SELECTIVO] Racha 3 para normal, 1 para rescate (rescate necesita velocidad)
+    const requiredGhost = isRecovery ? 1 : 3; 
 
     if (botState.ghostStreak < requiredGhost) return;
     
