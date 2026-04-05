@@ -589,8 +589,17 @@
             // Sincronizar Reloj
             if (data.isRunning && data.startTime) {
                 sessionStartTime = data.startTime;
-            } else if (!data.isRunning) {
+                sessionFrozenTime = null; // Timer corriendo en vivo
+            } else if (!data.isRunning && data.startTime && sessionStartTime) {
+                // Bot se detuvo: congelar el tiempo que duró
+                if (!sessionFrozenTime) {
+                    const elapsed = Math.floor((Date.now() - sessionStartTime) / 1000);
+                    sessionFrozenTime = elapsed;
+                }
+            } else if (!data.startTime) {
+                // Reset total: sin startTime = limpiar todo
                 sessionStartTime = null;
+                sessionFrozenTime = null;
             }
 
             document.getElementById('dailyProfit').innerText = `+$${dp.toFixed(2)}`;
@@ -769,18 +778,36 @@
     let scanRangeTimeout = null;
 
     let sessionStartTime = null;
+    let sessionFrozenTime = null; // Tiempo congelado cuando el bot se detiene
 
     function updateTimer() {
-        if (!sessionStartTime) {
-            document.getElementById('sessionTimer').innerText = "--:--:--";
+        const timerEl = document.getElementById('sessionTimer');
+        
+        // Si hay un tiempo congelado, mostrar ese (bot detenido)
+        if (sessionFrozenTime !== null) {
+            const h = Math.floor(sessionFrozenTime / 3600).toString().padStart(2, '0');
+            const m = Math.floor((sessionFrozenTime % 3600) / 60).toString().padStart(2, '0');
+            const s = (sessionFrozenTime % 60).toString().padStart(2, '0');
+            timerEl.innerText = `⏱️ ${h}:${m}:${s}`;
+            timerEl.style.color = '#fbbf24'; // Dorado = congelado
             return;
         }
+        
+        // Sin sesión activa
+        if (!sessionStartTime) {
+            timerEl.innerText = "--:--:--";
+            timerEl.style.color = '#a78bfa';
+            return;
+        }
+        
+        // Timer corriendo en vivo
         const now = Date.now();
         const diff = Math.floor((now - sessionStartTime) / 1000);
         const h = Math.floor(diff / 3600).toString().padStart(2, '0');
         const m = Math.floor((diff % 3600) / 60).toString().padStart(2, '0');
         const s = (diff % 60).toString().padStart(2, '0');
-        document.getElementById('sessionTimer').innerText = `${h}:${m}:${s}`;
+        timerEl.innerText = `${h}:${m}:${s}`;
+        timerEl.style.color = '#34d399'; // Verde = corriendo
     }
 
     setInterval(updateTimer, 1000);
