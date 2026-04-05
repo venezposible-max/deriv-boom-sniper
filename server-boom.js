@@ -58,7 +58,8 @@ let botState = {
     lastTickPrice: 0,
     pnlSession: 0,
     ghostStreak: 0,
-    nextBarrier: null
+    nextBarrier: null,
+    sessionDuration: null
 };
 
 // ─── CARGAR ESTADO ───
@@ -181,6 +182,7 @@ app.post('/differs/control', (req, res) => {
 
     if (action === 'START') {
         botState.isRunning = true;
+        botState.sessionDuration = null; // Resetear duración guardada
         if (!botState.startTime) botState.startTime = Date.now(); // [RELOJ] Empieza el cronómetro
         botState.stake = parseFloat(req.body.stake) || 1;
         botState.takeProfit = parseFloat(req.body.takeProfit) || 10;
@@ -189,8 +191,9 @@ app.post('/differs/control', (req, res) => {
         res.json({ success: true, action: 'STARTED', startTime: botState.startTime });
     } else if (action === 'STOP') {
         botState.isRunning = false;
+        if (botState.startTime) botState.sessionDuration = Math.floor((Date.now() - botState.startTime) / 1000);
         // Mantenemos el startTime por si solo pausó, o lo reseteamos si queremos borrón y cuenta nueva
-        console.log(`⏸️ SNIPER DETENIDO POR USUARIO`);
+        console.log(`⏸️ SNIPER DETENIDO POR USUARIO | Duración: ${botState.sessionDuration}s`);
         saveState();
         res.json({ success: true, action: 'STOPPED' });
     } else if (action === 'RESET' || action === 'RESET_DAY') {
@@ -208,6 +211,7 @@ app.post('/differs/control', (req, res) => {
         botState.recoveryActive = false;
         botState.waitingForRecovery = false;
         botState.startTime = null;
+        botState.sessionDuration = null;
         botState.results = [];
         console.log(`🧹 [RESET COMPLETO] Estadísticas, historial, dígitos y recuperación LIMPIADOS`);
         saveState();
@@ -388,7 +392,8 @@ function connectDeriv() {
 
                 if (hasReachedTP || hasReachedSL) {
                     botState.isRunning = false; 
-                    console.log(`🛑 [REAL-TIME STOP] Meta alcanzada al cerrar contrato. Net: ${netProfit.toFixed(2)} / Loss: ${botState.dailyLoss.toFixed(2)}`);
+                    if (botState.startTime) botState.sessionDuration = Math.floor((Date.now() - botState.startTime) / 1000);
+                    console.log(`🛑 [REAL-TIME STOP] Meta alcanzada al cerrar contrato. Net: ${netProfit.toFixed(2)} / Loss: ${botState.dailyLoss.toFixed(2)} | Duración: ${botState.sessionDuration}s`);
                 }
 
                 saveState();

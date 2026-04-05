@@ -585,17 +585,14 @@
             // Daily
             const dp = parseFloat(data.dailyProfit || 0);
             const dl = parseFloat(data.dailyLoss || 0);
-            
             // Sincronizar Reloj
             if (data.isRunning && data.startTime) {
                 sessionStartTime = data.startTime;
                 sessionFrozenTime = null; // Timer corriendo en vivo
-            } else if (!data.isRunning && data.startTime && sessionStartTime) {
-                // Bot se detuvo: congelar el tiempo que duró
-                if (!sessionFrozenTime) {
-                    const elapsed = Math.floor((Date.now() - sessionStartTime) / 1000);
-                    sessionFrozenTime = elapsed;
-                }
+            } else if (!data.isRunning && data.sessionDuration) {
+                // Bot se detuvo: recuperar la duración exacta del servidor
+                sessionStartTime = null;
+                sessionFrozenTime = data.sessionDuration;
             } else if (!data.startTime) {
                 // Reset total: sin startTime = limpiar todo
                 sessionStartTime = null;
