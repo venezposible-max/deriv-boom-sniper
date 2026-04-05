@@ -259,7 +259,8 @@ function connectDeriv() {
             if (c.status === 'won' || c.status === 'lost') {
                 const profit = parseFloat(c.profit);
                 const isDiffer = c.contract_type === 'DIGITDIFF';
-                const exitDigit = c.exit_tick ? String(c.exit_tick).slice(-1) : '?';
+                // Extracting EXACT digit from the DISPLAY string (e.g. "987.50" -> "0")
+                const exitDigit = c.exit_tick_display_value ? String(c.exit_tick_display_value).slice(-1) : '?';
 
                 let displayBarrier = '';
                 if (isDiffer) {
