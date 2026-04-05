@@ -227,6 +227,14 @@ function connectDeriv() {
             // [STEALTH MODE] Solo procesamos ticks si el bot está encendido
             if (!botState.isRunning) return; 
 
+            // [ANTI-LOCK] Si el bot cree que está comprando pero han pasado 15 seg, reseteamos
+            if (botState.isBuying && (Date.now() - botState.lastTradeTime > 15000)) {
+                console.log("⚠️ [AUTO-CLEAN] Liberando gatillo bloqueado...");
+                botState.isBuying = false;
+                botState.activeContractId = null;
+                botState.secondaryContractId = null;
+            }
+
             botState.lastTickPrice = msg.tick.quote;
             const tickDigit = parseInt(parseFloat(botState.lastTickPrice).toFixed(2).slice(-1));
             const now = Date.now();
