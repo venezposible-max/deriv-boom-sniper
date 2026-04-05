@@ -185,11 +185,7 @@ function connectDeriv() {
             botState.lastTickPrice = msg.tick.quote;
             const tickDigit = parseInt(String(msg.tick.quote).slice(-1));
             
-            // [DEBUG Ticks]
-            if (botState.digitHistory.length % 5 === 0) {
-                console.log(`📡 [TICK R_100] Price: ${botState.lastTickPrice} | Digit: ${tickDigit} | Streak: ${botState.ghostStreak}`);
-            }
-
+            // [SYNC] Actualizamos el Ghost Streak basado en la predicción previa
             if (botState.nextBarrier !== null) {
                 if (tickDigit !== parseInt(botState.nextBarrier)) {
                     botState.ghostStreak++;
@@ -198,25 +194,25 @@ function connectDeriv() {
                 }
             }
             
+            console.log(`📡 [TICK R_100] Digit: ${tickDigit} | Streak: ${botState.ghostStreak} | Next Prediction: ${botState.nextBarrier}`);
+
             botState.nextBarrier = chooseBestBarrier();
-            if (botState.lastDigit !== null) { botState.digitTransitions[`${botState.lastDigit}->${tickDigit}`] = (botState.digitTransitions[`${botState.lastDigit}->${tickDigit}`] || 0) + 1; }
             botState.lastDigit = tickDigit;
             botState.digitHistory.push(tickDigit);
             if (botState.digitHistory.length > 100) botState.digitHistory.shift();
 
-            // [FRANKLIN v16.1] Simple RSI/EMA calculation for UI
-            const period = 5;
-            if (botState.digitHistory.length >= 10) {
-                botState.lastEMA = botState.lastTickPrice; // Placeholder
-                botState.lastRSI = 50 + (tickDigit - 5) * 5; // Visual dynamic RSI
-            }
+            // Simple RSI/EMA visual placeholders
+            botState.lastEMA = botState.lastTickPrice; 
+            botState.lastRSI = (botState.ghostStreak * 10) % 100;
 
             const freq = {};
             botState.digitHistory.forEach(d => freq[d] = (freq[d] || 0) + 1);
             botState.digitFrequency = freq;
 
+            // [FRANKLIN DIRECT-FIRE] No esperamos interval, disparamos apenas se cumple la condición
             if (botState.isRunning && !botState.isBuying && !botState.activeContractId && !botState.secondaryContractId) {
                 botState.pendingSignal = { type: 'RABBIT' };
+                executeFlashMirrorFire();
             }
         }
 
