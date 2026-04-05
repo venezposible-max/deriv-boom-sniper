@@ -133,17 +133,24 @@ function chooseBestBarrier() {
 // [v20.10] Analiza si es más seguro usar Under-9 (Excluye 9) o Over-0 (Excluye 0)
 function getOptimalRabbitHole() {
     const hist = botState.digitHistory;
-    const lastSeen0 = hist.lastIndexOf(0) === -1 ? 999 : (hist.length - 1 - hist.lastIndexOf(0));
-    const lastSeen9 = hist.lastIndexOf(9) === -1 ? 999 : (hist.length - 1 - hist.lastIndexOf(9));
-    
-    const freq0 = hist.slice(-30).filter(d => d === 0).length;
-    const freq9 = hist.slice(-30).filter(d => d === 9).length;
+    // Si no tenemos datos, fallback al default
+    if (hist.length < 10) return { type: 'DIGITOVER', barrier: '0', label: 'OVER-0 (1-9)' };
 
-    // Priorizamos el que tenga MENOS frecuencia y MÁS tiempo sin salir (Dormancia)
-    if (lastSeen9 > lastSeen0 && freq9 <= freq0) {
-        return { type: 'DIGITUNDER', barrier: '9', label: 'UNDER-9 (0-8)' };
-    } else {
+    // Analizamos el promedio de los últimos 10 ticks
+    const last10 = hist.slice(-10);
+    const sum = last10.reduce((a, b) => a + b, 0);
+    const avg = sum / 10;
+    
+    // Si el promedio es alto (ej. 6,7,8,9), la tendencia está lejos del 0.
+    // Disparar OVER-0 es muy seguro porque es improbable que baje de golpe a 0.
+    if (avg > 4.5) {
+        console.log(`🧠 [SMART-RABBIT] Promedio Momentum Alto (${avg}). Tirando hacia arriba alejándose del 0.`);
         return { type: 'DIGITOVER', barrier: '0', label: 'OVER-0 (1-9)' };
+    } else {
+        // Promedio bajo (ej. 0,1,2,3). La tendencia está cerca del 0 y lejos del 9.
+        // Disparar UNDER-9 es la opción más segura.
+        console.log(`🧠 [SMART-RABBIT] Promedio Momentum Bajo (${avg}). Tirando hacia abajo alejándose del 9.`);
+        return { type: 'DIGITUNDER', barrier: '9', label: 'UNDER-9 (0-8)' };
     }
 }
 
