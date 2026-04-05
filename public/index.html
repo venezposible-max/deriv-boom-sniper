@@ -388,15 +388,15 @@
         <div style="display:flex; gap:8px; margin-bottom:14px;">
             <div class="input-group" style="flex:1; margin-bottom:0;">
                 <label>Stake Base ($)</label>
-                <input type="number" id="stake" value="1.00" step="1" style="border-color: #7c3aed; box-shadow: 0 0 10px rgba(124,58,237,0.2);">
+                <input type="number" id="stake" value="1.00" step="1" onblur="syncConfig()" style="border-color: #7c3aed; box-shadow: 0 0 10px rgba(124,58,237,0.2);">
             </div>
             <div class="input-group" style="flex:1; margin-bottom:0;">
                 <label>Max Loss ($)</label>
-                <input type="number" id="maxDailyLoss" value="20" step="5">
+                <input type="number" id="maxDailyLoss" value="20" step="5" onblur="syncConfig()">
             </div>
             <div class="input-group" style="flex:1; margin-bottom:0;">
                 <label>Meta ($)</label>
-                <input type="number" id="takeProfit" value="10" step="1">
+                <input type="number" id="takeProfit" value="10" step="1" onblur="syncConfig()">
             </div>
         </div>
 
@@ -423,7 +423,7 @@
                 <span id="recoveryLabelSub" style="font-size: 9px; opacity: 0.6; font-weight: 400; display: block;">Escudo One-Shot Activado</span>
             </div>
             <label class="switch">
-                <input type="checkbox" id="isRecoveryEnabled" onchange="toggleRecovery(this.checked)">
+                <input type="checkbox" id="isRecoveryEnabled" onchange="toggleRecovery(this.checked); syncConfig();">
                 <span class="slider"></span>
             </label>
         </div>
@@ -780,6 +780,24 @@
                 console.error(e); 
             }
         }, 300);
+    }
+
+    // [FRANKLIN SYNC] Enviar cambios de config al instante
+    async function syncConfig() {
+        const body = {
+            action: 'SYNC',
+            stake: parseFloat(document.getElementById('stake').value),
+            maxDailyLoss: parseFloat(document.getElementById('maxDailyLoss').value),
+            takeProfit: parseFloat(document.getElementById('takeProfit').value),
+            isRecoveryEnabled: document.getElementById('isRecoveryEnabled').checked
+        };
+        try {
+            await fetch('/differs/control', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(body)
+            });
+        } catch (e) { console.error('Error syncing config:', e); }
     }
 
     // Sincronización inicial Forzada

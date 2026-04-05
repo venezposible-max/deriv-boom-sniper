@@ -150,16 +150,34 @@ app.post('/api/config', (req, res) => {
 });
 
 app.post('/differs/control', (req, res) => {
-    const { action, stake } = req.body;
+    const { action, stake, takeProfit, maxDailyLoss, isRecoveryEnabled } = req.body;
+    
+    // Actualización inmediata de parámetros si vienen en el comando
+    if (stake) botState.stake = parseFloat(stake);
+    if (takeProfit) botState.takeProfit = parseFloat(takeProfit);
+    if (maxDailyLoss) botState.maxDailyLoss = parseFloat(maxDailyLoss);
+    if (isRecoveryEnabled !== undefined) botState.isRecoveryEnabled = !!isRecoveryEnabled;
+
     if (action === 'START') {
-        if (stake) botState.stake = parseFloat(stake);
         botState.isRunning = true;
-        console.log(`▶️ SNIPER v20.10 INICIADO [SMART-RABBIT]`);
-        return res.json({ success: true, isRunning: true });
+        botState.ghostStreak = 0; // Limpiamos racha al iniciar
+        console.log(`▶️ SNIPER INICIADO [Meta: $${botState.takeProfit} | Stake: $${botState.stake}]`);
+        saveState();
+        res.json({ success: true, action: 'STARTED' });
+    } else if (action === 'STOP') {
+        botState.isRunning = false;
+        console.log(`⏸️ SNIPER DETENIDO POR USUARIO`);
+        saveState();
+        res.json({ success: true, action: 'STOPPED' });
+    } else if (action === 'RESET_DAY') {
+        botState.dailyProfit = 0; botState.dailyLoss = 0; botState.winsSession = 0; botState.lossesSession = 0;
+        botState.tradeHistory = []; botState.ghostStreak = 0;
+        console.log(`🧹 ESTADÍSTICAS RESETEADAS`);
+        saveState();
+        res.json({ success: true });
+    } else {
+        res.json({ success: true });
     }
-    if (action === 'STOP') { botState.isRunning = false; return res.json({ success: true, isRunning: false }); }
-    if (action === 'RESET_DAY') { botState.dailyLoss = 0; botState.dailyProfit = 0; botState.tradeHistory = []; saveState(); return res.json({ success: true }); }
-    res.status(400).json({ success: false });
 });
 
 app.post('/differs/toggle-recovery', (req, res) => {
