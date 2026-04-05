@@ -166,7 +166,8 @@ function connectDeriv() {
     ws = new WebSocket(process.env.DERIV_WS_URL || `wss://ws.derivws.com/websockets/v3?app_id=${APP_ID}`);
 
     ws.on('open', () => {
-        const token = process.env.DERIV_TOKEN_REAL || process.env.DERIV_TOKEN_DEMO || DERIV_TOKEN_DEMO;
+        // [SECURITY SWAP] PRIORIDAD CUENTA VIRTUAL PARA PRUEBAS
+        const token = process.env.DERIV_TOKEN_DEMO || process.env.DERIV_TOKEN_REAL || DERIV_TOKEN_DEMO;
         ws.send(JSON.stringify({ authorize: token }));
     });
 
