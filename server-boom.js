@@ -195,7 +195,7 @@ function connectDeriv() {
     ws = new WebSocket(process.env.DERIV_WS_URL || `wss://ws.derivws.com/websockets/v3?app_id=${APP_ID}`);
 
     ws.on('open', () => {
-        console.log("🚀 v20.48 ONLINE [MASTER-RESCUE]");
+        console.log("🚀 v20.49 ONLINE [STABLE-FORCE]");
         const token = process.env.DERIV_TOKEN_DEMO || process.env.DERIV_TOKEN_REAL || DERIV_TOKEN_DEMO;
         ws.send(JSON.stringify({ authorize: token }));
     });
@@ -266,6 +266,8 @@ function connectDeriv() {
             if (botState.digitHistory.length > 100) botState.digitHistory.shift();
 
             if (botState.isRunning) {
+                const isRecovery = botState.isRecoveryEnabled && botState.recoveryActive;
+                
                 // [GATILLO DE FUERZA] Si estamos en rescate, forzamos la señal
                 if (isRecovery && !botState.waitingForRecovery) {
                     if (botState.isBuying || botState.activeContractId) {
