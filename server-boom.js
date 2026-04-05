@@ -88,7 +88,7 @@ function chooseBestBarrier() {
     const recentDigits = botState.digitHistory.slice(-windowSize);
     const recentPrices = botState.priceHistory.slice(-windowSize);
 
-    // Buscar si algún dígito aparece >= 3 veces en la ventana ultra-corta
+    // Buscar si algún dígito aparece >= 4 veces en la ventana ultra-corta
     const counts = {};
     let anomalyDigit = null;
     let maxCount = 0;
@@ -97,7 +97,7 @@ function chooseBestBarrier() {
         counts[num] = (counts[num] || 0) + 1;
         if (counts[num] > maxCount) {
             maxCount = counts[num];
-            if (maxCount >= 3) {
+            if (maxCount >= 4) {
                 anomalyDigit = num.toString();
             }
         }
