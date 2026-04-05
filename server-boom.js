@@ -157,6 +157,7 @@ function connectDeriv() {
         if (msg.msg_type === 'tick' && msg.tick) {
             const now = Date.now();
             botState.lastTickReceivedAt = now;
+            botState.lastTickPrice = msg.tick.quote;
             const tickDigit = parseInt(String(msg.tick.quote).slice(-1));
             
             if (botState.nextBarrier !== null) {
