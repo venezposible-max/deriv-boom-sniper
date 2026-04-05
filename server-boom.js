@@ -337,8 +337,15 @@ function executeFlashMirrorFire() {
     const isRecovery = botState.recoveryActive;
     if (isRecovery && botState.waitingForRecovery) return;
 
-    const requiredGhost = isRecovery ? 12 : 2;
-    if (botState.ghostStreak < requiredGhost) return;
+    const requiredGhost = isRecovery ? 8 : 2; // [MÁS AGRESIVO] Bajamos de 12 a 8 para disparar más rápido
+    
+    if (botState.ghostStreak < requiredGhost) {
+        // [HEARTBEAT] Log cada 5 segundos para que el usuario sepa que acecha
+        if (Date.now() % 5000 < 100) {
+            console.log(`🔭 [STALKING] Esperando racha segura (${botState.ghostStreak}/${requiredGhost})...`);
+        }
+        return;
+    }
     
     botState.isBuying = true;
     botState.lastTradeTime = Date.now();
