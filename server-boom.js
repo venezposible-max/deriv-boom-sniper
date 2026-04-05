@@ -41,7 +41,7 @@ let botState = {
     currentBarrier: null,
     stake: 1.00,
     maxDailyLoss: 20.00,
-    takeProfit: 10.00,
+    takeProfit: 1.00, // [DEFAULT TO USER PREFERENCE]
     dailyLoss: 0,
     dailyProfit: 0,
     lastTradeTime: 0,
