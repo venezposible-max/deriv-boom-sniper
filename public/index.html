@@ -668,6 +668,7 @@
             btn.className = `btn-main ${isRunning ? 'btn-stop' : 'btn-start'}`;
 
             // History
+            const hist = data.tradeHistory || [];
             document.getElementById('history').innerHTML = hist.slice(0, 25).map(t => {
                 const isWin = t.profit >= 0;
                 const barrierLabel = t.barrier ? `<div style="font-size:10px; color:#aaa; margin-top:2px;">Barrera: ${t.barrier}</div>` : '';
