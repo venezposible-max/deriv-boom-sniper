@@ -175,8 +175,14 @@ function connectDeriv() {
         const msg = JSON.parse(data);
         if (msg.msg_type === 'authorize') {
              botState.isConnectedToDeriv = true;
-             botState.currency = msg.authorize.currency || 'USD'; // [AUTO-DETECT] Guardamos la moneda real
-             console.log(`✅ AUTH SUCCESS: ${msg.authorize.loginid} [Currency: ${botState.currency}]`);
+             // [SAFE READ] Evitamos el crash si authorize viene incompleto
+             if (msg.authorize) {
+                 botState.currency = msg.authorize.currency || 'USD';
+                 console.log(`✅ AUTH SUCCESS: ${msg.authorize.loginid} [Currency: ${botState.currency}]`);
+             } else {
+                 botState.currency = 'USD';
+                 console.log(`✅ AUTH SUCCESS (Partial)`);
+             }
              
              botState.activeContractId = null;
              botState.secondaryContractId = null;
