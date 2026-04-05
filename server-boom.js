@@ -206,11 +206,18 @@ function connectDeriv() {
                 const profit = parseFloat(c.profit);
                 const isDiffer = c.contract_type === 'DIGITDIFF';
 
+                let displayBarrier = '';
+                if (isDiffer) {
+                    displayBarrier = `NO-${c.barrier}`;
+                } else {
+                    displayBarrier = c.contract_type === 'DIGITUNDER' ? '0-8' : '1-9';
+                }
+
                 botState.tradeHistory.unshift({
-                    type: isDiffer ? 'DIFFERS' : 'RESCUE [UNDER-9]', 
+                    type: isDiffer ? 'DIFFERS' : `RESCUE [${c.contract_type === 'DIGITUNDER' ? 'U9' : 'O0'}]`, 
                     profit: parseFloat(profit.toFixed(2)), 
                     time: new Date().toLocaleTimeString(),
-                    barrier: c.barrier || botState.currentBarrier,
+                    barrier: displayBarrier,
                     result: profit > 0 ? 'WIN ✅' : 'LOSS ❌'
                 });
                 if (botState.tradeHistory.length > 50) botState.tradeHistory.pop();
@@ -228,23 +235,23 @@ function connectDeriv() {
                             botState.recoveryActive = true;
                             botState.waitingForRecovery = false;
                             botState.lastTradeTime = Date.now() + 10000;
-                            console.log(`🐇 [RECOVERY] RABBIT HUNTER ACTIVADO...`);
+                            console.log(`🐇 [RECOVERY] SMART-RABBIT ACTIVADO...`);
                         }
                     }
                     botState.activeContractId = null;
                     botState.ghostStreak = 0; 
                 } else {
-                    // Rescate Under-9
+                    // Rescate Adaptativo
                     if (profit > 0) {
                         botState.dailyProfit += profit;
-                        console.log(`✅ ¡RESCATE EXITOSO! Under-9 Cubierto.`);
+                        console.log(`✅ ¡RESCATE EXITOSO! Escudo ${displayBarrier} funcionó.`);
                         botState.recoveryActive = false;
                     } else {
                         botState.dailyLoss += Math.abs(profit);
-                        console.log(`❌ RESCATE FALLIDO. Perforamos el Under-9.`);
+                        console.log(`❌ RESCATE FALLIDO. Perforamos el Escudo ${displayBarrier}.`);
                     }
                     botState.secondaryContractId = null;
-                    botState.waitingForRecovery = false; // RESET CRÍTICO: Evita bloqueo
+                    botState.waitingForRecovery = false; 
                     botState.ghostStreak = 0;
                 }
                 saveState();
@@ -261,7 +268,6 @@ function executeFlashMirrorFire() {
     const isRecovery = botState.recoveryActive;
     if (isRecovery && botState.waitingForRecovery) return;
 
-    // Ghosting moderado para Under-9
     const requiredGhost = isRecovery ? 12 : 2;
     if (botState.ghostStreak < requiredGhost) return;
     
@@ -270,12 +276,13 @@ function executeFlashMirrorFire() {
     if (isRecovery) {
         botState.waitingForRecovery = true; 
         process.nextTick(() => { 
-            const rabbitStake = 10.00; // Recupera $1.00 aprox con 90% Win
-            console.log(`🐇 [RABBIT FIRE] Lanzando Under-9 Hunter | Stake: $${rabbitStake}`);
+            const hole = getOptimalRabbitHole();
+            const rabbitStake = 10.00; 
+            console.log(`🐇 [SMART FIRE] Lanzando ${hole.label} | Stake: $${rabbitStake}`);
             
             ws.send(JSON.stringify({
                 buy: 1, price: rabbitStake,
-                parameters: { amount: rabbitStake, basis: 'stake', contract_type: 'DIGITUNDER', currency: 'USD', symbol: SYMBOL, duration: 1, duration_unit: 't', barrier: '9' }
+                parameters: { amount: rabbitStake, basis: 'stake', contract_type: hole.type, currency: 'USD', symbol: SYMBOL, duration: 1, duration_unit: 't', barrier: hole.barrier }
             }));
             
             botState.pendingSignal = null;
