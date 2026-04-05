@@ -62,7 +62,8 @@ let botState = {
     sessionDuration: null,
     priceHistory: [],
     lastRSI: 50.0,
-    lastEMA: 0.0
+    lastEMA: 0.0,
+    anomalyCooldown: 0
 };
 
 // ─── CARGAR ESTADO ───
@@ -79,6 +80,8 @@ const FIBO_SECUENCE = [1, 2, 3, 5, 8, 13, 21];
 
 // [ANOMALY SNIPER CORE] Busca cúmulos estadísticos irracionales (El Disparo Perfecto)
 function chooseBestBarrier() {
+    if (botState.anomalyCooldown > 0) return null; // Ignoramos el mercado mientras se enfría el arma
+
     const windowSize = 6;
     if (botState.digitHistory.length < windowSize || botState.priceHistory.length < windowSize) return null;
 
@@ -318,6 +321,9 @@ function connectDeriv() {
             const now = Date.now();
             botState.lastTickReceivedAt = now;
             
+            // Reducir enfriamiento del arma si lo hay
+            if (botState.anomalyCooldown > 0) botState.anomalyCooldown--;
+            
             const netProfit = botState.dailyProfit - botState.dailyLoss;
             const progressRatio = botState.takeProfit > 0 ? ((netProfit / botState.takeProfit) * 100).toFixed(1) : 0;
             
@@ -493,6 +499,7 @@ function executeFlashMirrorFire() {
         const barrier = chooseBestBarrier();
         if (!barrier) return; // 🤫 Esperando silenciosamente...
 
+        botState.anomalyCooldown = 6; // ❄️ Bloquear el arma hasta que este cúmulo desaparezca del radar
         botState.isBuying = true;
         botState.lastTradeTime = Date.now();
         console.log(`🛒 [DISPARO PERFECTO] Técnica: DIGITDIFF (No ${barrier}) | Stake: $${botState.stake}`);
