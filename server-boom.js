@@ -123,29 +123,7 @@ function chooseBestBarrier() {
     return anomalyDigit;
 }
 
-// [v20.10] Analiza si es más seguro usar Under-9 (Excluye 9) o Over-0 (Excluye 0)
-function getOptimalRabbitHole() {
-    const hist = botState.digitHistory;
-    // Si no tenemos datos, fallback al default
-    if (hist.length < 10) return { type: 'DIGITOVER', barrier: '0', label: 'OVER-0 (1-9)' };
 
-    // Analizamos el promedio de los últimos 10 ticks
-    const last10 = hist.slice(-10);
-    const sum = last10.reduce((a, b) => a + b, 0);
-    const avg = sum / 10;
-    
-    // Si el promedio es alto (ej. 6,7,8,9), la tendencia está lejos del 0.
-    // Disparar OVER-0 es muy seguro porque es improbable que baje de golpe a 0.
-    if (avg > 4.5) {
-        console.log(`🧠 [SMART-RABBIT] Promedio Momentum Alto (${avg}). Tirando hacia arriba alejándose del 0.`);
-        return { type: 'DIGITOVER', barrier: '0', label: 'OVER-0 (1-9)' };
-    } else {
-        // Promedio bajo (ej. 0,1,2,3). La tendencia está cerca del 0 y lejos del 9.
-        // Disparar UNDER-9 es la opción más segura.
-        console.log(`🧠 [SMART-RABBIT] Promedio Momentum Bajo (${avg}). Tirando hacia abajo alejándose del 9.`);
-        return { type: 'DIGITUNDER', barrier: '9', label: 'UNDER-9 (0-8)' };
-    }
-}
 
 // ─── INDICADORES TÉCNICOS (TICK-BY-TICK) ───
 function updateIndicators(price) {
@@ -457,51 +435,38 @@ function connectDeriv() {
     });
 }
 
+// [CEREBRO DE OPERACIONES PRINCIPAL]
 function executeFlashMirrorFire() {
     if (!ws || ws.readyState !== WebSocket.OPEN || !botState.pendingSignal) return;
     
     const isRecovery = botState.isRecoveryEnabled && botState.recoveryActive;
-    
-    // [NUCLEAR RESET] Si estamos en modo rescate y la racha sube sin disparar, limpiamos TODO
-    if (isRecovery && botState.ghostStreak > 3) {
-        if (Date.now() % 3000 < 100) {
-            console.log("🧠 [AUTO-RESET] Limpiando memoria para rescate inmediato...");
-        }
-        botState.waitingForRecovery = false;
-        botState.isBuying = false;
-        botState.activeContractId = null;
-        botState.secondaryContractId = null;
-    }
 
-    if (isRecovery && botState.waitingForRecovery) return;
+    // [FILTRO ABSOLUTO DE ANOMALÍAS] 
+    // Ni el modo normal ni el rescate se ejecutan sin el Disparo Perfecto.
+    const barrier = chooseBestBarrier();
+    if (!barrier) return; // 🤫 Esperando silenciosamente falla en the matrix...
+
+    // ❄️ Bloquear el arma 6 ticks para que el cúmulo actual desaparezca del radar
+    botState.anomalyCooldown = 6; 
+    botState.isBuying = true;
+    botState.lastTradeTime = Date.now();
 
     const curr = botState.currency || 'USD'; 
 
     if (isRecovery) {
-        // [MODO RESCATE] Disparo rápido asistido por Smart Rabbit
-        if (botState.ghostStreak < 1) return;
-        
-        botState.isBuying = true;
-        botState.lastTradeTime = Date.now();
+        // [BALA DE PLATA: Rescate de Alta Precisión]
+        // Stake x11 para recuperar el dólar perdido con ganancia 9% limpiamente.
         botState.waitingForRecovery = true; 
+        const silverBulletStake = (botState.stake * 11).toFixed(2); 
         
-        const hole = getOptimalRabbitHole();
-        const rabbitStake = (botState.stake * 10).toFixed(2); 
-        
-        console.log(`🛡️ [RESCATE] Técnica: ${hole.type} ${hole.barrier} | Stake: $${rabbitStake}`);
+        console.log(`🛡️ [BALA DE PLATA] Técnica: DIGITDIFF (No ${barrier}) | Stake: $${silverBulletStake}`);
         
         ws.send(JSON.stringify({
-            buy: 1, price: parseFloat(rabbitStake),
-            parameters: { amount: parseFloat(rabbitStake), basis: 'stake', contract_type: hole.type, currency: curr, symbol: SYMBOL, duration: 1, duration_unit: 't', barrier: hole.barrier }
+            buy: 1, price: parseFloat(silverBulletStake),
+            parameters: { amount: parseFloat(silverBulletStake), basis: 'stake', contract_type: 'DIGITDIFF', currency: curr, symbol: SYMBOL, duration: 1, duration_unit: 't', barrier: barrier }
         }));
     } else {
-        // [ANOMALY SNIPER] Trades normales ($1). Solo dispara bajo condición extrema.
-        const barrier = chooseBestBarrier();
-        if (!barrier) return; // 🤫 Esperando silenciosamente...
-
-        botState.anomalyCooldown = 6; // ❄️ Bloquear el arma hasta que este cúmulo desaparezca del radar
-        botState.isBuying = true;
-        botState.lastTradeTime = Date.now();
+        // [ANOMALY SNIPER NORMAL]
         console.log(`🛒 [DISPARO PERFECTO] Técnica: DIGITDIFF (No ${barrier}) | Stake: $${botState.stake}`);
         
         ws.send(JSON.stringify({
