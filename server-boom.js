@@ -362,26 +362,29 @@ function executeFlashMirrorFire() {
     if (isRecovery) {
         botState.waitingForRecovery = true; 
         const hole = getOptimalRabbitHole();
-        const rabbitStake = 10.00; 
+        const rabbitStake = (botState.stake * 10).toFixed(2); // Usamos stake dinámico
+        
+        console.log(`🛡️ [OPERACIÓN RESCATE] Enviando Stake: $${rabbitStake} | Barrera: ${hole.barrier}`);
         
         ws.send(JSON.stringify({
-            buy: 1, price: rabbitStake,
-            parameters: { amount: rabbitStake, basis: 'stake', contract_type: hole.type, currency: curr, symbol: SYMBOL, duration: 1, duration_unit: 't', barrier: hole.barrier }
+            buy: 1, price: parseFloat(rabbitStake),
+            parameters: { amount: parseFloat(rabbitStake), basis: 'stake', contract_type: hole.type, currency: curr, symbol: SYMBOL, duration: 1, duration_unit: 't', barrier: hole.barrier }
         }));
         botState.pendingSignal = null;
     } else {
         const barrier = botState.nextBarrier;
+        console.log(`🛒 [OPERACIÓN REGULAR] Enviando Stake: $${botState.stake} | Barrera: ${barrier}`);
         
         if (String(barrier) === String(botState.lastBarrierUsed)) {
-            botState.consecutiveBarrierCount++;
+            botState.barrierUsageCount++;
         } else {
-            botState.lastBarrierUsed = String(barrier);
-            botState.consecutiveBarrierCount = 1;
+            botState.lastBarrierUsed = barrier;
+            botState.barrierUsageCount = 1;
         }
 
         ws.send(JSON.stringify({
             buy: 1, price: botState.stake,
-            parameters: { amount: botState.stake, basis: 'stake', contract_type: 'DIGITDIFF', currency: curr, symbol: SYMBOL, duration: 1, duration_unit: 't', barrier: barrier }
+            parameters: { amount: botState.stake, basis: 'stake', contract_type: 'DIGITDIFF', currency: curr, symbol: SYMBOL, duration: 1, duration_unit: 't', barrier: `+${barrier}` }
         }));
         botState.pendingSignal = null;
     }
