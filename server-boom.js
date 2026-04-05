@@ -160,17 +160,24 @@ app.post('/differs/control', (req, res) => {
 
     if (action === 'START') {
         botState.isRunning = true;
-        botState.ghostStreak = 0; // Limpiamos racha al iniciar
+        if (!botState.startTime) botState.startTime = Date.now(); // [RELOJ] Empieza el cronómetro
+        botState.stake = parseFloat(req.body.stake) || 1;
+        botState.takeProfit = parseFloat(req.body.takeProfit) || 10;
         console.log(`▶️ SNIPER INICIADO [Meta: $${botState.takeProfit} | Stake: $${botState.stake}]`);
         saveState();
-        res.json({ success: true, action: 'STARTED' });
+        res.json({ success: true, action: 'STARTED', startTime: botState.startTime });
     } else if (action === 'STOP') {
         botState.isRunning = false;
+        // Mantenemos el startTime por si solo pausó, o lo reseteamos si queremos borrón y cuenta nueva
         console.log(`⏸️ SNIPER DETENIDO POR USUARIO`);
         saveState();
         res.json({ success: true, action: 'STOPPED' });
-    } else if (action === 'RESET_DAY') {
-        botState.dailyProfit = 0; botState.dailyLoss = 0; botState.winsSession = 0; botState.lossesSession = 0;
+    } else if (action === 'RESET') {
+        botState.dailyProfit = 0;
+        botState.dailyLoss = 0;
+        botState.results = [];
+        botState.startTime = null; // [RELOJ] Reset completo
+        console.log(`🧹 ESTADÍSTICAS RESETEADAS`);
         botState.tradeHistory = []; botState.ghostStreak = 0;
         console.log(`🧹 ESTADÍSTICAS RESETEADAS`);
         saveState();

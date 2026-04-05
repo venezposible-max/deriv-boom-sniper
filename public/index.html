@@ -588,6 +588,14 @@
             // Daily
             const dp = parseFloat(data.dailyProfit || 0);
             const dl = parseFloat(data.dailyLoss || 0);
+            
+            // Sincronizar Reloj
+            if (data.isRunning && data.startTime) {
+                sessionStartTime = data.startTime;
+            } else if (!data.isRunning) {
+                sessionStartTime = null;
+            }
+
             document.getElementById('dailyProfit').innerText = `+$${dp.toFixed(2)}`;
             document.getElementById('dailyLoss').innerText = `-$${dl.toFixed(2)}`;
             const net = dp - dl;
@@ -762,6 +770,23 @@
     }
 
     let scanRangeTimeout = null;
+
+    let sessionStartTime = null;
+
+    function updateTimer() {
+        if (!sessionStartTime) {
+            document.getElementById('sessionTimer').innerText = "--:--:--";
+            return;
+        }
+        const now = Date.now();
+        const diff = Math.floor((now - sessionStartTime) / 1000);
+        const h = Math.floor(diff / 3600).toString().padStart(2, '0');
+        const m = Math.floor((diff % 3600) / 60).toString().padStart(2, '0');
+        const s = (diff % 60).toString().padStart(2, '0');
+        document.getElementById('sessionTimer').innerText = `${h}:${m}:${s}`;
+    }
+
+    setInterval(updateTimer, 1000);
 
     async function updateScanRange(val) {
         window.lastScanRangeAdjust = Date.now();
