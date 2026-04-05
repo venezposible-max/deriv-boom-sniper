@@ -195,7 +195,7 @@ function connectDeriv() {
     ws = new WebSocket(process.env.DERIV_WS_URL || `wss://ws.derivws.com/websockets/v3?app_id=${APP_ID}`);
 
     ws.on('open', () => {
-        console.log("🚀 v20.45 ONLINE [ULTRA-FAST]");
+        console.log("🚀 v20.46 ONLINE [TOTAL-VISIBILITY]");
         const token = process.env.DERIV_TOKEN_DEMO || process.env.DERIV_TOKEN_REAL || DERIV_TOKEN_DEMO;
         ws.send(JSON.stringify({ authorize: token }));
     });
@@ -227,9 +227,12 @@ function connectDeriv() {
             // [STEALTH MODE] Solo procesamos ticks si el bot está encendido
             if (!botState.isRunning) return; 
 
-            // [ANTI-LOCK] Si el bot cree que está comprando pero han pasado 15 seg, reseteamos
-            if (botState.isBuying && (Date.now() - botState.lastTradeTime > 15000)) {
-                console.log("⚠️ [AUTO-CLEAN] Liberando gatillo bloqueado...");
+            // Identificador visual de estado
+            const statusLabel = (botState.isRecoveryEnabled && botState.recoveryActive) ? "🛡️ [RESCATE]" : "";
+
+            // [ANTI-LOCK] Si el bot cree que está comprando pero han pasado 5 seg, reseteamos
+            if (botState.isBuying && (Date.now() - botState.lastTradeTime > 5000)) {
+                console.log("🛠️ [AUTO-FIX] Limpiando gatillo...");
                 botState.isBuying = false;
                 botState.activeContractId = null;
                 botState.secondaryContractId = null;
@@ -240,6 +243,11 @@ function connectDeriv() {
             const now = Date.now();
             botState.lastTickReceivedAt = now;
             
+            const netProfit = botState.dailyProfit - botState.dailyLoss;
+            const progressRatio = botState.takeProfit > 0 ? ((netProfit / botState.takeProfit) * 100).toFixed(1) : 0;
+            
+            console.log(`📡 [TICK ${SYMBOL}] Digit: ${tickDigit} | Streak: ${botState.ghostStreak} | 📊 Goal: $${netProfit.toFixed(2)} / $${botState.takeProfit} (${progressRatio}%) ${statusLabel}`);
+
             if (botState.nextBarrier !== null) {
                 if (Number(tickDigit) !== Number(botState.nextBarrier)) {
                     botState.ghostStreak++;
@@ -250,12 +258,6 @@ function connectDeriv() {
             } else {
                 botState.nextBarrier = chooseBestBarrier();
             }
-            
-            const netProfit = botState.dailyProfit - botState.dailyLoss;
-            const progress = botState.takeProfit > 0 ? ((netProfit / botState.takeProfit) * 100).toFixed(1) : 0;
-            console.log(`📡 [TICK R_100] Digit: ${tickDigit} | Streak: ${botState.ghostStreak} | 📊 Goal: $${netProfit.toFixed(2)} / $${botState.takeProfit} (${progress}%)`);
-
-            botState.nextBarrier = chooseBestBarrier();
             if (botState.lastDigit !== null) { 
                 botState.digitTransitions[`${botState.lastDigit}->${tickDigit}`] = (botState.digitTransitions[`${botState.lastDigit}->${tickDigit}`] || 0) + 1; 
             }
