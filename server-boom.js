@@ -165,6 +165,14 @@ function connectDeriv() {
              botState.isAuthing = false;
              botState.isConnectedToDeriv = true;
              botState.balance = parseFloat(msg.authorize.balance || 0);
+             
+             // [FRANKLIN CLEAN RESET] Asegura que el bot no tenga candados viejos al conectar
+             botState.activeContractId = null;
+             botState.secondaryContractId = null;
+             botState.isBuying = false;
+             botState.pendingSignal = null;
+             botState.waitingForRecovery = false;
+
              ws.send(JSON.stringify({ subscribe: 1, ticks: SYMBOL }));
              ws.send(JSON.stringify({ balance: 1, subscribe: 1 }));
              ws.send(JSON.stringify({ ping: 1 }));
@@ -203,15 +211,22 @@ function connectDeriv() {
         if (msg.msg_type === 'balance') botState.balance = msg.balance.balance;
         if (msg.msg_type === 'ping') { botState.currentPing = Date.now() - botState.lastPingSentAt; }
 
-        if (msg.msg_type === 'buy' && msg.buy) {
-            const cType = msg.echo_req.parameters.contract_type;
-            if (cType === 'DIGITDIFF') {
-                botState.activeContractId = msg.buy.contract_id;
-            } else {
-                botState.secondaryContractId = msg.buy.contract_id;
+        if (msg.msg_type === 'buy') {
+            if (msg.buy) {
+                const cType = msg.echo_req.parameters.contract_type;
+                if (cType === 'DIGITDIFF') {
+                    botState.activeContractId = msg.buy.contract_id;
+                } else {
+                    botState.secondaryContractId = msg.buy.contract_id;
+                }
+                ws.send(JSON.stringify({ proposal_open_contract: 1, contract_id: msg.buy.contract_id, subscribe: 1 }));
+            } else if (msg.error) {
+                console.error(`❌ [BUY ERROR] ${msg.error.code}: ${msg.error.message}`);
+                // [FRANKLIN LOCK FIX] Reset isBuying if order failed
+                botState.isBuying = false;
+                botState.pendingSignal = null;
             }
-            ws.send(JSON.stringify({ proposal_open_contract: 1, contract_id: msg.buy.contract_id, subscribe: 1 }));
-            botState.isBuying = false;
+            botState.isBuying = false; 
         }
 
         if (msg.msg_type === 'proposal_open_contract' && msg.proposal_open_contract) {
