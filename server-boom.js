@@ -59,7 +59,10 @@ let botState = {
     pnlSession: 0,
     ghostStreak: 0,
     nextBarrier: null,
-    sessionDuration: null
+    sessionDuration: null,
+    priceHistory: [],
+    lastRSI: 50.0,
+    lastEMA: 0.0
 };
 
 // ─── CARGAR ESTADO ───
@@ -151,6 +154,42 @@ function getOptimalRabbitHole() {
         // Disparar UNDER-9 es la opción más segura.
         console.log(`🧠 [SMART-RABBIT] Promedio Momentum Bajo (${avg}). Tirando hacia abajo alejándose del 9.`);
         return { type: 'DIGITUNDER', barrier: '9', label: 'UNDER-9 (0-8)' };
+    }
+}
+
+// ─── INDICADORES TÉCNICOS (TICK-BY-TICK) ───
+function updateIndicators(price) {
+    botState.priceHistory.push(price);
+    if (botState.priceHistory.length > 50) botState.priceHistory.shift();
+
+    const prices = botState.priceHistory;
+
+    // EMA-5
+    if (prices.length > 0) {
+        const period = Math.min(5, prices.length);
+        const k = 2 / (period + 1);
+        let ema = prices[0];
+        for (let i = 1; i < prices.length; i++) {
+            ema = (prices[i] * k) + (ema * (1 - k));
+        }
+        botState.lastEMA = ema;
+    }
+
+    // RSI-5 Simple
+    if (prices.length > 5) {
+        const period = 5;
+        let gains = 0, losses = 0;
+        for (let i = prices.length - period; i < prices.length; i++) {
+            const diff = prices[i] - prices[i - 1];
+            if (diff >= 0) gains += diff;
+            else losses -= diff;
+        }
+        if (losses === 0) {
+            botState.lastRSI = gains === 0 ? 50.0 : 100.0;
+        } else {
+            const rs = (gains / period) / (losses / period);
+            botState.lastRSI = 100 - (100 / (1 + rs));
+        }
     }
 }
 
@@ -287,6 +326,7 @@ function connectDeriv() {
             }
 
             botState.lastTickPrice = msg.tick.quote;
+            updateIndicators(parseFloat(botState.lastTickPrice));
             const tickDigit = parseInt(parseFloat(botState.lastTickPrice).toFixed(2).slice(-1));
             const now = Date.now();
             botState.lastTickReceivedAt = now;
