@@ -170,12 +170,13 @@ function connectDeriv() {
         ws.send(JSON.stringify({ authorize: token }));
     });
 
-    ws.on('message', (raw) => {
-        let msg; try { msg = JSON.parse(raw); } catch (e) { return; }
-
+    ws.on('message', (data) => {
+        const msg = JSON.parse(data);
         if (msg.msg_type === 'authorize') {
              botState.isConnectedToDeriv = true;
-             console.log(`✅ AUTH SUCCESS: ${msg.authorize.loginid}`);
+             botState.currency = msg.authorize.currency || 'USD'; // [AUTO-DETECT] Guardamos la moneda real
+             console.log(`✅ AUTH SUCCESS: ${msg.authorize.loginid} [Currency: ${botState.currency}]`);
+             
              botState.activeContractId = null;
              botState.secondaryContractId = null;
              botState.isBuying = false;
@@ -184,14 +185,11 @@ function connectDeriv() {
              
              ws.send(JSON.stringify({ subscribe: 1, ticks: SYMBOL }));
              ws.send(JSON.stringify({ balance: 1, subscribe: 1 }));
-             setInterval(() => { if (ws && ws.readyState === WebSocket.OPEN) { botState.lastPingSentAt = Date.now(); ws.send(JSON.stringify({ ping: 1 })); } }, 30000);
         }
 
         if (msg.msg_type === 'tick' && msg.tick) {
             botState.lastTickPrice = msg.tick.quote;
             const tickDigit = parseInt(parseFloat(botState.lastTickPrice).toFixed(2).slice(-1));
-            const now = Date.now();
-            botState.lastTickReceivedAt = now;
             
             if (botState.nextBarrier !== null) {
                 if (tickDigit !== botState.nextBarrier) {
@@ -213,10 +211,6 @@ function connectDeriv() {
             botState.digitHistory.push(tickDigit);
             if (botState.digitHistory.length > 100) botState.digitHistory.shift();
 
-            const freq = {};
-            botState.digitHistory.forEach(d => freq[d] = (freq[d] || 0) + 1);
-            botState.digitFrequency = freq;
-
             if (botState.isRunning && !botState.isBuying && !botState.activeContractId && !botState.secondaryContractId) {
                 botState.pendingSignal = { type: 'RABBIT' };
                 executeFlashMirrorFire();
@@ -224,7 +218,6 @@ function connectDeriv() {
         }
 
         if (msg.msg_type === 'balance') botState.balance = msg.balance.balance;
-        if (msg.msg_type === 'ping') { botState.currentPing = Date.now() - botState.lastPingSentAt; }
 
         if (msg.msg_type === 'buy') {
             if (msg.buy) {
@@ -235,10 +228,6 @@ function connectDeriv() {
                     botState.secondaryContractId = msg.buy.contract_id;
                 }
                 ws.send(JSON.stringify({ proposal_open_contract: 1, contract_id: msg.buy.contract_id, subscribe: 1 }));
-            } else if (msg.error) {
-                console.error(`❌ [BUY ERROR] ${msg.error.code}: ${msg.error.message}`);
-                botState.isBuying = false;
-                botState.pendingSignal = null;
             }
             botState.isBuying = false; 
         }
@@ -247,44 +236,19 @@ function connectDeriv() {
             const c = msg.proposal_open_contract;
             if (c.status === 'won' || c.status === 'lost') {
                 const profit = parseFloat(c.profit);
-                const isDiffer = c.contract_type === 'DIGITDIFF';
-                const exitDigit = c.exit_tick_display_value ? String(parseFloat(c.exit_tick_display_value).toFixed(2)).slice(-1) : '?';
-
-                let displayBarrier = '';
-                if (isDiffer) {
-                    displayBarrier = `NO [${c.barrier}] | SALIÓ [${exitDigit}]`;
+                if (profit > 0) {
+                    botState.winsSession++;
+                    botState.dailyProfit += profit;
+                    botState.recoveryActive = false;
                 } else {
-                    displayBarrier = `${c.contract_type === 'DIGITUNDER' ? 'BAJO' : 'SOBRE'} [${c.barrier}] | SALIÓ [${exitDigit}]`;
+                    botState.lossesSession++;
+                    botState.dailyLoss += Math.abs(profit);
+                    if (botState.isRecoveryEnabled) botState.recoveryActive = true;
                 }
-
-                botState.tradeHistory.unshift({
-                    type: isDiffer ? 'DIFFERS' : 'RECOVERY', 
-                    profit: parseFloat(profit.toFixed(2)), 
-                    time: new Date().toLocaleTimeString(),
-                    barrier: displayBarrier,
-                    result: profit > 0 ? 'WIN' : 'LOSS'
-                });
-                if (botState.tradeHistory.length > 50) botState.tradeHistory.pop();
-
-                if (isDiffer) {
-                    if (profit > 0) {
-                        botState.winsSession++;
-                        botState.dailyProfit += profit;
-                        botState.recoveryActive = false;
-                    } else {
-                        botState.lossesSession++;
-                        botState.dailyLoss += Math.abs(profit);
-                        if (botState.isRecoveryEnabled) botState.recoveryActive = true;
-                    }
-                    botState.activeContractId = null;
-                } else {
-                    if (profit > 0) botState.dailyProfit += profit;
-                    else botState.dailyLoss += Math.abs(profit);
-                    botState.secondaryContractId = null;
-                    botState.waitingForRecovery = false; 
-                }
+                botState.activeContractId = null;
+                botState.secondaryContractId = null;
+                botState.waitingForRecovery = false;
                 botState.ghostStreak = 0;
-                botState.isBuying = false;
                 saveState();
             }
         }
@@ -296,23 +260,6 @@ function connectDeriv() {
 function executeFlashMirrorFire() {
     if (!ws || ws.readyState !== WebSocket.OPEN || !botState.pendingSignal) return;
     
-    if (botState.isBuying && (Date.now() - botState.lastTradeTime > 15000)) {
-        console.warn(`🕒 [WATCHDOG] Limpiando gatillo trabado...`);
-        botState.isBuying = false;
-    }
-
-    if (botState.isBuying || botState.activeContractId || botState.secondaryContractId) {
-        if (Date.now() % 10000 < 50) console.log("⚠️ [LOCK] Esperando cierre de contrato o liberación de gatillo...");
-        return;
-    }
-
-    const hasReachedTP = botState.takeProfit > 0 && botState.dailyProfit >= botState.takeProfit;
-    const hasReachedSL = botState.maxDailyLoss > 0 && botState.dailyLoss >= botState.maxDailyLoss;
-    if (hasReachedTP || hasReachedSL) {
-        if (botState.isRunning) botState.isRunning = false;
-        return;
-    }
-
     const isRecovery = botState.recoveryActive;
     if (isRecovery && botState.waitingForRecovery) return;
 
@@ -321,22 +268,31 @@ function executeFlashMirrorFire() {
     
     botState.isBuying = true;
     botState.lastTradeTime = Date.now();
+    const curr = botState.currency || 'USD'; // Usamos la moneda detectada
 
     if (isRecovery) {
         botState.waitingForRecovery = true; 
         const hole = getOptimalRabbitHole();
         const rabbitStake = 10.00; 
+        
         ws.send(JSON.stringify({
             buy: 1, price: rabbitStake,
-            parameters: { amount: rabbitStake, basis: 'stake', contract_type: hole.type, currency: 'USD', symbol: SYMBOL, duration: 1, duration_unit: 't', barrier: hole.barrier }
+            parameters: { amount: rabbitStake, basis: 'stake', contract_type: hole.type, currency: curr, symbol: SYMBOL, duration: 1, duration_unit: 't', barrier: hole.barrier }
         }));
         botState.pendingSignal = null;
     } else {
         const barrier = botState.nextBarrier;
         
+        if (String(barrier) === String(botState.lastBarrierUsed)) {
+            botState.consecutiveBarrierCount++;
+        } else {
+            botState.lastBarrierUsed = String(barrier);
+            botState.consecutiveBarrierCount = 1;
+        }
+
         ws.send(JSON.stringify({
             buy: 1, price: botState.stake,
-            parameters: { amount: botState.stake, basis: 'stake', contract_type: 'DIGITDIFF', currency: 'USD', symbol: SYMBOL, duration: 1, duration_unit: 't', barrier: barrier }
+            parameters: { amount: botState.stake, basis: 'stake', contract_type: 'DIGITDIFF', currency: curr, symbol: SYMBOL, duration: 1, duration_unit: 't', barrier: barrier }
         }));
         botState.pendingSignal = null;
     }
