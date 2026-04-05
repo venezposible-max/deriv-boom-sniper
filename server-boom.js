@@ -159,50 +159,37 @@ app.post('/differs/toggle-recovery', (req, res) => {
 
 // ─── CONEXIÓN A DERIV ───
 let ws = null;
-let reconnectTimeout = null;
 
 function connectDeriv() {
-    if (ws && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING)) return;
-    ws = new WebSocket(`wss://ws.derivws.com/websockets/v3?app_id=${APP_ID}`);
+    if (ws) ws.terminate();
+    ws = new WebSocket(process.env.DERIV_WS_URL || `wss://ws.derivws.com/websockets/v3?app_id=${APP_ID}`);
 
     ws.on('open', () => {
-        setTimeout(() => {
-            const token = (botState.isRealAccount ? process.env.DERIV_TOKEN_REAL : process.env.DERIV_TOKEN_DEMO) || DERIV_TOKEN_DEMO;
-            botState.isAuthing = true;
-            ws.send(JSON.stringify({ authorize: token.trim() }));
-        }, 2000);
+        const token = process.env.DERIV_TOKEN_REAL || process.env.DERIV_TOKEN_DEMO || DERIV_TOKEN_DEMO;
+        ws.send(JSON.stringify({ authorize: token }));
     });
 
     ws.on('message', (raw) => {
         let msg; try { msg = JSON.parse(raw); } catch (e) { return; }
 
-        if (msg.msg_type === 'authorize' && msg.authorize) {
-             botState.isAuthing = false;
+        if (msg.msg_type === 'authorize') {
              botState.isConnectedToDeriv = true;
-             botState.balance = parseFloat(msg.authorize.balance || 0);
-             
-             // [FRANKLIN CLEAN RESET] Asegura que el bot no tenga candados viejos al conectar
              botState.activeContractId = null;
              botState.secondaryContractId = null;
              botState.isBuying = false;
-             botState.pendingSignal = null;
              botState.waitingForRecovery = false;
 
              ws.send(JSON.stringify({ subscribe: 1, ticks: SYMBOL }));
              ws.send(JSON.stringify({ balance: 1, subscribe: 1 }));
-             ws.send(JSON.stringify({ ping: 1 }));
-             console.log(`🎯 SNIPER v20.10 ONLINE | Smart-Rabbit Activado...`);
+             setInterval(() => { if (ws && ws.readyState === WebSocket.OPEN) { botState.lastPingSentAt = Date.now(); ws.send(JSON.stringify({ ping: 1 })); } }, 30000);
         }
 
         if (msg.msg_type === 'tick' && msg.tick) {
             botState.lastTickPrice = msg.tick.quote;
-            // Sincronización de precisión para Vol 100: Forzamos 2 decimales para evitar el "cero fantasma"
             const tickDigit = parseInt(parseFloat(botState.lastTickPrice).toFixed(2).slice(-1));
-            const now = Date.now();
-            botState.lastTickReceivedAt = now;
             
             if (botState.nextBarrier !== null) {
-                if (tickDigit !== parseInt(botState.nextBarrier)) {
+                if (tickDigit !== botState.nextBarrier) {
                     botState.ghostStreak++;
                 } else {
                     botState.ghostStreak = 0;
@@ -219,7 +206,6 @@ function connectDeriv() {
             botState.digitHistory.push(tickDigit);
             if (botState.digitHistory.length > 100) botState.digitHistory.shift();
 
-            // Simple RSI/EMA visual placeholders
             botState.lastEMA = botState.lastTickPrice; 
             botState.lastRSI = (botState.ghostStreak * 10) % 100;
 
@@ -227,7 +213,6 @@ function connectDeriv() {
             botState.digitHistory.forEach(d => freq[d] = (freq[d] || 0) + 1);
             botState.digitFrequency = freq;
 
-            // [FRANKLIN DIRECT-FIRE] Disparo inmediato apenas llega el dato
             if (botState.isRunning && !botState.isBuying && !botState.activeContractId && !botState.secondaryContractId) {
                 botState.pendingSignal = { type: 'RABBIT' };
                 executeFlashMirrorFire();
@@ -235,21 +220,15 @@ function connectDeriv() {
         }
 
         if (msg.msg_type === 'balance') botState.balance = msg.balance.balance;
-        if (msg.msg_type === 'ping') { botState.currentPing = Date.now() - botState.lastPingSentAt; }
 
         if (msg.msg_type === 'buy') {
             if (msg.buy) {
-                console.log(`🛒 [ORDER SENT] Contract ID: ${msg.buy.contract_id}`);
                 if (msg.echo_req.parameters.contract_type === 'DIGITDIFF') {
                     botState.activeContractId = msg.buy.contract_id;
                 } else {
                     botState.secondaryContractId = msg.buy.contract_id;
                 }
                 ws.send(JSON.stringify({ proposal_open_contract: 1, contract_id: msg.buy.contract_id, subscribe: 1 }));
-            } else if (msg.error) {
-                console.error(`❌ [BUY ERROR] ${msg.error.code}: ${msg.error.message}`);
-                botState.isBuying = false;
-                botState.pendingSignal = null;
             }
             botState.isBuying = false; 
         }
@@ -259,22 +238,21 @@ function connectDeriv() {
             if (c.status === 'won' || c.status === 'lost') {
                 const profit = parseFloat(c.profit);
                 const isDiffer = c.contract_type === 'DIGITDIFF';
-                // Extracting EXACT digit with 2-decimal precision for Vol 100
                 const exitDigit = c.exit_tick_display_value ? String(parseFloat(c.exit_tick_display_value).toFixed(2)).slice(-1) : '?';
 
                 let displayBarrier = '';
                 if (isDiffer) {
-                    displayBarrier = `🎯 NO [${c.barrier}] | SALIÓ [${exitDigit}]`;
+                    displayBarrier = `NO [${c.barrier}] | SALIÓ [${exitDigit}]`;
                 } else {
-                    displayBarrier = c.contract_type === 'DIGITUNDER' ? `🐇 ESQUIVO [9] | SALIÓ [${exitDigit}]` : `🐇 ESQUIVO [0] | SALIÓ [${exitDigit}]`;
+                    displayBarrier = `${c.contract_type === 'DIGITUNDER' ? 'BAJO' : 'SOBRE'} [${c.barrier}] | SALIÓ [${exitDigit}]`;
                 }
 
                 botState.tradeHistory.unshift({
-                    type: isDiffer ? 'DIFFERS' : 'SMART-RECOVERY', 
+                    type: isDiffer ? 'DIFFERS' : 'RECOVERY', 
                     profit: parseFloat(profit.toFixed(2)), 
                     time: new Date().toLocaleTimeString(),
                     barrier: displayBarrier,
-                    result: profit > 0 ? 'WIN ✅' : 'LOSS ❌'
+                    result: profit > 0 ? 'WIN' : 'LOSS'
                 });
                 if (botState.tradeHistory.length > 50) botState.tradeHistory.pop();
 
@@ -286,46 +264,29 @@ function connectDeriv() {
                     } else {
                         botState.lossesSession++;
                         botState.dailyLoss += Math.abs(profit);
-                        if (botState.isRecoveryEnabled) {
-                            botState.recoveryActive = true;
-                            botState.lastTradeTime = Date.now() + 5000;
-                            console.log(`🐇 [RECOVERY] SMART-RABBIT ACTIVADO...`);
-                        }
+                        if (botState.isRecoveryEnabled) botState.recoveryActive = true;
                     }
                     botState.activeContractId = null;
-                    botState.ghostStreak = 0; 
                 } else {
-                    if (profit > 0) {
-                        botState.dailyProfit += profit;
-                        console.log(`✅ ¡RESCATE EXITOSO! Evitamos el dígito prohibido.`);
-                        botState.recoveryActive = false;
-                    } else {
-                        botState.dailyLoss += Math.abs(profit);
-                        console.log(`❌ RESCATE FALLIDO. El dígito prohibido apareció.`);
-                    }
+                    if (profit > 0) botState.dailyProfit += profit;
+                    else botState.dailyLoss += Math.abs(profit);
                     botState.secondaryContractId = null;
                     botState.waitingForRecovery = false; 
-                    botState.ghostStreak = 0;
                 }
+                botState.ghostStreak = 0;
                 saveState();
             }
         }
     });
-
-    ws.on('close', () => { botState.isConnectedToDeriv = false; if (!reconnectTimeout) reconnectTimeout = setTimeout(connectDeriv, 5000); });
 }
 
 function executeFlashMirrorFire() {
     if (!ws || ws.readyState !== WebSocket.OPEN || !botState.pendingSignal || botState.isBuying || botState.activeContractId || botState.secondaryContractId) return;
     
-    // [FRANKLIN GUARDIAN] Verificación de Metas Diarias
     const hasReachedTP = botState.takeProfit > 0 && botState.dailyProfit >= botState.takeProfit;
     const hasReachedSL = botState.maxDailyLoss > 0 && botState.dailyLoss >= botState.maxDailyLoss;
     if (hasReachedTP || hasReachedSL) {
-        if (botState.isRunning) {
-            botState.isRunning = false;
-            console.log(`🛑 [STOP] Meta Alcanzada. Profit: ${botState.dailyProfit.toFixed(2)} / Loss: ${botState.dailyLoss.toFixed(2)}`);
-        }
+        if (botState.isRunning) botState.isRunning = false;
         return;
     }
 
@@ -341,26 +302,28 @@ function executeFlashMirrorFire() {
         botState.waitingForRecovery = true; 
         const hole = getOptimalRabbitHole();
         const rabbitStake = 10.00; 
-        console.log(`🐇 [FIRE RECOVERY] Evitando el dídito: ${hole.barrier} | Stake: $${rabbitStake}`);
-        
         ws.send(JSON.stringify({
             buy: 1, price: rabbitStake,
             parameters: { amount: rabbitStake, basis: 'stake', contract_type: hole.type, currency: 'USD', symbol: SYMBOL, duration: 1, duration_unit: 't', barrier: hole.barrier }
         }));
         botState.pendingSignal = null;
-        botState.lastTradeTime = Date.now();
-        botState.ghostStreak = 0;
     } else {
         const barrier = botState.nextBarrier || chooseBestBarrier();
-        console.log(`🎯 [FIRE NORMAL] Comprando Differ NO [${barrier}] | Stake: $${botState.stake}`);
+        
+        if (String(barrier) === String(botState.lastBarrierUsed)) {
+            botState.consecutiveBarrierCount++;
+        } else {
+            botState.lastBarrierUsed = String(barrier);
+            botState.consecutiveBarrierCount = 1;
+        }
+
         ws.send(JSON.stringify({
             buy: 1, price: botState.stake,
             parameters: { amount: botState.stake, basis: 'stake', contract_type: 'DIGITDIFF', currency: 'USD', symbol: SYMBOL, duration: 1, duration_unit: 't', barrier: barrier }
         }));
         botState.pendingSignal = null;
-        botState.lastTradeTime = Date.now();
     }
 }
 
 const PORT = process.env.PORT || 8080;
-app.listen(PORT, '0.0.0.0', () => { console.log(`🚀 v20.10 ONLINE [SMART-RABBIT]`); connectDeriv(); });
+app.listen(PORT, '0.0.0.0', () => { console.log(`🚀 v20.26 ONLINE [SMART-RABBIT]`); connectDeriv(); });
