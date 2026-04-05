@@ -277,8 +277,19 @@ function connectDeriv() {
                 }
                 botState.activeContractId = null;
                 botState.secondaryContractId = null;
-                botState.waitingForRecovery = false;
                 botState.ghostStreak = 0;
+                botState.isBuying = false;
+                
+                // [FRANKLIN REAL-TIME GUARDIAN] Verificación inmediata al cerrar contrato
+                const netProfit = botState.dailyProfit - botState.dailyLoss;
+                const hasReachedTP = botState.takeProfit > 0 && netProfit >= botState.takeProfit;
+                const hasReachedSL = botState.maxDailyLoss > 0 && botState.dailyLoss >= botState.maxDailyLoss;
+
+                if (hasReachedTP || hasReachedSL) {
+                    botState.isRunning = false; 
+                    console.log(`🛑 [REAL-TIME STOP] Meta alcanzada al cerrar contrato. Net: ${netProfit.toFixed(2)} / Loss: ${botState.dailyLoss.toFixed(2)}`);
+                }
+
                 saveState();
             }
         }
