@@ -195,7 +195,7 @@ function connectDeriv() {
     ws = new WebSocket(process.env.DERIV_WS_URL || `wss://ws.derivws.com/websockets/v3?app_id=${APP_ID}`);
 
     ws.on('open', () => {
-        console.log("🚀 v20.44 ONLINE [LIGHTNING-RECOVERY]");
+        console.log("🚀 v20.45 ONLINE [ULTRA-FAST]");
         const token = process.env.DERIV_TOKEN_DEMO || process.env.DERIV_TOKEN_REAL || DERIV_TOKEN_DEMO;
         ws.send(JSON.stringify({ authorize: token }));
     });
@@ -345,11 +345,12 @@ function executeFlashMirrorFire() {
     const isRecovery = botState.isRecoveryEnabled && botState.recoveryActive;
     if (isRecovery && botState.waitingForRecovery) return;
 
-    const requiredGhost = isRecovery ? 0 : 2; // [LLAMARADA] Rescate inmediato (0 o 1)
+    // [MODO AMETRALLADORA] Racha 1 para todos (Rescate y Normal)
+    const requiredGhost = 1; 
     
-    // [EMERGENCY UNLOCK] Si el bot se queda acechando más de 10 ticks sin disparar, desbloqueamos a la fuerza
-    if (botState.ghostStreak > 10 && (botState.activeContractId || botState.secondaryContractId || botState.isBuying)) {
-        console.log("🛠️ [REPARACIÓN] Forzando liberación de gatillo por racha larga...");
+    // [EMERGENCY UNLOCK] Si el bot se queda acechando más de 5 ticks sin disparar, desbloqueamos
+    if (botState.ghostStreak > 5 && (botState.activeContractId || botState.secondaryContractId || botState.isBuying)) {
+        console.log("🛠️ [AUTO-FIX] Limpiando gatillo para disparo inmediato...");
         botState.activeContractId = null;
         botState.secondaryContractId = null;
         botState.isBuying = false;
