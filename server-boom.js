@@ -239,11 +239,14 @@ function connectDeriv() {
                     if (profit > 0) {
                         botState.winsSession++;
                         botState.dailyProfit += profit;
+                        botState.recoveryActive = false; // Reset recovery on Difer win
+                        botState.waitingForRecovery = false;
                     } else {
                         botState.lossesSession++;
                         botState.dailyLoss += Math.abs(profit);
                         if (botState.isRecoveryEnabled) {
                             botState.recoveryActive = true;
+                            botState.waitingForRecovery = false; // Listo para disparar
                             botState.lastTradeTime = Date.now() + 10000;
                             console.log(`🎯 [RECOVERY] DOUBLE-SNIPER HUNTER ACTIVADO...`);
                         }
@@ -255,7 +258,8 @@ function connectDeriv() {
                     if (profit > 0) {
                         botState.dailyProfit += profit;
                         console.log(`💰 ¡BOOM! SNIPER MATCH GANADO. Recuperación Exitosa.`);
-                        botState.recoveryActive = false; // Un solo acierto de los dos basta
+                        botState.recoveryActive = false; 
+                        botState.waitingForRecovery = false;
                     } else {
                         botState.dailyLoss += Math.abs(profit);
                     }
@@ -275,6 +279,9 @@ function executeFlashMirrorFire() {
     
     const isRecovery = botState.recoveryActive;
     
+    // Evitar disparos múltiples en recuperación
+    if (isRecovery && botState.waitingForRecovery) return;
+
     // El Ghosting depende del modo
     const requiredGhost = isRecovery ? 15 : 2;
     if (botState.ghostStreak < requiredGhost) return;
@@ -282,9 +289,10 @@ function executeFlashMirrorFire() {
     botState.isBuying = true;
 
     if (isRecovery) {
+        botState.waitingForRecovery = true; // Bloquea futuros disparos hasta reset
         process.nextTick(() => { 
             const dormantDigits = getMostDormantDigits(2);
-            const sniperStake = 0.50; // $0.50 cada uno ($1.00 total)
+            const sniperStake = 0.50; 
             console.log(`🎯 [SNIPER BURST] Cazando Dígitos Dormidos: ${dormantDigits.join(', ')} | Stake: $${sniperStake} x2`);
             
             dormantDigits.forEach((digit) => {
@@ -296,6 +304,7 @@ function executeFlashMirrorFire() {
             
             botState.pendingSignal = null;
             botState.lastTradeTime = Date.now();
+            botState.ghostStreak = 0; // Reset inmediato para no re-disparar en el siguiente tick
         });
     } else {
         const barrier = botState.nextBarrier || chooseBestBarrier();
