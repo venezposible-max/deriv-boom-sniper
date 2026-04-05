@@ -1,8 +1,8 @@
 /**
  * ============================================================
- *  DIFFERS SNIPER ENGINE v18.18 [ATOMIC SHIELD]
- *  Estrategia: DIFFERS (x22) + ATOMIC-MATCH (5% Hedge)
- *  Símbolo: R_100 (Recuperación Real v18.18)
+ *  DIFFERS SNIPER ENGINE v19.00 [DOUBLE-SNIPER HUNTER]
+ *  Estrategia: DIFFERS ($1) + DOUBLE-MATCH RECOVERY ($1 Total)
+ *  Símbolo: R_100 (Recuperación Real v19.00)
  * ============================================================
  */
 
@@ -48,6 +48,7 @@ let botState = {
     isBuying: false,
     activeContractId: null,
     secondaryContractId: null, 
+    thirdContractId: null, // Para el segundo Sniper del Double-Match
     isAuthing: false,
     lastTickReceivedAt: Date.now(),
     avgTickInterval: 1000,
@@ -65,7 +66,7 @@ let botState = {
 if (fs.existsSync(STATE_FILE)) {
     try {
         const saved = JSON.parse(fs.readFileSync(STATE_FILE));
-        botState = { ...botState, ...saved.botState, isBuying: false, isAuthing: false, activeContractId: null, secondaryContractId: null };
+        botState = { ...botState, ...saved.botState, isBuying: false, isAuthing: false, activeContractId: null, secondaryContractId: null, thirdContractId: null };
     } catch (e) {}
 }
 
@@ -98,6 +99,20 @@ function chooseBestBarrier() {
     return bestDigit;
 }
 
+// [v19.0] Busca los dos dígitos más dormidos para el Double-Match Recovery
+function getMostDormantDigits(count = 2) {
+    const hist = botState.digitHistory;
+    const lastSeen = Array(10).fill(999);
+    for (let i = hist.length - 1; i >= 0; i--) {
+        const d = hist[i];
+        if (lastSeen[d] === 999) {
+            lastSeen[d] = hist.length - 1 - i;
+        }
+    }
+    const sorted = [...Array(10).keys()].sort((a, b) => lastSeen[b] - lastSeen[a]);
+    return sorted.slice(0, count).map(String);
+}
+
 // ─── SERVIDOR WEB ───
 const app = express();
 app.use(cors({ origin: '*' }));
@@ -111,7 +126,7 @@ app.post('/differs/control', (req, res) => {
     if (action === 'START') {
         if (stake) botState.stake = parseFloat(stake);
         botState.isRunning = true;
-        console.log(`▶️ SNIPER v18.18 INICIADO [ATOMIC SHIELD]`);
+        console.log(`▶️ SNIPER v19.00 INICIADO [DOUBLE-SNIPER HUNTER]`);
         return res.json({ success: true, isRunning: true });
     }
     if (action === 'STOP') { botState.isRunning = false; return res.json({ success: true, isRunning: false }); }
@@ -151,7 +166,7 @@ function connectDeriv() {
              ws.send(JSON.stringify({ subscribe: 1, ticks: SYMBOL }));
              ws.send(JSON.stringify({ balance: 1, subscribe: 1 }));
              ws.send(JSON.stringify({ ping: 1 }));
-             console.log(`🎯 SNIPER v18.18 ONLINE | Atomic Shield x22 Activado...`);
+             console.log(`🎯 SNIPER v19.00 ONLINE | Double-Sniper Hunter Activado...`);
         }
 
         if (msg.msg_type === 'tick' && msg.tick) {
@@ -178,8 +193,8 @@ function connectDeriv() {
             botState.digitHistory.forEach(d => freq[d] = (freq[d] || 0) + 1);
             botState.digitFrequency = freq;
 
-            if (botState.isRunning && !botState.isBuying && !botState.activeContractId) {
-                botState.pendingSignal = { type: 'DIFFERS' };
+            if (botState.isRunning && !botState.isBuying && !botState.activeContractId && !botState.secondaryContractId) {
+                botState.pendingSignal = { type: 'SNIPER' };
             }
         }
 
@@ -187,11 +202,16 @@ function connectDeriv() {
         if (msg.msg_type === 'ping') { botState.currentPing = Date.now() - botState.lastPingSentAt; }
 
         if (msg.msg_type === 'buy' && msg.buy) {
-            if (msg.echo_req.parameters.contract_type === 'DIGITDIFF') {
+            const cType = msg.echo_req.parameters.contract_type;
+            if (cType === 'DIGITDIFF') {
                 botState.activeContractId = msg.buy.contract_id;
                 ws.send(JSON.stringify({ proposal_open_contract: 1, contract_id: msg.buy.contract_id, subscribe: 1 }));
             } else {
-                botState.secondaryContractId = msg.buy.contract_id;
+                if (!botState.secondaryContractId) {
+                    botState.secondaryContractId = msg.buy.contract_id;
+                } else {
+                    botState.thirdContractId = msg.buy.contract_id;
+                }
                 ws.send(JSON.stringify({ proposal_open_contract: 1, contract_id: msg.buy.contract_id, subscribe: 1 }));
             }
             botState.isBuying = false;
@@ -199,13 +219,15 @@ function connectDeriv() {
 
         if (msg.msg_type === 'proposal_open_contract' && msg.proposal_open_contract) {
             const c = msg.proposal_open_contract;
-            if (c.is_sold && (c.contract_id === botState.activeContractId || c.contract_id === botState.secondaryContractId)) {
+            const ids = [botState.activeContractId, botState.secondaryContractId, botState.thirdContractId];
+            
+            if (c.is_sold && ids.includes(c.contract_id)) {
                 
                 const profit = parseFloat(c.profit);
                 const isDiffer = c.contract_type === 'DIGITDIFF';
 
                 botState.tradeHistory.unshift({
-                    type: isDiffer ? 'DIFFERS' : 'MATCH [AIRBAG]', 
+                    type: isDiffer ? 'DIFFERS' : 'SNIPER [MATCH]', 
                     profit: parseFloat(profit.toFixed(2)), 
                     time: new Date().toLocaleTimeString(),
                     barrier: isDiffer ? botState.currentBarrier : (c.barrier || botState.currentBarrier),
@@ -217,27 +239,28 @@ function connectDeriv() {
                     if (profit > 0) {
                         botState.winsSession++;
                         botState.dailyProfit += profit;
-                        if (botState.recoveryActive) { console.log(`✅ ATOMIC RESCATE GANADO.`); botState.recoveryActive = false; }
                     } else {
                         botState.lossesSession++;
                         botState.dailyLoss += Math.abs(profit);
-                        if (botState.recoveryActive) {
-                            botState.recoveryActive = false;
-                        } else if (botState.isRecoveryEnabled) {
+                        if (botState.isRecoveryEnabled) {
                             botState.recoveryActive = true;
-                            botState.lastTradeTime = Date.now() + 15000;
-                            console.log(`🛡️ ATOMIC SHIELD x22 ACTIVADO...`);
+                            botState.lastTradeTime = Date.now() + 10000;
+                            console.log(`🎯 [RECOVERY] DOUBLE-SNIPER HUNTER ACTIVADO...`);
                         }
                     }
                     botState.activeContractId = null;
                     botState.ghostStreak = 0; 
                 } else {
+                    // Manejo de Match Sniper (Recovery)
                     if (profit > 0) {
                         botState.dailyProfit += profit;
+                        console.log(`💰 ¡BOOM! SNIPER MATCH GANADO. Recuperación Exitosa.`);
+                        botState.recoveryActive = false; // Un solo acierto de los dos basta
                     } else {
                         botState.dailyLoss += Math.abs(profit);
                     }
-                    botState.secondaryContractId = null;
+                    if (c.contract_id === botState.secondaryContractId) botState.secondaryContractId = null;
+                    if (c.contract_id === botState.thirdContractId) botState.thirdContractId = null;
                 }
                 saveState();
             }
@@ -250,41 +273,35 @@ function connectDeriv() {
 function executeFlashMirrorFire() {
     if (!ws || ws.readyState !== WebSocket.OPEN || !botState.pendingSignal || botState.isBuying || botState.activeContractId) return;
     
-    // [v18.18] ATOMIC PRIORITY: Si es rescate, saltamos filtros de tendencia y aceleramos CPU
     const isRecovery = botState.recoveryActive;
-    const requiredGhost = isRecovery ? 4 : 2;
     
+    // El Ghosting depende del modo
+    const requiredGhost = isRecovery ? 15 : 2;
     if (botState.ghostStreak < requiredGhost) return;
     
-    const barrier = botState.nextBarrier || chooseBestBarrier();
     botState.isBuying = true;
-    
-    let mainStake = botState.stake;
+
     if (isRecovery) {
         process.nextTick(() => { 
-            mainStake = botState.stake * 22;
-            const airbagStake = (mainStake * 0.05).toFixed(2);
-            console.log(`🚀 [ATOMIC RESCUE] Enviando ráfaga paralela: Diff $${mainStake} + Match $${airbagStake}`);
+            const dormantDigits = getMostDormantDigits(2);
+            const sniperStake = 0.50; // $0.50 cada uno ($1.00 total)
+            console.log(`🎯 [SNIPER BURST] Cazando Dígitos Dormidos: ${dormantDigits.join(', ')} | Stake: $${sniperStake} x2`);
             
-            // Fuego Paralelo: Enviamos ambos mensajes sin esperar (Simultáneos en Buffer)
-            ws.send(JSON.stringify({
-                buy: 1, price: airbagStake,
-                parameters: { amount: airbagStake, basis: 'stake', contract_type: 'DIGITMATCH', currency: 'USD', symbol: SYMBOL, duration: 1, duration_unit: 't', barrier: barrier }
-            }));
-            
-            ws.send(JSON.stringify({
-                buy: 1, price: mainStake,
-                parameters: { amount: mainStake, basis: 'stake', contract_type: 'DIGITDIFF', currency: 'USD', symbol: SYMBOL, duration: 1, duration_unit: 't', barrier: barrier }
-            }));
+            dormantDigits.forEach((digit) => {
+                ws.send(JSON.stringify({
+                    buy: 1, price: sniperStake,
+                    parameters: { amount: sniperStake, basis: 'stake', contract_type: 'DIGITMATCH', currency: 'USD', symbol: SYMBOL, duration: 1, duration_unit: 't', barrier: digit }
+                }));
+            });
             
             botState.pendingSignal = null;
             botState.lastTradeTime = Date.now();
         });
     } else {
-        // Trade Normal
+        const barrier = botState.nextBarrier || chooseBestBarrier();
         ws.send(JSON.stringify({
-            buy: 1, price: mainStake,
-            parameters: { amount: mainStake, basis: 'stake', contract_type: 'DIGITDIFF', currency: 'USD', symbol: SYMBOL, duration: 1, duration_unit: 't', barrier: barrier }
+            buy: 1, price: botState.stake,
+            parameters: { amount: botState.stake, basis: 'stake', contract_type: 'DIGITDIFF', currency: 'USD', symbol: SYMBOL, duration: 1, duration_unit: 't', barrier: barrier }
         }));
         botState.pendingSignal = null;
         botState.lastTradeTime = Date.now();
@@ -297,7 +314,7 @@ setInterval(() => {
     const dynamicLead = Math.min(400, botState.currentPing + 25);
     if (now - botState.lastTickReceivedAt < 3000 && (now - botState.lastTickReceivedAt) >= (botState.avgTickInterval - dynamicLead)) {
         if (botState.recoveryActive) {
-            setImmediate(executeFlashMirrorFire); // Prioridad CPU inmediata para rescate
+            setImmediate(executeFlashMirrorFire);
         } else {
             executeFlashMirrorFire();
         }
@@ -305,4 +322,4 @@ setInterval(() => {
 }, 50);
 
 const PORT = process.env.PORT || 8080;
-app.listen(PORT, '0.0.0.0', () => { console.log(`🚀 v18.18 ONLINE [ATOMIC SHIELD]`); connectDeriv(); });
+app.listen(PORT, '0.0.0.0', () => { console.log(`🚀 v19.00 ONLINE [DOUBLE-SNIPER HUNTER]`); connectDeriv(); });
