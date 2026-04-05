@@ -195,7 +195,7 @@ function connectDeriv() {
     ws = new WebSocket(process.env.DERIV_WS_URL || `wss://ws.derivws.com/websockets/v3?app_id=${APP_ID}`);
 
     ws.on('open', () => {
-        console.log("🚀 v20.46 ONLINE [TOTAL-VISIBILITY]");
+        console.log("🚀 v20.47 ONLINE [FORCE-RESCUE]");
         const token = process.env.DERIV_TOKEN_DEMO || process.env.DERIV_TOKEN_REAL || DERIV_TOKEN_DEMO;
         ws.send(JSON.stringify({ authorize: token }));
     });
@@ -345,18 +345,22 @@ function executeFlashMirrorFire() {
     if (!ws || ws.readyState !== WebSocket.OPEN || !botState.pendingSignal) return;
     
     const isRecovery = botState.isRecoveryEnabled && botState.recoveryActive;
+    
+    // [NUCLEAR RESET] Si estamos en modo rescate y la racha sube sin disparar, limpiamos TODO
+    if (isRecovery && botState.ghostStreak > 3) {
+        if (Date.now() % 3000 < 100) {
+            console.log("🧠 [AUTO-RESET] Limpiando memoria para rescate inmediato...");
+        }
+        botState.waitingForRecovery = false;
+        botState.isBuying = false;
+        botState.activeContractId = null;
+        botState.secondaryContractId = null;
+    }
+
     if (isRecovery && botState.waitingForRecovery) return;
 
     // [MODO AMETRALLADORA] Racha 1 para todos (Rescate y Normal)
     const requiredGhost = 1; 
-    
-    // [EMERGENCY UNLOCK] Si el bot se queda acechando más de 5 ticks sin disparar, desbloqueamos
-    if (botState.ghostStreak > 5 && (botState.activeContractId || botState.secondaryContractId || botState.isBuying)) {
-        console.log("🛠️ [AUTO-FIX] Limpiando gatillo para disparo inmediato...");
-        botState.activeContractId = null;
-        botState.secondaryContractId = null;
-        botState.isBuying = false;
-    }
 
     if (botState.ghostStreak < requiredGhost) return;
     
