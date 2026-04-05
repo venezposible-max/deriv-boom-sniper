@@ -1,8 +1,8 @@
 /**
  * ============================================================
- *  DIFFERS SNIPER ENGINE v18.17 [PROFITABLE AIRBAG]
- *  Estrategia: DIFFERS (x22) + SMART-MATCH (5% Hedge)
- *  Símbolo: R_100 (Recuperación Real v18.17)
+ *  DIFFERS SNIPER ENGINE v18.18 [ATOMIC SHIELD]
+ *  Estrategia: DIFFERS (x22) + ATOMIC-MATCH (5% Hedge)
+ *  Símbolo: R_100 (Recuperación Real v18.18)
  * ============================================================
  */
 
@@ -111,7 +111,7 @@ app.post('/differs/control', (req, res) => {
     if (action === 'START') {
         if (stake) botState.stake = parseFloat(stake);
         botState.isRunning = true;
-        console.log(`▶️ SNIPER v18.17 INICIADO [PROFITABLE AIRBAG]`);
+        console.log(`▶️ SNIPER v18.18 INICIADO [ATOMIC SHIELD]`);
         return res.json({ success: true, isRunning: true });
     }
     if (action === 'STOP') { botState.isRunning = false; return res.json({ success: true, isRunning: false }); }
@@ -151,7 +151,7 @@ function connectDeriv() {
              ws.send(JSON.stringify({ subscribe: 1, ticks: SYMBOL }));
              ws.send(JSON.stringify({ balance: 1, subscribe: 1 }));
              ws.send(JSON.stringify({ ping: 1 }));
-             console.log(`🎯 SNIPER v18.17 ONLINE | Power Airbag x22 Activado...`);
+             console.log(`🎯 SNIPER v18.18 ONLINE | Atomic Shield x22 Activado...`);
         }
 
         if (msg.msg_type === 'tick' && msg.tick) {
@@ -217,7 +217,7 @@ function connectDeriv() {
                     if (profit > 0) {
                         botState.winsSession++;
                         botState.dailyProfit += profit;
-                        if (botState.recoveryActive) { console.log(`✅ RESCATE POWER GANADO.`); botState.recoveryActive = false; }
+                        if (botState.recoveryActive) { console.log(`✅ ATOMIC RESCATE GANADO.`); botState.recoveryActive = false; }
                     } else {
                         botState.lossesSession++;
                         botState.dailyLoss += Math.abs(profit);
@@ -226,7 +226,7 @@ function connectDeriv() {
                         } else if (botState.isRecoveryEnabled) {
                             botState.recoveryActive = true;
                             botState.lastTradeTime = Date.now() + 15000;
-                            console.log(`🛡️ RESCATE x22 SMART-AIRBAG ACTIVADO...`);
+                            console.log(`🛡️ ATOMIC SHIELD x22 ACTIVADO...`);
                         }
                     }
                     botState.activeContractId = null;
@@ -249,30 +249,46 @@ function connectDeriv() {
 
 function executeFlashMirrorFire() {
     if (!ws || ws.readyState !== WebSocket.OPEN || !botState.pendingSignal || botState.isBuying || botState.activeContractId) return;
-    const requiredGhost = botState.recoveryActive ? 4 : 2;
+    
+    // [v18.18] ATOMIC PRIORITY: Si es rescate, saltamos filtros de tendencia y aceleramos CPU
+    const isRecovery = botState.recoveryActive;
+    const requiredGhost = isRecovery ? 4 : 2;
+    
     if (botState.ghostStreak < requiredGhost) return;
+    
     const barrier = botState.nextBarrier || chooseBestBarrier();
     botState.isBuying = true;
     
     let mainStake = botState.stake;
-    if (botState.recoveryActive) {
-        // [v18.17] POWER MULTIPLIER x22
-        mainStake = botState.stake * 22;
-        // SMART AIRBAG (5% del stake principal)
-        const airbagStake = (mainStake * 0.05).toFixed(2);
-        console.log(`🛡️ LANZANDO POWER-RESCATE x22 + SMART-AIRBAG: Diff $${mainStake} | Match $${airbagStake}`);
+    if (isRecovery) {
+        process.nextTick(() => { 
+            mainStake = botState.stake * 22;
+            const airbagStake = (mainStake * 0.05).toFixed(2);
+            console.log(`🚀 [ATOMIC RESCUE] Enviando ráfaga paralela: Diff $${mainStake} + Match $${airbagStake}`);
+            
+            // Fuego Paralelo: Enviamos ambos mensajes sin esperar (Simultáneos en Buffer)
+            ws.send(JSON.stringify({
+                buy: 1, price: airbagStake,
+                parameters: { amount: airbagStake, basis: 'stake', contract_type: 'DIGITMATCH', currency: 'USD', symbol: SYMBOL, duration: 1, duration_unit: 't', barrier: barrier }
+            }));
+            
+            ws.send(JSON.stringify({
+                buy: 1, price: mainStake,
+                parameters: { amount: mainStake, basis: 'stake', contract_type: 'DIGITDIFF', currency: 'USD', symbol: SYMBOL, duration: 1, duration_unit: 't', barrier: barrier }
+            }));
+            
+            botState.pendingSignal = null;
+            botState.lastTradeTime = Date.now();
+        });
+    } else {
+        // Trade Normal
         ws.send(JSON.stringify({
-            buy: 1, price: airbagStake,
-            parameters: { amount: airbagStake, basis: 'stake', contract_type: 'DIGITMATCH', currency: 'USD', symbol: SYMBOL, duration: 1, duration_unit: 't', barrier: barrier }
+            buy: 1, price: mainStake,
+            parameters: { amount: mainStake, basis: 'stake', contract_type: 'DIGITDIFF', currency: 'USD', symbol: SYMBOL, duration: 1, duration_unit: 't', barrier: barrier }
         }));
+        botState.pendingSignal = null;
+        botState.lastTradeTime = Date.now();
     }
-
-    ws.send(JSON.stringify({
-        buy: 1, price: mainStake,
-        parameters: { amount: mainStake, basis: 'stake', contract_type: 'DIGITDIFF', currency: 'USD', symbol: SYMBOL, duration: 1, duration_unit: 't', barrier: barrier }
-    }));
-    botState.pendingSignal = null;
-    botState.lastTradeTime = Date.now();
 }
 
 setInterval(() => {
@@ -280,9 +296,13 @@ setInterval(() => {
     const now = Date.now();
     const dynamicLead = Math.min(400, botState.currentPing + 25);
     if (now - botState.lastTickReceivedAt < 3000 && (now - botState.lastTickReceivedAt) >= (botState.avgTickInterval - dynamicLead)) {
-        executeFlashMirrorFire();
+        if (botState.recoveryActive) {
+            setImmediate(executeFlashMirrorFire); // Prioridad CPU inmediata para rescate
+        } else {
+            executeFlashMirrorFire();
+        }
     }
 }, 50);
 
 const PORT = process.env.PORT || 8080;
-app.listen(PORT, '0.0.0.0', () => { console.log(`🚀 v18.17 ONLINE [PROFITABLE AIRBAG]`); connectDeriv(); });
+app.listen(PORT, '0.0.0.0', () => { console.log(`🚀 v18.18 ONLINE [ATOMIC SHIELD]`); connectDeriv(); });
