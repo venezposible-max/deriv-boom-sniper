@@ -197,12 +197,16 @@ function connectDeriv() {
         if (msg.msg_type === 'tick' && msg.tick) {
             botState.lastTickPrice = msg.tick.quote;
             const tickDigit = parseInt(parseFloat(botState.lastTickPrice).toFixed(2).slice(-1));
+            const now = Date.now();
+            botState.lastTickReceivedAt = now;
             
             if (botState.nextBarrier !== null) {
-                if (tickDigit !== botState.nextBarrier) {
+                // [TYPE-SAFE RESET] Forzamos comparación numérica para evitar rachas infinitas
+                if (Number(tickDigit) !== Number(botState.nextBarrier)) {
                     botState.ghostStreak++;
                 } else {
                     botState.ghostStreak = 0;
+                    console.log(`🎯 [STREAK RESET] Predicción cumplida con el dígito: ${tickDigit}`);
                 }
             } else {
                 botState.nextBarrier = chooseBestBarrier();
