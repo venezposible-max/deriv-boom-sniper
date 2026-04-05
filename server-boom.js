@@ -185,6 +185,11 @@ function connectDeriv() {
             botState.lastTickPrice = msg.tick.quote;
             const tickDigit = parseInt(String(msg.tick.quote).slice(-1));
             
+            // [DEBUG Ticks]
+            if (botState.digitHistory.length % 5 === 0) {
+                console.log(`📡 [TICK R_100] Price: ${botState.lastTickPrice} | Digit: ${tickDigit} | Streak: ${botState.ghostStreak}`);
+            }
+
             if (botState.nextBarrier !== null) {
                 if (tickDigit !== parseInt(botState.nextBarrier)) {
                     botState.ghostStreak++;
@@ -198,6 +203,13 @@ function connectDeriv() {
             botState.lastDigit = tickDigit;
             botState.digitHistory.push(tickDigit);
             if (botState.digitHistory.length > 100) botState.digitHistory.shift();
+
+            // [FRANKLIN v16.1] Simple RSI/EMA calculation for UI
+            const period = 5;
+            if (botState.digitHistory.length >= 10) {
+                botState.lastEMA = botState.lastTickPrice; // Placeholder
+                botState.lastRSI = 50 + (tickDigit - 5) * 5; // Visual dynamic RSI
+            }
 
             const freq = {};
             botState.digitHistory.forEach(d => freq[d] = (freq[d] || 0) + 1);
@@ -213,6 +225,7 @@ function connectDeriv() {
 
         if (msg.msg_type === 'buy') {
             if (msg.buy) {
+                console.log(`🛒 [ORDER SENT] Contract ID: ${msg.buy.contract_id}`);
                 const cType = msg.echo_req.parameters.contract_type;
                 if (cType === 'DIGITDIFF') {
                     botState.activeContractId = msg.buy.contract_id;
@@ -222,7 +235,6 @@ function connectDeriv() {
                 ws.send(JSON.stringify({ proposal_open_contract: 1, contract_id: msg.buy.contract_id, subscribe: 1 }));
             } else if (msg.error) {
                 console.error(`❌ [BUY ERROR] ${msg.error.code}: ${msg.error.message}`);
-                // [FRANKLIN LOCK FIX] Reset isBuying if order failed
                 botState.isBuying = false;
                 botState.pendingSignal = null;
             }
@@ -233,7 +245,7 @@ function connectDeriv() {
             const c = msg.proposal_open_contract;
             const ids = [botState.activeContractId, botState.secondaryContractId];
             
-            if (c.is_sold && ids.includes(c.contract_id)) {
+            if (c.status === 'won' || c.status === 'lost') {
                 const profit = parseFloat(c.profit);
                 const isDiffer = c.contract_type === 'DIGITDIFF';
 
@@ -272,7 +284,6 @@ function connectDeriv() {
                     botState.activeContractId = null;
                     botState.ghostStreak = 0; 
                 } else {
-                    // Rescate Adaptativo
                     if (profit > 0) {
                         botState.dailyProfit += profit;
                         console.log(`✅ ¡RESCATE EXITOSO! Escudo ${displayBarrier} funcionó.`);
@@ -309,7 +320,7 @@ function executeFlashMirrorFire() {
         process.nextTick(() => { 
             const hole = getOptimalRabbitHole();
             const rabbitStake = 10.00; 
-            console.log(`🐇 [SMART FIRE] Lanzando ${hole.label} | Stake: $${rabbitStake}`);
+            console.log(`🐇 [FIRE RECOVERY] Lanzando ${hole.label} | Stake: $${rabbitStake}`);
             
             ws.send(JSON.stringify({
                 buy: 1, price: rabbitStake,
@@ -322,6 +333,7 @@ function executeFlashMirrorFire() {
         });
     } else {
         const barrier = botState.nextBarrier || chooseBestBarrier();
+        console.log(`🎯 [FIRE NORMAL] Comprando Differ NO-${barrier} | Stake: $${botState.stake}`);
         ws.send(JSON.stringify({
             buy: 1, price: botState.stake,
             parameters: { amount: botState.stake, basis: 'stake', contract_type: 'DIGITDIFF', currency: 'USD', symbol: SYMBOL, duration: 1, duration_unit: 't', barrier: barrier }
@@ -335,6 +347,13 @@ setInterval(() => {
     if (!botState.isRunning || !ws || ws.readyState !== WebSocket.OPEN) return;
     const now = Date.now();
     const dynamicLead = Math.min(400, botState.currentPing + 25);
+    
+    // [DEBUG LOG CRÍTICO] Ver si el loop de disparo intenta ejecutarse
+    if (now % 2000 < 50) {
+        // Log cada 2 segundos para no saturar
+        // console.log(`⏳ [SYNC CHECK] Ticks recibidos: ${botState.digitHistory.length} | Comprando: ${botState.isBuying} | Señal: ${!!botState.pendingSignal}`);
+    }
+
     if (now - botState.lastTickReceivedAt < 3000 && (now - botState.lastTickReceivedAt) >= (botState.avgTickInterval - dynamicLead)) {
         if (botState.recoveryActive) {
             setImmediate(executeFlashMirrorFire);
