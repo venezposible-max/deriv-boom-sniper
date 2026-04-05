@@ -237,6 +237,25 @@ function connectDeriv() {
             const c = msg.proposal_open_contract;
             if (c.status === 'won' || c.status === 'lost') {
                 const profit = parseFloat(c.profit);
+                const isDiffer = c.contract_type === 'DIGITDIFF';
+                const exitDigit = c.exit_tick_display_value ? String(parseFloat(c.exit_tick_display_value).toFixed(2)).slice(-1) : '?';
+
+                let displayBarrier = '';
+                if (isDiffer) {
+                    displayBarrier = `NO [${c.barrier}] | SALIÓ [${exitDigit}]`;
+                } else {
+                    displayBarrier = `${c.contract_type === 'DIGITUNDER' ? 'BAJO' : 'SOBRE'} [${c.barrier}] | SALIÓ [${exitDigit}]`;
+                }
+
+                botState.tradeHistory.unshift({
+                    type: isDiffer ? 'DIFFERS' : 'RECOVERY', 
+                    profit: parseFloat(profit.toFixed(2)), 
+                    time: new Date().toLocaleTimeString(),
+                    barrier: displayBarrier,
+                    result: profit > 0 ? 'WIN' : 'LOSS'
+                });
+                if (botState.tradeHistory.length > 50) botState.tradeHistory.pop();
+
                 if (profit > 0) {
                     botState.winsSession++;
                     botState.dailyProfit += profit;
