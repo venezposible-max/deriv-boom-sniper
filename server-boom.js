@@ -77,60 +77,47 @@ const saveState = () => { try { fs.writeFileSync(STATE_FILE, JSON.stringify({ bo
 
 const FIBO_SECUENCE = [1, 2, 3, 5, 8, 13, 21];
 
+// [ANOMALY SNIPER CORE] Busca cúmulos estadísticos irracionales (El Disparo Perfecto)
 function chooseBestBarrier() {
-    const hist = botState.digitHistory;
-    
-    // Con pocos datos, elegir el dígito MENOS visto en lo que tenemos
-    if (hist.length < 10) {
-        // Rotación inteligente basada en totalTrades para no repetir
-        const rotation = ['3', '7', '1', '8', '4', '6', '2', '9', '0', '5'];
-        const idx = (botState.winsSession + botState.lossesSession) % rotation.length;
-        const pick = rotation[idx];
-        console.log(`🎯 [BARRIER] Rotación inicial: NO-${pick} (trade #${idx})`);
-        botState.currentBarrier = pick;
-        return pick;
-    }
-    
-    // ─── ANÁLISIS DE FRECUENCIA (últimos 40 ticks) ───
-    let digitScores = Array(10).fill(0);
-    const window = Math.min(hist.length, 40);
-    const recentHist = hist.slice(-window);
-    const freqLast = {};
-    recentHist.forEach(d => freqLast[d] = (freqLast[d] || 0) + 1);
-    
-    // MÁS frecuente = MÁS probable que salga = MEJOR para Differs (queremos que NO salga)
-    // Buscamos el dígito MÁS frecuente para apostar DIFFERS contra él
-    for (let d = 0; d <= 9; d++) digitScores[d] += (freqLast[d] || 0) * 10;
-    
-    // ─── TRANSICIONES: Qué dígito suele SEGUIR al actual ───
-    const lastD = hist[hist.length - 1];
-    for (let d = 0; d <= 9; d++) {
-        const t = botState.digitTransitions[`${lastD}->${d}`] || 0;
-        digitScores[d] += t * 15;
-    }
+    const windowSize = 6;
+    if (botState.digitHistory.length < windowSize || botState.priceHistory.length < windowSize) return null;
 
-    // ─── FIBONACCI: Patrones de repetición ───
-    FIBO_SECUENCE.forEach((steps) => {
-        const index = hist.length - 1 - steps;
-        if (index >= 0) digitScores[hist[index]] += 30;
-    });
+    const recentDigits = botState.digitHistory.slice(-windowSize);
+    const recentPrices = botState.priceHistory.slice(-windowSize);
 
-    // ─── SELECCIÓN: Elegimos el dígito con MAYOR score (más frecuente/probable) ───
-    // Para DIFFERS: apostamos que NO saldrá este dígito
-    // Si un dígito sale mucho → alta probabilidad de repetir → pero 90% de que NO sea exactamente ÉL
-    let bestDigit = '5';
-    let maxScore = -1;
-    for (let d = 0; d <= 9; d++) {
-        const noise = Math.random() * 3; // Ruido para romper empates
-        if ((digitScores[d] + noise) > maxScore) { 
-            maxScore = digitScores[d] + noise; 
-            bestDigit = String(d); 
+    // Buscar si algún dígito aparece >= 3 veces en la ventana ultra-corta
+    const counts = {};
+    let anomalyDigit = null;
+    let maxCount = 0;
+    
+    for (const num of recentDigits) {
+        counts[num] = (counts[num] || 0) + 1;
+        if (counts[num] > maxCount) {
+            maxCount = counts[num];
+            if (maxCount >= 3) {
+                anomalyDigit = num.toString();
+            }
         }
     }
+
+    // No hay anomalía real, seguimos acechando en silencio
+    if (!anomalyDigit) return null; 
+
+    // Filtro Físico de Movimiento Real (Verificar que el precio no esté atascado)
+    const maxPrice = Math.max(...recentPrices);
+    const minPrice = Math.min(...recentPrices);
+    const movement = maxPrice - minPrice;
     
-    console.log(`🎯 [BARRIER] Análisis: NO-${bestDigit} (más frecuente) | Scores: [${digitScores.map((s,i) => `${i}:${s}`).join(', ')}]`);
-    botState.currentBarrier = bestDigit;
-    return bestDigit;
+    // Si el precio apenas se movió (ej. 0.1 o 0.0), es un estancamiento, no una anomalía del RNG
+    if (movement < 0.2) return null; 
+
+    // Aquí hemos encontrado el Disparo Perfecto
+    if (botState.currentBarrier !== anomalyDigit) {
+        console.log(`🎯 [ANOMALY SNIPER] Cúmulo del dígito [${anomalyDigit}] detectado (${maxCount} apariciones). Fluctuación precio: ${movement.toFixed(2)}. BLOQUEADO.`);
+        botState.currentBarrier = anomalyDigit;
+    }
+    
+    return anomalyDigit;
 }
 
 // [v20.10] Analiza si es más seguro usar Under-9 (Excluye 9) o Over-0 (Excluye 0)
@@ -482,18 +469,16 @@ function executeFlashMirrorFire() {
 
     if (isRecovery && botState.waitingForRecovery) return;
 
-    // [MODO SELECTIVO] Racha 3 para normal, 1 para rescate (rescate necesita velocidad)
-    const requiredGhost = isRecovery ? 1 : 3; 
-
-    if (botState.ghostStreak < requiredGhost) return;
-    
-    botState.isBuying = true;
-    botState.lastTradeTime = Date.now();
     const curr = botState.currency || 'USD'; 
 
     if (isRecovery) {
-        // [TÉCNICA DE MUROS] Solo para Rescate (90% Prob)
+        // [MODO RESCATE] Disparo rápido asistido por Smart Rabbit
+        if (botState.ghostStreak < 1) return;
+        
+        botState.isBuying = true;
+        botState.lastTradeTime = Date.now();
         botState.waitingForRecovery = true; 
+        
         const hole = getOptimalRabbitHole();
         const rabbitStake = (botState.stake * 10).toFixed(2); 
         
@@ -504,9 +489,13 @@ function executeFlashMirrorFire() {
             parameters: { amount: parseFloat(rabbitStake), basis: 'stake', contract_type: hole.type, currency: curr, symbol: SYMBOL, duration: 1, duration_unit: 't', barrier: hole.barrier }
         }));
     } else {
-        // [TÉCNICA DIFFERS] Para trades normales ($1)
-        const barrier = botState.nextBarrier || chooseBestBarrier();
-        console.log(`🛒 [OPERACIÓN] Técnica: DIGITDIFF (No ${barrier}) | Stake: $${botState.stake}`);
+        // [ANOMALY SNIPER] Trades normales ($1). Solo dispara bajo condición extrema.
+        const barrier = chooseBestBarrier();
+        if (!barrier) return; // 🤫 Esperando silenciosamente...
+
+        botState.isBuying = true;
+        botState.lastTradeTime = Date.now();
+        console.log(`🛒 [DISPARO PERFECTO] Técnica: DIGITDIFF (No ${barrier}) | Stake: $${botState.stake}`);
         
         ws.send(JSON.stringify({
             buy: 1, price: botState.stake,
