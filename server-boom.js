@@ -195,7 +195,7 @@ function connectDeriv() {
     ws = new WebSocket(process.env.DERIV_WS_URL || `wss://ws.derivws.com/websockets/v3?app_id=${APP_ID}`);
 
     ws.on('open', () => {
-        console.log("🚀 v20.49 ONLINE [STABLE-FORCE]");
+        console.log("🚀 v20.51 ONLINE [RESCUE-SPECIALIST]");
         const token = process.env.DERIV_TOKEN_DEMO || process.env.DERIV_TOKEN_REAL || DERIV_TOKEN_DEMO;
         ws.send(JSON.stringify({ authorize: token }));
     });
@@ -380,37 +380,31 @@ function executeFlashMirrorFire() {
     
     botState.isBuying = true;
     botState.lastTradeTime = Date.now();
-    const curr = botState.currency || 'USD'; // Usamos la moneda detectada
+    const curr = botState.currency || 'USD'; 
 
     if (isRecovery) {
+        // [TÉCNICA DE MUROS] Solo para Rescate (90% Prob)
         botState.waitingForRecovery = true; 
         const hole = getOptimalRabbitHole();
-        const rabbitStake = (botState.stake * 10).toFixed(2); // Usamos stake dinámico
+        const rabbitStake = (botState.stake * 10).toFixed(2); 
         
-        console.log(`🛡️ [OPERACIÓN RESCATE] Enviando Stake: $${rabbitStake} | Barrera: ${hole.barrier}`);
+        console.log(`🛡️ [RESCATE] Técnica: ${hole.type} ${hole.barrier} | Stake: $${rabbitStake}`);
         
         ws.send(JSON.stringify({
             buy: 1, price: parseFloat(rabbitStake),
             parameters: { amount: parseFloat(rabbitStake), basis: 'stake', contract_type: hole.type, currency: curr, symbol: SYMBOL, duration: 1, duration_unit: 't', barrier: hole.barrier }
         }));
-        botState.pendingSignal = null;
     } else {
-        const barrier = botState.nextBarrier;
-        console.log(`🛒 [OPERACIÓN REGULAR] Enviando Stake: $${botState.stake} | Barrera: ${barrier}`);
+        // [TÉCNICA DIFFERS] Para trades normales ($1)
+        const barrier = botState.nextBarrier || chooseBestBarrier();
+        console.log(`🛒 [OPERACIÓN] Técnica: DIGITDIFF (No ${barrier}) | Stake: $${botState.stake}`);
         
-        if (String(barrier) === String(botState.lastBarrierUsed)) {
-            botState.barrierUsageCount++;
-        } else {
-            botState.lastBarrierUsed = barrier;
-            botState.barrierUsageCount = 1;
-        }
-
         ws.send(JSON.stringify({
             buy: 1, price: botState.stake,
             parameters: { amount: botState.stake, basis: 'stake', contract_type: 'DIGITDIFF', currency: curr, symbol: SYMBOL, duration: 1, duration_unit: 't', barrier: barrier }
         }));
-        botState.pendingSignal = null;
     }
+    botState.pendingSignal = null;
 }
 
 const PORT = process.env.PORT || 8080;
