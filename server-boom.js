@@ -259,12 +259,13 @@ function connectDeriv() {
             if (c.status === 'won' || c.status === 'lost') {
                 const profit = parseFloat(c.profit);
                 const isDiffer = c.contract_type === 'DIGITDIFF';
+                const exitDigit = c.exit_tick ? String(c.exit_tick).slice(-1) : '?';
 
                 let displayBarrier = '';
                 if (isDiffer) {
-                    displayBarrier = `🎯 NO [${c.barrier}]`;
+                    displayBarrier = `🎯 NO [${c.barrier}] | SALIÓ [${exitDigit}]`;
                 } else {
-                    displayBarrier = c.contract_type === 'DIGITUNDER' ? '🐇 ESQUIVO [9]' : '🐇 ESQUIVO [0]';
+                    displayBarrier = c.contract_type === 'DIGITUNDER' ? `🐇 ESQUIVO [9] | SALIÓ [${exitDigit}]` : `🐇 ESQUIVO [0] | SALIÓ [${exitDigit}]`;
                 }
 
                 botState.tradeHistory.unshift({
@@ -316,6 +317,17 @@ function connectDeriv() {
 function executeFlashMirrorFire() {
     if (!ws || ws.readyState !== WebSocket.OPEN || !botState.pendingSignal || botState.isBuying || botState.activeContractId || botState.secondaryContractId) return;
     
+    // [FRANKLIN GUARDIAN] Verificación de Metas Diarias
+    const hasReachedTP = botState.takeProfit > 0 && botState.dailyProfit >= botState.takeProfit;
+    const hasReachedSL = botState.maxDailyLoss > 0 && botState.dailyLoss >= botState.maxDailyLoss;
+    if (hasReachedTP || hasReachedSL) {
+        if (botState.isRunning) {
+            botState.isRunning = false;
+            console.log(`🛑 [STOP] Meta Alcanzada. Profit: ${botState.dailyProfit.toFixed(2)} / Loss: ${botState.dailyLoss.toFixed(2)}`);
+        }
+        return;
+    }
+
     const isRecovery = botState.recoveryActive;
     if (isRecovery && botState.waitingForRecovery) return;
 
