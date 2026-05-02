@@ -97,7 +97,7 @@ function chooseBestBarrier() {
         counts[num] = (counts[num] || 0) + 1;
         if (counts[num] > maxCount) {
             maxCount = counts[num];
-            if (maxCount >= 4) {
+            if (maxCount >= 5) {
                 anomalyDigit = num.toString();
             }
         }
