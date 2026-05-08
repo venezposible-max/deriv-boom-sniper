@@ -1,9 +1,9 @@
 /**
  * ============================================================
- *  DIFFERS SNIPER ENGINE v1.0
- *  Estrategia: DIFFERS — El último dígito NO será X
- *  Probabilidad de ganar: ~90% por operación
- *  Símbolo: R_10 (Volatility 10 índex — más lento, más predecible para dígitos)
+ *  EL FÉNIX ENGINE v2.0
+ *  Estrategias: DIFFERS + OVER/UNDER (Modo Dual)
+ *  Markov Chain + Shannon Entropy + Hidra Recovery
+ *  Símbolo: Volatility Index (R_10/R_25/R_50/R_100)
  * ============================================================
  */
 
@@ -53,13 +53,17 @@ let botState = {
     activeContractId: null,
     tradeCount: 0,
     takeProfit: 10,                // Meta de ganancia diaria
-    // ─── LA HIDRA: Sistema de Recuperación de 4 Capas ───
+    // ─── EL FÉNIX: Sistema de Recuperación Inteligente ───
     isRecoveryEnabled: false,  // Switch del usuario
-    recoveryLayer: 0,          // 0=Normal, 1=Espejo, 2=D'Alembert, 3=Freno
-    consecutiveLosses: 0,      // Pérdidas seguidas
-    lastLostBarrier: null,     // El dígito que nos hizo perder (para el Espejo)
-    dalembertStep: 0,          // Nivel actual del D'Alembert
-    emergencyWaitTicks: 0,     // Contador del freno de emergencia
+    recoveryLayer: 0,          // 0=Normal, 1=Espejo, 2=Fénix(Over/Under), 3=Freno
+    consecutiveLosses: 0,
+    lastLostBarrier: null,
+    dalembertStep: 0,
+    emergencyWaitTicks: 0,
+    // ─── MARKOV + ENTROPÍA ───
+    currentContractType: 'DIGITDIFF', // DIGITDIFF o DIGITOVER/DIGITUNDER
+    shannonEntropy: 0,
+    markovEdge: 0,             // Ventaja detectada por Markov
 };
 
 // ─── CARGAR ESTADO PREVIO ──────────────────────────────────────
@@ -115,32 +119,39 @@ function chooseBestBarrier() {
         return mirrorBarrier;
     }
 
-    // ─── CAPA 2: D'ALEMBERT (Dígito Frío) ───
+    // ─── CAPA 2: FÉNIX (Over/Under con Markov) ───
     if (botState.isRecoveryEnabled && botState.recoveryLayer === 2) {
-        const subHistory = hist.slice(-range);
-        const freq = {};
-        for (let d = 0; d <= 9; d++) freq[d] = 0;
-        subHistory.forEach(d => freq[d]++);
-
-        let coldDigit = null;
-        let minFreq = Infinity;
-        const lastDigit = hist[hist.length - 1];
-
-        for (let d = 0; d <= 9; d++) {
-            if (d === lastDigit) continue;
-            if (freq[d] < minFreq) {
-                minFreq = freq[d];
-                coldDigit = d;
-            }
+        const markovSignal = getMarkovOverUnder(hist);
+        if (markovSignal) {
+            botState.currentContractType = markovSignal.type;
+            console.log(`🔥 [FÉNIX CAPA 2] ${markovSignal.label} | Prob: ${(markovSignal.prob*100).toFixed(1)}% | Edge: ${botState.markovEdge}%`);
+            return markovSignal.barrier;
         }
-
+        // Si Markov no tiene señal, usar Differs con dígito frío como fallback
+        const subH = hist.slice(-range);
+        const fq = {};
+        for (let d = 0; d <= 9; d++) fq[d] = 0;
+        subH.forEach(d => fq[d]++);
+        let coldDigit = null, minF = Infinity;
+        for (let d = 0; d <= 9; d++) {
+            if (d === hist[hist.length-1]) continue;
+            if (fq[d] < minF) { minF = fq[d]; coldDigit = d; }
+        }
         if (coldDigit !== null) {
-            console.log(`🧊 [HIDRA CAPA 2] D'ALEMBERT: Dígito frío ${coldDigit} (${minFreq}/${range}) | Step: ${botState.dalembertStep}`);
+            botState.currentContractType = 'DIGITDIFF';
             return String(coldDigit);
         }
     }
 
-    // ─── CAPA 0: MODO NORMAL (Dígito Caliente) ───
+    // ─── CAPA 0: MODO NORMAL (Markov + Entropía) ───
+    botState.currentContractType = 'DIGITDIFF';
+    
+    // Calcular entropía
+    const entropy = calcEntropy(hist, range);
+    botState.shannonEntropy = entropy.toFixed(2);
+    
+    // Si la entropía es muy alta (>3.25), el mercado es caótico, no operar
+    if (entropy > 3.25) return null;
     const subHistory = hist.slice(-range);
     const freq = {};
     for (let d = 0; d <= 9; d++) freq[d] = 0;
@@ -173,6 +184,68 @@ function saveState() {
     try {
         fs.writeFileSync(STATE_FILE, JSON.stringify({ botState }));
     } catch (e) { }
+}
+
+// ─── CADENA DE MARKOV: Tabla de transiciones dígito→dígito ───
+function buildMarkovMatrix(hist) {
+    const matrix = {};
+    for (let i = 0; i <= 9; i++) {
+        matrix[i] = {};
+        for (let j = 0; j <= 9; j++) matrix[i][j] = 0;
+    }
+    for (let k = 1; k < hist.length; k++) {
+        matrix[hist[k-1]][hist[k]]++;
+    }
+    // Normalizar a probabilidades
+    for (let i = 0; i <= 9; i++) {
+        const total = Object.values(matrix[i]).reduce((a,b) => a+b, 0);
+        if (total > 0) {
+            for (let j = 0; j <= 9; j++) matrix[i][j] = matrix[i][j] / total;
+        }
+    }
+    return matrix;
+}
+
+// ─── ENTROPÍA DE SHANNON: Mide el caos del mercado ───
+function calcEntropy(hist, range) {
+    const sub = hist.slice(-range);
+    const freq = {};
+    for (let d = 0; d <= 9; d++) freq[d] = 0;
+    sub.forEach(d => freq[d]++);
+    let entropy = 0;
+    for (let d = 0; d <= 9; d++) {
+        const p = freq[d] / sub.length;
+        if (p > 0) entropy -= p * Math.log2(p);
+    }
+    return entropy; // Max = 3.32 (totalmente aleatorio)
+}
+
+// ─── MARKOV: Decidir Over o Under basado en transiciones ───
+function getMarkovOverUnder(hist) {
+    if (hist.length < 100) return null;
+    const matrix = buildMarkovMatrix(hist.slice(-200));
+    const lastDigit = hist[hist.length - 1];
+    const transitions = matrix[lastDigit];
+    
+    // Probabilidad de que el siguiente dígito sea > 4 (OVER)
+    let probOver = 0;
+    for (let d = 5; d <= 9; d++) probOver += transitions[d];
+    
+    // Probabilidad de que sea < 5 (UNDER)
+    let probUnder = 1 - probOver;
+    
+    const edge = Math.abs(probOver - 0.5); // Desviación del 50/50
+    botState.markovEdge = (edge * 100).toFixed(1);
+    
+    // Solo operar si hay al menos 5% de ventaja
+    if (edge < 0.05) return null;
+    
+    if (probOver > 0.55) {
+        return { type: 'DIGITOVER', barrier: '4', prob: probOver, label: 'OVER 4' };
+    } else if (probUnder > 0.55) {
+        return { type: 'DIGITUNDER', barrier: '5', prob: probUnder, label: 'UNDER 5' };
+    }
+    return null;
 }
 
 // ─── SERVIDOR WEB ─────────────────────────────────────────────
@@ -451,30 +524,30 @@ function tryFireTrade() {
     
     botState.currentBarrier = barrier;
 
-    // ─── CALCULAR STAKE DINÁMICO (LA HIDRA) ───
-    let currentStake = botState.stake; // Stake base del usuario
+    // ─── CALCULAR STAKE DINÁMICO (EL FÉNIX) ───
+    let currentStake = botState.stake;
     let layerLabel = 'NORMAL';
+    let contractType = botState.currentContractType || 'DIGITDIFF';
 
     if (botState.isRecoveryEnabled) {
         if (botState.recoveryLayer === 1) {
-            // ESPEJO: stake × 1.5
             currentStake = botState.stake * 1.5;
             layerLabel = '🪞 ESPEJO';
+            contractType = 'DIGITDIFF';
         } else if (botState.recoveryLayer === 2) {
-            // D'ALEMBERT: stake + (step × 35% del stake)
             currentStake = botState.stake + (botState.dalembertStep * botState.stake * 0.35);
-            layerLabel = `🧊 D'ALEMBERT (Step ${botState.dalembertStep})`;
+            layerLabel = `🔥 FÉNIX (${contractType === 'DIGITDIFF' ? 'Differs' : contractType.includes('OVER') ? 'OVER' : 'UNDER'})`;
         }
     }
 
-    // Construir la orden Differs
+    // Construir la orden
     const req = {
         buy: 1,
         price: currentStake,
         parameters: {
             amount: currentStake,
             basis: 'stake',
-            contract_type: 'DIGITDIFF',
+            contract_type: contractType,
             currency: 'USD',
             symbol: SYMBOL,
             duration: 1,
@@ -486,7 +559,8 @@ function tryFireTrade() {
     botState.isBuying = true;
     botState.lastTradeTime = now;
 
-    console.log(`🎲 DIFFERS SHOOT [${layerLabel}] | Barrera (NO-${barrier}) | Stake: $${currentStake.toFixed(2)} | Últ.Dígito: ${botState.lastDigit}`);
+    const typeLabel = contractType === 'DIGITDIFF' ? `NO-${barrier}` : (contractType.includes('OVER') ? `OVER ${barrier}` : `UNDER ${barrier}`);
+    console.log(`🎲 SHOOT [${layerLabel}] | ${typeLabel} | Stake: $${currentStake.toFixed(2)} | Entropy: ${botState.shannonEntropy}`);
     ws.send(JSON.stringify(req));
 }
 
@@ -499,13 +573,15 @@ function finalizeTrade(c) {
     botState.totalTradesSession++;
     botState.tradeCount++;
 
-    const layerNames = ['NORMAL', '🪞 ESPEJO', '🧊 D\'ALEMBERT', '🛑 FRENO'];
+    const layerNames = ['NORMAL', '🪞 ESPEJO', '🔥 FÉNIX', '🛑 FRENO'];
     const currentLayerName = botState.isRecoveryEnabled ? layerNames[botState.recoveryLayer] : 'NORMAL';
+    const cType = botState.currentContractType || 'DIGITDIFF';
+    const typeLabel = cType === 'DIGITDIFF' ? `DIFFERS (NO-${botState.currentBarrier})` : (cType.includes('OVER') ? `OVER ${botState.currentBarrier}` : `UNDER ${botState.currentBarrier}`);
 
     if (isWin) {
         botState.winsSession++;
         botState.dailyProfit += profit;
-        console.log(`✅ WIN +$${profit.toFixed(2)} [${currentLayerName}] | Barrera NO-${botState.currentBarrier} AGUANTÓ`);
+        console.log(`✅ WIN +$${profit.toFixed(2)} [${currentLayerName}] | ${typeLabel} AGUANTÓ`);
 
         // ─── LA HIDRA: Transiciones al GANAR ───
         if (botState.isRecoveryEnabled) {
@@ -518,12 +594,12 @@ function finalizeTrade(c) {
                 // D'Alembert ganó → bajar un step
                 botState.dalembertStep--;
                 if (botState.dalembertStep <= 0) {
-                    console.log(`🐍 [HIDRA] D'Alembert completado. Volviendo a Capa 0.`);
+                    console.log(`🐍 [FÉNIX] D'Alembert completado. Volviendo a Capa 0.`);
                     botState.dalembertStep = 0;
                     botState.recoveryLayer = 0;
                     botState.consecutiveLosses = 0;
                 } else {
-                    console.log(`🐍 [HIDRA] D'Alembert bajó a Step ${botState.dalembertStep}.`);
+                    console.log(`🐍 [FÉNIX] D'Alembert bajó a Step ${botState.dalembertStep}.`);
                 }
             } else {
                 // Normal win → reset
@@ -533,9 +609,9 @@ function finalizeTrade(c) {
     } else {
         botState.lossesSession++;
         botState.dailyLoss += Math.abs(profit);
-        console.log(`❌ LOSS -$${Math.abs(profit).toFixed(2)} [${currentLayerName}] | El dígito SÍ fue ${botState.currentBarrier}`);
+        console.log(`❌ LOSS -$${Math.abs(profit).toFixed(2)} [${currentLayerName}] | ${typeLabel}`);
 
-        // ─── LA HIDRA: Transiciones al PERDER ───
+        // ─── EL FÉNIX: Transiciones al PERDER ───
         if (botState.isRecoveryEnabled) {
             botState.consecutiveLosses++;
 
@@ -543,21 +619,20 @@ function finalizeTrade(c) {
                 // Normal → Espejo
                 botState.lastLostBarrier = botState.currentBarrier;
                 botState.recoveryLayer = 1;
-                console.log(`🐍 [HIDRA] Pérdida detectada. Activando Capa 1 (Espejo): NO-${botState.currentBarrier}`);
+                console.log(`🐍 [FÉNIX] Pérdida detectada. Activando Capa 1 (Espejo): NO-${botState.currentBarrier}`);
             } else if (botState.recoveryLayer === 1) {
-                // Espejo falló → D'Alembert
                 botState.recoveryLayer = 2;
                 botState.dalembertStep = 1;
-                console.log(`🐍 [HIDRA] Espejo FALLÓ (raro, 1%). Activando Capa 2 (D'Alembert Step 1).`);
+                console.log(`🐍 [FÉNIX] Espejo FALLÓ. Activando Capa 2 (Over/Under con Markov).`);
             } else if (botState.recoveryLayer === 2) {
                 // D'Alembert pérdida → subir step o activar freno
                 botState.dalembertStep++;
                 if (botState.consecutiveLosses >= 3) {
                     botState.recoveryLayer = 3;
                     botState.emergencyWaitTicks = 0;
-                    console.log(`🐍 [HIDRA] 3 pérdidas seguidas. Activando Capa 3 (FRENO DE EMERGENCIA). Esperando 50 ticks...`);
+                    console.log(`🐍 [FÉNIX] 3 pérdidas seguidas. FRENO DE EMERGENCIA. Reconstruyendo Markov en 50 ticks...`);
                 } else {
-                    console.log(`🐍 [HIDRA] D'Alembert subió a Step ${botState.dalembertStep}.`);
+                    console.log(`🐍 [FÉNIX] Fénix Step ${botState.dalembertStep}.`);
                 }
             }
         }
@@ -566,10 +641,11 @@ function finalizeTrade(c) {
     // Guardar en historial
     const timeVE = new Date().toLocaleString('es-VE', { timeZone: 'America/Caracas' });
     botState.tradeHistory.unshift({
-        type: `DIFFERS (NO-${botState.currentBarrier})`,
+        type: typeLabel,
         profit: profit,
         time: timeVE,
         barrier: botState.currentBarrier,
+        contractType: cType,
         result: isWin ? 'WIN ✅' : 'LOSS ❌',
         lastDigit: botState.lastDigit,
         layer: currentLayerName
