@@ -71,14 +71,13 @@ if (fs.existsSync(STATE_FILE)) {
     }
 }
 
-// ─── LÓGICA CENTRAL: ELEGIR EL BARRERA (DÍGITO A DIFERIR) ────
+// ─── LÓGICA CENTRAL: ELEGIR LA BARRERA (DÍGITO A DIFERIR) ────
 /**
- * ESTRATEGIA SNIPER CRIPTOGRÁFICA SHA-256 (Edición Ilimitada):
- * 1. Filtro Sniper: Identifica si hay un dígito sobrecalentado.
- * 2. Entropía el Precio: Toma el último precio recibido.
- * 3. Hashing SHA-256: Genera un hash único del precio.
- * 4. Barrera Dinámica: Si hay un Sniper disponible, usa el último dígito numérico 
- *    del hash como barrera final para máxima impredecibilidad.
+ * ESTRATEGIA SNIPER ESTADÍSTICA PURA:
+ * 1. Analiza los últimos N ticks (scanRange) y cuenta la frecuencia de cada dígito.
+ * 2. Identifica el dígito "caliente" (el que MÁS ha salido recientemente).
+ * 3. Usa ESE dígito como barrera: apuesta a que el próximo NO será ese.
+ * 4. Lógica: si un dígito está sobrecalentado, estadísticamente tiende a enfriarse.
  */
 function chooseBestBarrier() {
     const hist = botState.digitHistory;
@@ -87,7 +86,7 @@ function chooseBestBarrier() {
 
     if (hist.length < 50 || !lastPrice) return null;
 
-    // A. ¿Hay una oportunidad Sniper por estadística?
+    // Tomar los últimos N ticks para el análisis
     const subHistory = hist.slice(-range);
     const freq = {};
     for (let d = 0; d <= 9; d++) freq[d] = 0;
@@ -100,32 +99,22 @@ function chooseBestBarrier() {
     let maxFreq = -1;
 
     for (let d = 0; d <= 9; d++) {
-        if (d === lastDigit) continue;
-        if (!recent5.includes(d)) continue;
+        if (d === lastDigit) continue;      // No apostar contra el que acaba de salir
+        if (!recent5.includes(d)) continue; // Solo considerar dígitos activos recientemente
         if (freq[d] > maxFreq) {
             maxFreq = freq[d];
             hotDigit = d;
         }
     }
 
-    // Si no hay un dígito lo suficientemente caliente, no hacemos nada
+    // Si no hay un dígito lo suficientemente caliente, no operamos
     const threshold = Math.floor(range * 0.12);
     if (hotDigit === null || freq[hotDigit] < threshold) return null;
 
-    // B. GENERACIÓN DE BARRERA CRIPTOGRÁFICA (SHA-256)
-    // El precio actual se convierte en nuestra semilla de caos
-    const hash = crypto.createHash('sha256').update(String(lastPrice)).digest('hex');
+    // LA BARRERA ES EL DÍGITO CALIENTE — la estadística decide la apuesta
+    console.log(`🎯 [SNIPER] Dígito caliente: ${hotDigit} (${maxFreq}/${range} = ${((maxFreq/range)*100).toFixed(1)}%) | Barrera: NO-${hotDigit}`);
     
-    // Extraemos todos los números del hash hexadecimal
-    const numbersInHash = hash.match(/\d/g);
-    if (!numbersInHash || numbersInHash.length === 0) return String(hotDigit);
-
-    // Tomamos el último dígito numérico del hash como nuestra barrera "mágica"
-    const cryptoDigit = numbersInHash[numbersInHash.length - 1];
-
-    console.log(`🔐 [CRYPTO ENGINE] Precio: ${lastPrice} -> Hash: ${hash.substring(0,10)}... -> Barrera: ${cryptoDigit}`);
-    
-    return String(cryptoDigit);
+    return String(hotDigit);
 }
 
 // ─── GUARDAR ESTADO ───────────────────────────────────────────
