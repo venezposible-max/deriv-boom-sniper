@@ -52,6 +52,7 @@ let botState = {
     isBuying: false,
     activeContractId: null,
     tradeCount: 0,
+    takeProfit: 10,                // Meta de ganancia diaria
     // ─── LA HIDRA: Sistema de Recuperación de 4 Capas ───
     isRecoveryEnabled: false,  // Switch del usuario
     recoveryLayer: 0,          // 0=Normal, 1=Espejo, 2=D'Alembert, 3=Freno
@@ -203,8 +204,11 @@ app.post('/differs/control', (req, res) => {
     if (action === 'START') {
         if (stake) botState.stake = Math.max(0.35, parseFloat(stake));
         if (maxDailyLoss) botState.maxDailyLoss = parseFloat(maxDailyLoss);
+        if (req.body.takeProfit) botState.takeProfit = parseFloat(req.body.takeProfit);
+        if (req.body.isRecoveryEnabled !== undefined) botState.isRecoveryEnabled = !!req.body.isRecoveryEnabled;
         botState.isRunning = true;
-        console.log(`▶️ DIFFERS SNIPER INICIADO | Stake: $${botState.stake} | Símbolo: ${SYMBOL}`);
+        saveState();
+        console.log(`▶️ DIFFERS SNIPER INICIADO | Stake: $${botState.stake} | MaxLoss: $${botState.maxDailyLoss} | Meta: $${botState.takeProfit} | Símbolo: ${SYMBOL}`);
         return res.json({ success: true, message: 'Differs Sniper Activado ✅' });
     }
     if (action === 'STOP') {
@@ -233,6 +237,15 @@ app.post('/differs/control', (req, res) => {
         if (cooldownMs) botState.cooldownMs = parseInt(cooldownMs);
         saveState();
         return res.json({ success: true, message: 'Configuración actualizada' });
+    }
+    if (action === 'SYNC') {
+        // Sincronizar todos los valores de config sin iniciar/detener el bot
+        if (req.body.stake) botState.stake = Math.max(0.35, parseFloat(req.body.stake));
+        if (req.body.maxDailyLoss) botState.maxDailyLoss = parseFloat(req.body.maxDailyLoss);
+        if (req.body.takeProfit) botState.takeProfit = parseFloat(req.body.takeProfit);
+        if (req.body.isRecoveryEnabled !== undefined) botState.isRecoveryEnabled = !!req.body.isRecoveryEnabled;
+        saveState();
+        return res.json({ success: true, message: 'Config sincronizada' });
     }
 
     res.status(400).json({ success: false, error: 'Acción inválida' });

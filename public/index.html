@@ -535,6 +535,30 @@
             // Balance
             document.getElementById('balanceDisplay').innerText = `SALDO: $${parseFloat(data.balance || 0).toFixed(2)}`;
 
+            // SINCRONIZAR INPUTS DE CONFIGURACIÓN DESDE EL SERVIDOR
+            const stakeInput = document.getElementById('stake');
+            const maxLossInput = document.getElementById('maxDailyLoss');
+            const tpInput = document.getElementById('takeProfit');
+
+            // Solo actualizar si el input NO está enfocado (el usuario no está escribiendo)
+            if (document.activeElement !== stakeInput && data.stake) {
+                stakeInput.value = parseFloat(data.stake).toFixed(2);
+            }
+            if (document.activeElement !== maxLossInput && data.maxDailyLoss) {
+                maxLossInput.value = parseFloat(data.maxDailyLoss);
+            }
+            if (document.activeElement !== tpInput && data.takeProfit) {
+                tpInput.value = parseFloat(data.takeProfit);
+            }
+
+            // Bloquear inputs cuando el bot está corriendo
+            stakeInput.disabled = isRunning;
+            maxLossInput.disabled = isRunning;
+            tpInput.disabled = isRunning;
+            stakeInput.style.opacity = isRunning ? '0.5' : '1';
+            maxLossInput.style.opacity = isRunning ? '0.5' : '1';
+            tpInput.style.opacity = isRunning ? '0.5' : '1';
+
             // Price
             const price = parseFloat(data.lastTickPrice || 0);
             document.getElementById('priceDisplay').innerText = price > 0 ? price.toFixed(3) : '---';
