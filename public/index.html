@@ -566,19 +566,17 @@
             const price = parseFloat(data.lastTickPrice || 0);
             document.getElementById('priceDisplay').innerText = price > 0 ? price.toFixed(3) : '---';
 
-            // [FRANKLIN v16.1] SYNC INDICATORS
+            // SYNC RSI INDICATOR
             const rsi = parseFloat(data.lastRSI || 50);
-            const ema = parseFloat(data.lastEMA || 0);
             const rsiDisp = document.getElementById('rsiValueDisplay');
-            const emaDisp = document.getElementById('emaValueDisplay');
-            
-            rsiDisp.innerText = rsi.toFixed(2);
-            emaDisp.innerText = ema.toFixed(3);
+            if (rsiDisp) rsiDisp.innerText = rsi.toFixed(2);
 
-            // Estilos dinámicos
-            document.getElementById('rsiBadge').style.borderColor = (rsi > 75 || rsi < 25) ? '#34d399' : 'rgba(255,255,255,0.1)';
-            document.getElementById('rsiBadge').style.color = (rsi > 75 || rsi < 25) ? '#34d399' : '#fff';
-            document.getElementById('emaBadge').style.borderColor = (price > ema) ? '#34d399' : '#f87171';
+            // Estilos dinámicos RSI
+            const rsiBadge = document.getElementById('rsiBadge');
+            if (rsiBadge) {
+                rsiBadge.style.borderColor = (rsi > 75 || rsi < 25) ? '#34d399' : 'rgba(255,255,255,0.1)';
+                rsiBadge.style.color = (rsi > 75 || rsi < 25) ? '#34d399' : '#fff';
+            }
 
             // Last digit
             const ld = document.getElementById('lastDigitBadge');
