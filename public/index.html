@@ -413,16 +413,19 @@
             </div>
         </div>
 
-        <!-- RECOVERY SWITCH -->
+        <!-- RECOVERY SWITCH (LA HIDRA) -->
         <div class="recovery-box" id="recoveryBox">
             <div class="rec-label">
-                🛡️ <span id="recoveryLabelTitle">Recuperar Tras Pérdida</span>
-                <span id="recoveryLabelSub" style="font-size: 9px; opacity: 0.6; font-weight: 400; display: block;">Escudo One-Shot Activado</span>
+                🐍 <span id="recoveryLabelTitle">La Hidra: Recuperar Tras Pérdida</span>
+                <span id="recoveryLabelSub" style="font-size: 9px; opacity: 0.6; font-weight: 400; display: block;">Espejo + D'Alembert + Freno Automático</span>
             </div>
             <label class="switch">
                 <input type="checkbox" id="isRecoveryEnabled" onchange="toggleRecovery(this.checked); syncConfig();">
                 <span class="slider"></span>
             </label>
+        </div>
+        <div id="hidraStatus" style="display:none; text-align:center; padding:10px 14px; margin-bottom:16px; border-radius:12px; background:rgba(52,211,153,0.05); border:1px solid rgba(52,211,153,0.15); font-size:12px; font-weight:700;">
+            <span id="hidraLayerText">CAPA 0: NORMAL</span>
         </div>
 
         <button id="btnToggle" class="btn-main btn-start" onclick="toggleBot()">
@@ -610,6 +613,23 @@
             if (!isRunning) {
                 document.getElementById('isRecoveryEnabled').checked = !!data.isRecoveryEnabled;
                 document.getElementById('recoveryBox').className = 'recovery-box' + (data.isRecoveryEnabled ? ' active' : '');
+            }
+
+            // HIDRA LAYER STATUS
+            const hidraBox = document.getElementById('hidraStatus');
+            if (data.isRecoveryEnabled && data.recoveryLayer > 0) {
+                hidraBox.style.display = 'block';
+                const layerColors = { 1: '#a78bfa', 2: '#38bdf8', 3: '#f87171' };
+                const layerTexts = {
+                    1: `🪞 CAPA 1: GOLPE ESPEJO (Barrera NO-${data.lastLostBarrier || '?'})`,
+                    2: `🧊 CAPA 2: D'ALEMBERT (Step ${data.dalembertStep || 1})`,
+                    3: `🛑 CAPA 3: FRENO (${data.emergencyWaitTicks || 0}/50 ticks)`
+                };
+                document.getElementById('hidraLayerText').innerText = layerTexts[data.recoveryLayer] || 'NORMAL';
+                hidraBox.style.borderColor = layerColors[data.recoveryLayer] || 'rgba(52,211,153,0.15)';
+                hidraBox.style.color = layerColors[data.recoveryLayer] || '#34d399';
+            } else {
+                hidraBox.style.display = 'none';
             }
 
             // ACCOUNT THEME UPDATE

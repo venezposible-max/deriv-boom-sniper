@@ -39,7 +39,7 @@ let botState = {
     currentContractId: null,
     lastTickPrice: 0,
     lastDigit: null,
-    digitHistory: [],         // Historial de últimos 50 dígitos vistos
+    digitHistory: [],         // Historial de últimos 300 dígitos vistos
     digitFrequency: {},        // Frecuencia de aparición de cada dígito
     currentBarrier: null,      // El dígito que actualmente "differimos"
     scanRange: 100,            // PRECISIÓN FIJA: 100 Ticks (Más estable)
@@ -52,6 +52,13 @@ let botState = {
     isBuying: false,
     activeContractId: null,
     tradeCount: 0,
+    // ─── LA HIDRA: Sistema de Recuperación de 4 Capas ───
+    isRecoveryEnabled: false,  // Switch del usuario
+    recoveryLayer: 0,          // 0=Normal, 1=Espejo, 2=D'Alembert, 3=Freno
+    consecutiveLosses: 0,      // Pérdidas seguidas
+    lastLostBarrier: null,     // El dígito que nos hizo perder (para el Espejo)
+    dalembertStep: 0,          // Nivel actual del D'Alembert
+    emergencyWaitTicks: 0,     // Contador del freno de emergencia
 };
 
 // ─── CARGAR ESTADO PREVIO ──────────────────────────────────────
@@ -73,11 +80,11 @@ if (fs.existsSync(STATE_FILE)) {
 
 // ─── LÓGICA CENTRAL: ELEGIR LA BARRERA (DÍGITO A DIFERIR) ────
 /**
- * ESTRATEGIA SNIPER ESTADÍSTICA PURA:
- * 1. Analiza los últimos N ticks (scanRange) y cuenta la frecuencia de cada dígito.
- * 2. Identifica el dígito "caliente" (el que MÁS ha salido recientemente).
- * 3. Usa ESE dígito como barrera: apuesta a que el próximo NO será ese.
- * 4. Lógica: si un dígito está sobrecalentado, estadísticamente tiende a enfriarse.
+ * ESTRATEGIA SNIPER + SISTEMA HIDRA:
+ * Capa 0 (Normal): Barrera = dígito caliente (el que más ha salido)
+ * Capa 1 (Espejo): Barrera = el dígito que nos hizo perder (99% de no repetir)
+ * Capa 2 (D'Alembert): Barrera = dígito más frío (el que menos ha salido)
+ * Capa 3 (Freno): No opera, espera 50 ticks
  */
 function chooseBestBarrier() {
     const hist = botState.digitHistory;
@@ -86,7 +93,53 @@ function chooseBestBarrier() {
 
     if (hist.length < 50 || !lastPrice) return null;
 
-    // Tomar los últimos N ticks para el análisis
+    // ─── CAPA 3: FRENO DE EMERGENCIA ───
+    if (botState.isRecoveryEnabled && botState.recoveryLayer === 3) {
+        botState.emergencyWaitTicks++;
+        if (botState.emergencyWaitTicks >= 50) {
+            console.log(`🔄 [HIDRA] Freno completado. 50 ticks observados. Reseteando a Capa 0.`);
+            botState.recoveryLayer = 0;
+            botState.dalembertStep = 0;
+            botState.consecutiveLosses = 0;
+            botState.emergencyWaitTicks = 0;
+        } else {
+            return null; // No operar, solo observar
+        }
+    }
+
+    // ─── CAPA 1: GOLPE ESPEJO ───
+    if (botState.isRecoveryEnabled && botState.recoveryLayer === 1 && botState.lastLostBarrier !== null) {
+        const mirrorBarrier = String(botState.lastLostBarrier);
+        console.log(`🪞 [HIDRA CAPA 1] GOLPE ESPEJO: Repitiendo barrera NO-${mirrorBarrier} (99% de que no repita)`);
+        return mirrorBarrier;
+    }
+
+    // ─── CAPA 2: D'ALEMBERT (Dígito Frío) ───
+    if (botState.isRecoveryEnabled && botState.recoveryLayer === 2) {
+        const subHistory = hist.slice(-range);
+        const freq = {};
+        for (let d = 0; d <= 9; d++) freq[d] = 0;
+        subHistory.forEach(d => freq[d]++);
+
+        let coldDigit = null;
+        let minFreq = Infinity;
+        const lastDigit = hist[hist.length - 1];
+
+        for (let d = 0; d <= 9; d++) {
+            if (d === lastDigit) continue;
+            if (freq[d] < minFreq) {
+                minFreq = freq[d];
+                coldDigit = d;
+            }
+        }
+
+        if (coldDigit !== null) {
+            console.log(`🧊 [HIDRA CAPA 2] D'ALEMBERT: Dígito frío ${coldDigit} (${minFreq}/${range}) | Step: ${botState.dalembertStep}`);
+            return String(coldDigit);
+        }
+    }
+
+    // ─── CAPA 0: MODO NORMAL (Dígito Caliente) ───
     const subHistory = hist.slice(-range);
     const freq = {};
     for (let d = 0; d <= 9; d++) freq[d] = 0;
@@ -99,21 +152,18 @@ function chooseBestBarrier() {
     let maxFreq = -1;
 
     for (let d = 0; d <= 9; d++) {
-        if (d === lastDigit) continue;      // No apostar contra el que acaba de salir
-        if (!recent5.includes(d)) continue; // Solo considerar dígitos activos recientemente
+        if (d === lastDigit) continue;
+        if (!recent5.includes(d)) continue;
         if (freq[d] > maxFreq) {
             maxFreq = freq[d];
             hotDigit = d;
         }
     }
 
-    // Si no hay un dígito lo suficientemente caliente, no operamos
     const threshold = Math.floor(range * 0.12);
     if (hotDigit === null || freq[hotDigit] < threshold) return null;
 
-    // LA BARRERA ES EL DÍGITO CALIENTE — la estadística decide la apuesta
     console.log(`🎯 [SNIPER] Dígito caliente: ${hotDigit} (${maxFreq}/${range} = ${((maxFreq/range)*100).toFixed(1)}%) | Barrera: NO-${hotDigit}`);
-    
     return String(hotDigit);
 }
 
@@ -382,32 +432,48 @@ function tryFireTrade() {
     // Necesitamos al menos 10 dígitos de historia para elegir barrera inteligente
     if (botState.digitHistory.length < 10) return;
 
-    // Elegir el mejor dígito barrera
+    // Elegir el mejor dígito barrera (La Hidra decide según la capa)
     const barrier = chooseBestBarrier();
-    if (!barrier) return; // SNIPER MODE: No dispara si no hay oportunidad clara
+    if (!barrier) return;
     
     botState.currentBarrier = barrier;
+
+    // ─── CALCULAR STAKE DINÁMICO (LA HIDRA) ───
+    let currentStake = botState.stake; // Stake base del usuario
+    let layerLabel = 'NORMAL';
+
+    if (botState.isRecoveryEnabled) {
+        if (botState.recoveryLayer === 1) {
+            // ESPEJO: stake × 1.5
+            currentStake = botState.stake * 1.5;
+            layerLabel = '🪞 ESPEJO';
+        } else if (botState.recoveryLayer === 2) {
+            // D'ALEMBERT: stake + (step × 35% del stake)
+            currentStake = botState.stake + (botState.dalembertStep * botState.stake * 0.35);
+            layerLabel = `🧊 D'ALEMBERT (Step ${botState.dalembertStep})`;
+        }
+    }
 
     // Construir la orden Differs
     const req = {
         buy: 1,
-        price: botState.stake,
+        price: currentStake,
         parameters: {
-            amount: botState.stake,
+            amount: currentStake,
             basis: 'stake',
             contract_type: 'DIGITDIFF',
             currency: 'USD',
             symbol: SYMBOL,
             duration: 1,
-            duration_unit: 't', // 1 tick
-            barrier: barrier    // El dígito del que differimos
+            duration_unit: 't',
+            barrier: barrier
         }
     };
 
     botState.isBuying = true;
     botState.lastTradeTime = now;
 
-    console.log(`🎲 DIFFERS SHOOT | Barrera (NO-${barrier}) | Stake: $${botState.stake} | Últ.Dígito: ${botState.lastDigit}`);
+    console.log(`🎲 DIFFERS SHOOT [${layerLabel}] | Barrera (NO-${barrier}) | Stake: $${currentStake.toFixed(2)} | Últ.Dígito: ${botState.lastDigit}`);
     ws.send(JSON.stringify(req));
 }
 
@@ -420,14 +486,68 @@ function finalizeTrade(c) {
     botState.totalTradesSession++;
     botState.tradeCount++;
 
+    const layerNames = ['NORMAL', '🪞 ESPEJO', '🧊 D\'ALEMBERT', '🛑 FRENO'];
+    const currentLayerName = botState.isRecoveryEnabled ? layerNames[botState.recoveryLayer] : 'NORMAL';
+
     if (isWin) {
         botState.winsSession++;
         botState.dailyProfit += profit;
-        console.log(`✅ WIN +$${profit.toFixed(2)} | Barrera NO-${botState.currentBarrier} AGUANTÓ`);
+        console.log(`✅ WIN +$${profit.toFixed(2)} [${currentLayerName}] | Barrera NO-${botState.currentBarrier} AGUANTÓ`);
+
+        // ─── LA HIDRA: Transiciones al GANAR ───
+        if (botState.isRecoveryEnabled) {
+            if (botState.recoveryLayer === 1) {
+                // Espejo ganó → volver a Normal
+                console.log(`🐍 [HIDRA] Espejo exitoso. Volviendo a Capa 0 (Normal).`);
+                botState.recoveryLayer = 0;
+                botState.consecutiveLosses = 0;
+            } else if (botState.recoveryLayer === 2) {
+                // D'Alembert ganó → bajar un step
+                botState.dalembertStep--;
+                if (botState.dalembertStep <= 0) {
+                    console.log(`🐍 [HIDRA] D'Alembert completado. Volviendo a Capa 0.`);
+                    botState.dalembertStep = 0;
+                    botState.recoveryLayer = 0;
+                    botState.consecutiveLosses = 0;
+                } else {
+                    console.log(`🐍 [HIDRA] D'Alembert bajó a Step ${botState.dalembertStep}.`);
+                }
+            } else {
+                // Normal win → reset
+                botState.consecutiveLosses = 0;
+            }
+        }
     } else {
         botState.lossesSession++;
         botState.dailyLoss += Math.abs(profit);
-        console.log(`❌ LOSS -$${Math.abs(profit).toFixed(2)} | El dígito SÍ fue ${botState.currentBarrier}`);
+        console.log(`❌ LOSS -$${Math.abs(profit).toFixed(2)} [${currentLayerName}] | El dígito SÍ fue ${botState.currentBarrier}`);
+
+        // ─── LA HIDRA: Transiciones al PERDER ───
+        if (botState.isRecoveryEnabled) {
+            botState.consecutiveLosses++;
+
+            if (botState.recoveryLayer === 0) {
+                // Normal → Espejo
+                botState.lastLostBarrier = botState.currentBarrier;
+                botState.recoveryLayer = 1;
+                console.log(`🐍 [HIDRA] Pérdida detectada. Activando Capa 1 (Espejo): NO-${botState.currentBarrier}`);
+            } else if (botState.recoveryLayer === 1) {
+                // Espejo falló → D'Alembert
+                botState.recoveryLayer = 2;
+                botState.dalembertStep = 1;
+                console.log(`🐍 [HIDRA] Espejo FALLÓ (raro, 1%). Activando Capa 2 (D'Alembert Step 1).`);
+            } else if (botState.recoveryLayer === 2) {
+                // D'Alembert pérdida → subir step o activar freno
+                botState.dalembertStep++;
+                if (botState.consecutiveLosses >= 3) {
+                    botState.recoveryLayer = 3;
+                    botState.emergencyWaitTicks = 0;
+                    console.log(`🐍 [HIDRA] 3 pérdidas seguidas. Activando Capa 3 (FRENO DE EMERGENCIA). Esperando 50 ticks...`);
+                } else {
+                    console.log(`🐍 [HIDRA] D'Alembert subió a Step ${botState.dalembertStep}.`);
+                }
+            }
+        }
     }
 
     // Guardar en historial
@@ -438,7 +558,8 @@ function finalizeTrade(c) {
         time: timeVE,
         barrier: botState.currentBarrier,
         result: isWin ? 'WIN ✅' : 'LOSS ❌',
-        lastDigit: botState.lastDigit
+        lastDigit: botState.lastDigit,
+        layer: currentLayerName
     });
 
     if (botState.tradeHistory.length > 100) botState.tradeHistory.pop();
