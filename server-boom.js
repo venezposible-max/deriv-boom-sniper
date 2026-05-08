@@ -136,15 +136,11 @@ function chooseBestBarrier() {
         }
     }
 
-    // ─── CAPA 0: MODO NORMAL (Markov + Entropía) ───
+    // ─── CAPA 0: MODO NORMAL (Filtro de Entropía) ───
     botState.currentContractType = 'DIGITDIFF';
     
-    // Calcular entropía
-    const entropy = calcEntropy(hist, range);
-    botState.shannonEntropy = entropy.toFixed(2);
-    
     // Si la entropía es muy alta (>3.25), el mercado es caótico, no operar
-    if (entropy > 3.25) return null;
+    if (parseFloat(botState.shannonEntropy) > 3.25) return null;
     const subHistory = hist.slice(-range);
     const freq = {};
     for (let d = 0; d <= 9; d++) freq[d] = 0;
@@ -425,6 +421,17 @@ function connectDeriv() {
             if (botState.digitHistory.length > 300) botState.digitHistory.shift();
 
             botState.digitFrequency[lastDigit] = (botState.digitFrequency[lastDigit] || 0) + 1;
+
+            // ACTUALIZAR INDICADORES (Markov + Entropía) CADA TICK
+            const range = botState.scanRange || 100;
+            if (botState.digitHistory.length >= 50) {
+                const entropy = calcEntropy(botState.digitHistory, range);
+                botState.shannonEntropy = entropy.toFixed(2);
+                
+                // Actualizar Markov Edge (sin disparar, solo análisis)
+                getMarkovOverUnder(botState.digitHistory); 
+            }
+
             tryFireTrade();
         }
 
