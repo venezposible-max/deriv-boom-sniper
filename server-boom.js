@@ -480,6 +480,19 @@ function connectDeriv() {
 
 // ─── MOTOR DE DISPARO ─────────────────────────────────────────
 function tryFireTrade() {
+    // Protección de Meta (Take Profit) y Pérdida Máxima (Stop Loss)
+    const netProfit = botState.dailyProfit - botState.dailyLoss;
+    if (netProfit >= botState.takeProfit) {
+        console.log(`🎯 META ALCANZADA ($${netProfit.toFixed(2)}). Deteniendo el Sniper...`);
+        botState.isRunning = false;
+        return;
+    }
+    if (botState.dailyLoss >= botState.maxDailyLoss) {
+        console.log(`🛑 LÍMITE DE PÉRDIDA ALCANZADO ($${botState.dailyLoss.toFixed(2)}). Deteniendo el Sniper...`);
+        botState.isRunning = false;
+        return;
+    }
+
     if (!botState.isRunning) return;
     if (botState.isBuying || botState.activeContractId) return;
 
@@ -609,6 +622,14 @@ function finalizeTrade(c) {
     if (botState.tradeHistory.length > 100) botState.tradeHistory.pop();
     botState.activeContractId = null;
     botState.currentContractId = null;
+
+    // VERIFICACIÓN INMEDIATA DE META/SL AL CERRAR TRADE
+    const net = botState.dailyProfit - botState.dailyLoss;
+    if (net >= botState.takeProfit || botState.dailyLoss >= botState.maxDailyLoss) {
+        botState.isRunning = false;
+        console.log(`🏁 SESIÓN FINALIZADA | PnL Neto: $${net.toFixed(2)} | Meta: $${botState.takeProfit}`);
+    }
+
     saveState();
 }
 
