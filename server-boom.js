@@ -287,7 +287,14 @@ app.post('/differs/control', (req, res) => {
         if (maxDailyLoss) botState.maxDailyLoss = parseFloat(maxDailyLoss);
         if (action === 'START') botState.isRunning = true;
     } else if (action === 'STOP') botState.isRunning = false;
-    else if (action === 'RESET_DAY') { botState.dailyProfit = 0; botState.dailyLoss = 0; botState.tradeHistory = []; }
+    else if (action === 'RESET_DAY') { 
+        botState.dailyProfit = 0; 
+        botState.dailyLoss = 0; 
+        botState.totalTradesSession = 0;
+        botState.winsSession = 0;
+        botState.lossesSession = 0;
+        botState.tradeHistory = []; 
+    }
     saveState(); res.json({ success: true });
 });
 app.listen(process.env.PORT || 8080, '0.0.0.0', () => connectDeriv());
