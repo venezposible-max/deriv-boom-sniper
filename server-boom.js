@@ -139,6 +139,9 @@ function processGhostDiffer(symbol, hotDigit, actualNextDigit) {
     ghost.total++;
     if (actualNextDigit !== hotDigit) {
         ghost.wins++; // DIFFERS gana cuando el dígito es DIFERENTE
+        console.log(`👻 [GHOST VIRTUAL] ${symbol} | Diferir de ${hotDigit} (Salió ${actualNextDigit}) | ✅ WIN (${ghost.wins}/${ghost.total})`);
+    } else {
+        console.log(`👻 [GHOST VIRTUAL] ${symbol} | Diferir de ${hotDigit} (Salió ${actualNextDigit}) | ❌ LOSS (${ghost.wins}/${ghost.total})`);
     }
 }
 
