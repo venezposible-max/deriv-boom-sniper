@@ -89,8 +89,8 @@ function findSingularity(symbol) {
         }
     }
 
-    // Un "Hueco" real ocurre cuando un dígito no ha salido en > 110 ticks (Probabilidad extrema de retorno)
-    if (maxWait > 110) {
+    // Un "Hueco" real ocurre cuando un dígito no ha salido en > 70 ticks (Probabilidad extrema de retorno)
+    if (maxWait > 70) {
         return { digit: coldestDigit, tension: maxWait };
     }
     return null;
