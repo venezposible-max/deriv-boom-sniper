@@ -72,7 +72,7 @@ function connectDeriv() {
         const msg = JSON.parse(raw);
         if (msg.msg_type === 'authorize') {
             botState.isConnectedToDeriv = true;
-            console.log("🎯 MODO INSTITUCIONAL v10.0 ACTIVADO (Núcleo Clásico: Puro Differs 3x)");
+            console.log("🛡️ MODO INSTITUCIONAL v11.0 ACTIVADO (Escudo Nivel 4: Modo Cisne Negro)");
             SYMBOLS.forEach(s => {
                 ws.send(JSON.stringify({ subscribe: 1, ticks: s }));
             });
@@ -122,16 +122,16 @@ function evaluateInstitutionalSniper() {
     let targetSymbol = null;
     let targetDigit = null;
 
-    // Escanear los 4 mercados en busca de la "Falla en la Matrix" (3 repeticiones seguidas)
+    // Escanear los 4 mercados en busca de la "Falla en la Matrix Nivel 4" (4 repeticiones seguidas)
     SYMBOLS.forEach(s => {
         const history = botState.markets[s].digitHistory;
-        if (history.length < 3) return;
+        if (history.length < 4) return;
         
-        const last3 = history.slice(-3);
-        if (last3[0] === last3[1] && last3[1] === last3[2]) {
-            // ¡Anomalía encontrada! El mismo dígito salió 3 veces seguidas.
+        const last4 = history.slice(-4);
+        if (last4[0] === last4[1] && last4[1] === last4[2] && last4[2] === last4[3]) {
+            // ¡Anomalía Extrema! El mismo dígito salió 4 veces seguidas.
             targetSymbol = s;
-            targetDigit = last3[0];
+            targetDigit = last4[0];
         }
     });
 
@@ -141,7 +141,7 @@ function evaluateInstitutionalSniper() {
     botState.isBuying = true;
     botState.lastTradeTime = now;
 
-    console.log(`🎯 [FRANCOTIRADOR CLÁSICO] ${targetSymbol} | Anomalía (Salió el ${targetDigit} tres veces) | Disparo: DIFFERS con $${botState.stake}`);
+    console.log(`🛡️ [ESCUDO NIVEL 4] ${targetSymbol} | Cisne Negro (Salió el ${targetDigit} CUATRO veces) | Disparo: DIFFERS con $${botState.stake}`);
 
     ws.send(JSON.stringify({
         buy: 1, price: botState.stake,
@@ -204,12 +204,25 @@ app.get('/differs/status', (req, res) => {
 
     SYMBOLS.forEach(s => {
         const h = botState.markets[s].digitHistory;
-        if (h.length >= 2) {
+        if (h.length >= 3) {
+            const last3 = h.slice(-3);
             const last2 = h.slice(-2);
-            if (last2[0] === last2[1]) {
-                activeStreak = 2;
-                streakDigit = last2[0];
+            if (h.length >= 4 && h.slice(-4)[0] === h.slice(-4)[1] && h.slice(-4)[1] === h.slice(-4)[2] && h.slice(-4)[2] === h.slice(-4)[3]) {
+                activeStreak = 4;
+                streakDigit = h.slice(-4)[0];
                 streakSymbol = s;
+            } else if (last3[0] === last3[1] && last3[1] === last3[2]) {
+                if (activeStreak < 3) {
+                    activeStreak = 3;
+                    streakDigit = last3[0];
+                    streakSymbol = s;
+                }
+            } else if (last2[0] === last2[1]) {
+                if (activeStreak < 2) {
+                    activeStreak = 2;
+                    streakDigit = last2[0];
+                    streakSymbol = s;
+                }
             }
         }
     });
@@ -225,7 +238,7 @@ app.get('/differs/status', (req, res) => {
             lastDigit: market.lastDigit,
             lastTickPrice: market.lastTickPrice,
             currentContractType: botState.strategyMode === 'MATCH' ? 'DIGITMATCH' : 'DIGITDIFF',
-            shannonEntropy: `Racha: ${activeStreak}/3`,
+            shannonEntropy: `Racha: ${activeStreak}/4`,
             markovEdge: streakDigit,
             currentBarrier: streakDigit,
             isRunning: botState.isRunning,
