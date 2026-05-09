@@ -420,7 +420,7 @@
         <!-- RECOVERY SWITCH REMOVED -->
 
         <button id="btnToggle" class="btn-main btn-start" onclick="toggleBot()">
-             🎲 Iniciar La Pata del Conejo
+             🛡️ Iniciar Anti-Racha
         </button>
     </div>
 
@@ -689,8 +689,9 @@
             // Active Straddle Shield card REMOVED
             // Toggle button
             const btn = document.getElementById('btnToggle');
-            const startText = currentStrategy === 'DIFFERS' ? '🎲 Activar La Pata del Conejo' : '🔥 Activar La Pata del Conejo';
-            btn.innerText = isRunning ? '⏸️ Soltar La Pata del Conejo' : startText;
+            const startText = currentStrategy === 'DIFFERS' ? '🛡️ Iniciar Anti-Racha' : '🔥 Iniciar Pro-Racha';
+            const stopText = currentStrategy === 'DIFFERS' ? '⏸️ Parar Anti-Racha' : '⏸️ Parar Pro-Racha';
+            btn.innerText = isRunning ? stopText : startText;
             btn.className = `btn-main ${isRunning ? 'btn-stop' : 'btn-start'}`;
 
             // History
