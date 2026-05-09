@@ -266,11 +266,7 @@
         <button id="btnAccReal" onclick="switchAccount(true)" class="account-btn real">Real Account 🔴</button>
     </div>
 
-    <!-- STRATEGY SELECTOR -->
-    <div style="display: flex; gap: 8px; margin-bottom: 20px; justify-content: center;">
-        <button id="btnStratDiffers" onclick="switchStrategy('DIFFERS')" class="chip chip-green" style="cursor:pointer; border:none; background: #059669; color:white; padding: 10px 16px; font-weight: 800;">🐇 ANTI-RACHA (DIFFERS)</button>
-        <button id="btnStratMatch" onclick="switchStrategy('MATCH')" class="chip chip-gold" style="cursor:pointer; border:none; padding: 10px 16px; font-weight: 800; background: rgba(250,204,21,0.15); color: #fbbf24;">🔥 PRO-RACHA (MATCH)</button>
-    </div>
+    <!-- STRATEGY SELECTOR REMOVED (Dual-Trigger is active) -->
 
     <!-- MARKET SELECTOR -->
     <div style="display: flex; gap: 8px; margin-bottom: 20px; justify-content: center;">
@@ -425,7 +421,7 @@
         <!-- RECOVERY SWITCH REMOVED -->
 
         <button id="btnToggle" class="btn-main btn-start" onclick="toggleBot()">
-             🛡️ Iniciar Anti-Racha
+             ⚔️ Iniciar Doble Gatillo
         </button>
     </div>
 
@@ -445,27 +441,7 @@
     let lastDigitHistory = [];
     let currentStrategy = 'DIFFERS';
 
-    function switchStrategy(strat) {
-        if (isRunning) return;
-        currentStrategy = strat;
-        
-        document.getElementById('btnStratDiffers').style.background = strat === 'DIFFERS' ? '#059669' : 'rgba(52,211,153,0.15)';
-        document.getElementById('btnStratDiffers').style.color = strat === 'DIFFERS' ? 'white' : '#34d399';
-        
-        document.getElementById('btnStratMatch').style.background = strat === 'MATCH' ? '#b45309' : 'rgba(250,204,21,0.15)';
-        document.getElementById('btnStratMatch').style.color = strat === 'MATCH' ? 'white' : '#fbbf24';
-        
-        document.getElementById('subTitle').innerText = strat === 'DIFFERS' ? 'Cazador Anti-Racha (90%)' : 'Cazador Pro-Racha (800%)';
-        const theBtn = document.getElementById('btnToggle');
-        if (!isRunning) theBtn.innerText = strat === 'DIFFERS' ? '🛡️ Iniciar Anti-Racha' : '🔥 Iniciar Pro-Racha';
-
-        // Sincronizar con el backend
-        fetch('/differs/control', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ action: 'SYNC', strategyMode: currentStrategy })
-        });
-    }
+    // switchStrategy removed
 
     // Build frequency table
     function buildFreqTable(digitHistory, barrier) {
@@ -694,8 +670,7 @@
                 if (scanningCard) {
                     scanningCard.style.display = data.isRunning ? 'block' : 'none';
                     if (data.isRunning) {
-                        const sText = currentStrategy === 'DIFFERS' ? 'Buscando 3 repeticiones para romper la racha...' : 'Buscando 3 repeticiones para cazar el MATCH...';
-                        document.getElementById('scanningText').innerText = sText;
+                        document.getElementById('scanningText').innerText = 'Agente 1: Differs (2 repetidos) | Agente 2: Match (4 repetidos)';
                     }
                 }
             }
@@ -703,8 +678,8 @@
             // Active Straddle Shield card REMOVED
             // Toggle button
             const btn = document.getElementById('btnToggle');
-            const startText = currentStrategy === 'DIFFERS' ? '🛡️ Iniciar Anti-Racha' : '🔥 Iniciar Pro-Racha';
-            const stopText = currentStrategy === 'DIFFERS' ? '⏸️ Parar Anti-Racha' : '⏸️ Parar Pro-Racha';
+            const startText = '⚔️ Iniciar Doble Gatillo';
+            const stopText = '⏸️ Parar Escáner';
             btn.innerText = isRunning ? stopText : startText;
             btn.className = `btn-main ${isRunning ? 'btn-stop' : 'btn-start'}`;
 

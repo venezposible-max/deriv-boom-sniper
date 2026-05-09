@@ -119,41 +119,68 @@ function evaluateInstitutionalSniper() {
     const now = Date.now();
     if (now - botState.lastTradeTime < botState.cooldownMs) return;
 
-    let targetSymbol = null;
-    let targetDigit = null;
+    let targetDiffersSymbol = null;
+    let targetDiffersDigit = null;
+    let targetMatchSymbol = null;
+    let targetMatchDigit = null;
 
-    // Escanear los 4 mercados en busca de la "Falla en la Matrix" (3 repeticiones seguidas)
+    // Escanear los 4 mercados con los dos agentes simultáneamente
     SYMBOLS.forEach(s => {
         const history = botState.markets[s].digitHistory;
-        if (history.length < 3) return;
+        if (history.length < 2) return;
         
-        const last3 = history.slice(-3);
-        if (last3[0] === last3[1] && last3[1] === last3[2]) {
-            // ¡Anomalía encontrada! El mismo dígito salió 3 veces seguidas.
-            targetSymbol = s;
-            targetDigit = last3[0];
+        const last4 = history.slice(-4);
+        const last2 = history.slice(-2);
+        
+        // Agente 2: Cazador de Cisnes Negros (MATCH) - Busca 4 idénticos
+        if (last4.length === 4 && last4[0] === last4[1] && last4[1] === last4[2] && last4[2] === last4[3]) {
+            targetMatchSymbol = s;
+            targetMatchDigit = last4[0];
+        } 
+        // Agente 1: Recolector Constante (DIFFERS) - Busca 2 idénticos
+        else if (last2.length === 2 && last2[0] === last2[1]) {
+            targetDiffersSymbol = s;
+            targetDiffersDigit = last2[0];
         }
     });
 
-    if (!targetSymbol || targetDigit === null) return;
-
-    botState.activeSymbol = targetSymbol;
-    botState.isBuying = true;
-    botState.lastTradeTime = now;
-
-    const contractType = botState.strategyMode === 'MATCH' ? 'DIGITMATCH' : 'DIGITDIFF';
-    const stratName = botState.strategyMode === 'MATCH' ? 'PRO-RACHA (MATCH)' : 'ANTI-RACHA (DIFFERS)';
-
-    console.log(`🎯 [FRANCOTIRADOR] ${targetSymbol} | Anomalía (Salió el ${targetDigit} tres veces) | Estrategia: ${stratName}`);
-
-    ws.send(JSON.stringify({
-        buy: 1, price: botState.stake,
-        parameters: {
-            amount: botState.stake, basis: 'stake', contract_type: contractType,
-            currency: 'USD', symbol: targetSymbol, duration: 1, duration_unit: 't',
-            barrier: String(targetDigit)
-        }
-    }));
+    // Prioridad absoluta al Agente de Cisnes Negros si se da la anomalía extrema
+    if (targetMatchSymbol && targetMatchDigit !== null) {
+        botState.activeSymbol = targetMatchSymbol;
+        botState.isBuying = true;
+        botState.lastTradeTime = now;
+        
+        // El Agente Match usa solo el 20% del stake para no arriesgar el capital del Recolector
+        const matchStake = Math.max(0.35, parseFloat((botState.stake * 0.20).toFixed(2)));
+        
+        console.log(`🎯 [FRANCOTIRADOR - MATCH] ${targetMatchSymbol} | Anomalía Extrema (Salió el ${targetMatchDigit} cuatro veces) | Disparo: $${matchStake}`);
+        
+        ws.send(JSON.stringify({
+            buy: 1, price: matchStake,
+            parameters: {
+                amount: matchStake, basis: 'stake', contract_type: 'DIGITMATCH',
+                currency: 'USD', symbol: targetMatchSymbol, duration: 1, duration_unit: 't',
+                barrier: String(targetMatchDigit)
+            }
+        }));
+    } 
+    // Si no hay anomalía extrema, el Agente Recolector hace su trabajo
+    else if (targetDiffersSymbol && targetDiffersDigit !== null) {
+        botState.activeSymbol = targetDiffersSymbol;
+        botState.isBuying = true;
+        botState.lastTradeTime = now;
+        
+        console.log(`🔫 [AMETRALLADORA - DIFFERS] ${targetDiffersSymbol} | Racha Leve (Salió el ${targetDiffersDigit} dos veces) | Disparo: $${botState.stake}`);
+        
+        ws.send(JSON.stringify({
+            buy: 1, price: botState.stake,
+            parameters: {
+                amount: botState.stake, basis: 'stake', contract_type: 'DIGITDIFF',
+                currency: 'USD', symbol: targetDiffersSymbol, duration: 1, duration_unit: 't',
+                barrier: String(targetDiffersDigit)
+            }
+        }));
+    }
 }
 
 function finalizeTrade(c) {
@@ -176,11 +203,11 @@ function finalizeTrade(c) {
     const barrierMatch = c.shortcode.match(/_(\d)_/);
     const barrierDigit = barrierMatch ? barrierMatch[1] : '?';
     const isMatch = c.shortcode.includes('DIGITMATCH');
-    const isHedge = isMatch && botState.strategyMode === 'DIFFERS';
+    const isHedge = isMatch && c.buy_price < botState.stake; // El escudo siempre entra con menos stake
 
     botState.tradeHistory.unshift({
         symbol: botState.activeSymbol || c.display_symbol,
-        type: isHedge ? `🛡️ ESCUDO(=${barrierDigit})` : (isMatch ? `MATCH(=${barrierDigit})` : `DIFF(≠${barrierDigit})`),
+        type: isHedge ? `🛡️ ESCUDO(=${barrierDigit})` : (isMatch ? `🎯 MATCH(=${barrierDigit})` : `🔫 DIFF(≠${barrierDigit})`),
         profit,
         result: isWin ? 'WIN ✅' : 'LOSS ❌',
         time: new Date().toLocaleTimeString()
@@ -190,8 +217,8 @@ function finalizeTrade(c) {
     botState.activeContractId = null;
 
     // 🛡️ ESCUDO ASIMÉTRICO (Contra-Golpe al 20%)
-    // Si estamos en modo ANTI-RACHA (Differs) y perdemos un trade normal (Differs)
-    if (!isWin && !isMatch && botState.strategyMode === 'DIFFERS' && botState.isRunning) {
+    // Si perdemos un trade normal (Differs)
+    if (!isWin && !isMatch && botState.isRunning) {
         // Calcular el 20% del stake original (Mínimo $0.35 permitido por Deriv)
         const hedgeStake = Math.max(0.35, parseFloat((botState.stake * 0.20).toFixed(2)));
         botState.isBuying = true;
