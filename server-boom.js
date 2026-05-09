@@ -1,9 +1,9 @@
 /**
  * ============================================================
- *  PROYECTO ANTIGRAVEDAD v4.0 - EL CEREBRO CAMALEÓN
- *  Estrategia: Metamórfica (Matches / Parity / Differs)
- *  Escaneo: Multi-Mercado en tiempo real (R10, R25, R50, R100)
- *  Selección Automática de Arma según Entropía de Shannon
+ *  PROYECTO ANTIGRAVEDAD v5.0 - GHOST PROTOCOL (GANAR-GANAR)
+ *  Motor: Cerebro Camaleón Adaptativo
+ *  Protocolo: Trading Virtual Pre-Validación (Ghost Mode)
+ *  Escaneo: Multi-Mercado (R10, R25, R50, R100)
  * ============================================================
  */
 
@@ -13,18 +13,15 @@ import { fileURLToPath } from 'url';
 import express from 'express';
 import cors from 'cors';
 import WebSocket from 'ws';
-import crypto from 'crypto';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// ─── CONFIGURACIÓN ───────────────────────────────────────────
 const APP_ID = process.env.DERIV_APP_ID || '36544';
 const DERIV_TOKEN = process.env.DERIV_TOKEN || 'PMIt2RhEjEDbcLD';
 const STATE_FILE = path.join(__dirname, 'persistent-state-differs.json');
 const SYMBOLS = ['R_10', 'R_25', 'R_50', 'R_100'];
 
-// ─── ESTADO GLOBAL ────────────────────────────────────────────
 let botState = {
     isRunning: false,
     isConnectedToDeriv: false,
@@ -41,44 +38,47 @@ let botState = {
     activeSymbol: 'R_25',
     activeContractId: null,
     lastTradeTime: 0,
-    cooldownMs: 2000,
+    cooldownMs: 2500,
     isBuying: false,
     isRecoveryEnabled: true,
-    recoveryLayer: 0, // 0=Normal, 1=Defensa, 2=Fénix
-    // Datos por mercado
+    recoveryLayer: 0,
+    shannonEntropy: 0,
+    markovEdge: 0,
+    currentBarrier: null,
+    currentContractType: 'DIGITDIFF',
+    // PROTOCOLO FANTASMA
+    isGhostMode: true, // Siempre activo por seguridad
+    virtualWinRate: 0,
     markets: {}
 };
 
-// Inicializar contenedores para cada mercado
 SYMBOLS.forEach(s => {
     botState.markets[s] = {
         digitHistory: [],
         entropy: 0,
-        markovEdge: 0,
+        virtualSuccessHistory: [], // [true, false, ...] de los últimos 10 ticks
         lastDigit: null,
         bestStrategy: 'WAIT'
     };
 });
 
-// ─── LÓGICA DE PERSISTENCIA ──────────────────────────────────
+// ─── CARGAR/GUARDAR ESTADO ────────────────────────────────────
 if (fs.existsSync(STATE_FILE)) {
     try {
         const saved = JSON.parse(fs.readFileSync(STATE_FILE));
         if (saved.botState) {
-            // Mezclamos pero reseteamos estados volátiles
             botState = { ...botState, ...saved.botState };
-            botState.isRunning = false;
+            botState.isRunning = false; 
             botState.isBuying = false;
-            botState.activeContractId = null;
         }
     } catch (e) {}
 }
 const saveState = () => { try { fs.writeFileSync(STATE_FILE, JSON.stringify({ botState })); } catch (e) {} };
 
-// ─── MATEMÁTICAS CUÁNTICAS ────────────────────────────────────
+// ─── MATEMÁTICAS Y ESTRATEGIAS ────────────────────────────────
 function calcEntropy(hist) {
-    if (hist.length < 100) return 3.32;
-    const sub = hist.slice(-100);
+    if (hist.length < 50) return 3.32;
+    const sub = hist.slice(-50);
     const freq = {};
     for (let d = 0; d <= 9; d++) freq[d] = 0;
     sub.forEach(d => freq[d]++);
@@ -90,189 +90,169 @@ function calcEntropy(hist) {
     return entropy;
 }
 
-function getMarkovParity(hist) {
-    if (hist.length < 100) return null;
-    const sub = hist.slice(-200);
-    const matrix = { even: { even: 0, odd: 0, total: 0 }, odd: { even: 0, odd: 0, total: 0 } };
-    for (let k = 1; k < sub.length; k++) {
-        const prev = sub[k-1] % 2 === 0 ? 'even' : 'odd';
-        const curr = sub[k] % 2 === 0 ? 'even' : 'odd';
-        matrix[prev][curr]++;
-        matrix[prev].total++;
+function getMarkovParityEdge(hist) {
+    if (hist.length < 50) return 0;
+    const sub = hist.slice(-100);
+    let transitions = { even: { even: 0, odd: 0, total: 0 }, odd: { even: 0, odd: 0, total: 0 } };
+    for (let i = 1; i < sub.length; i++) {
+        const prev = sub[i-1] % 2 === 0 ? 'even' : 'odd';
+        const curr = sub[i] % 2 === 0 ? 'even' : 'odd';
+        transitions[prev][curr]++;
+        transitions[prev].total++;
     }
-    const last = hist[hist.length - 1] % 2 === 0 ? 'even' : 'odd';
-    const trans = matrix[last];
-    if (trans.total < 10) return null;
-    const probEven = trans.even / trans.total;
-    const edge = Math.abs(probEven - 0.5);
-    botState.markovEdge = (edge * 100).toFixed(1);
-    if (probEven > 0.55) return { type: 'DIGITEVEN', label: 'PAR (Markov)' };
-    if (probEven < 0.45) return { type: 'DIGITODD', label: 'IMPAR (Markov)' };
-    return null;
-}
-
-function getMarkovOverUnder(hist) {
-    if (hist.length < 100) return null;
-    const sub = hist.slice(-200);
-    const matrix = {};
-    for (let i = 0; i <= 9; i++) {
-        matrix[i] = {};
-        for (let j = 0; j <= 9; j++) matrix[i][j] = 0;
-    }
-    for (let k = 1; k < sub.length; k++) {
-        matrix[sub[k-1]][sub[k]]++;
-    }
-    const lastDigit = hist[hist.length - 1];
-    let total = 0;
-    for (let j = 0; j <= 9; j++) total += matrix[lastDigit][j];
-    if (total < 10) return null;
-    
-    let probOver = 0;
-    for (let d = 5; d <= 9; d++) probOver += matrix[lastDigit][d] / total;
-    const probUnder = 1 - probOver;
-    const edge = Math.abs(probOver - 0.5);
-    botState.markovEdge = (edge * 100).toFixed(1);
-    
-    if (probOver > 0.55) return { type: 'DIGITOVER', barrier: '4', prob: probOver, label: 'OVER 4' };
-    if (probUnder > 0.55) return { type: 'DIGITUNDER', barrier: '5', prob: probUnder, label: 'UNDER 5' };
-    return null;
+    const last = hist[hist.length-1] % 2 === 0 ? 'even' : 'odd';
+    const t = transitions[last];
+    if (t.total === 0) return 0.5;
+    return t.even / t.total; // Probabilidad de que el siguiente sea PAR
 }
 
 function getBestStrategy(symbol) {
     const m = botState.markets[symbol];
     const ent = m.entropy;
-    
-    if (ent > 3.25) return 'WAIT';      // Caos absoluto
-    if (ent > 3.10) return 'DIFFERS';   // Mercado inestable -> Alta probabilidad
-    if (ent > 2.70) return 'PARITY';    // Mercado normal -> Beneficio 1:1
-    return 'MATCHES';                   // Mercado estable -> Alta recompensa (+800%)
+    if (ent > 3.25) return 'WAIT';
+    if (ent > 3.10) return 'DIFFERS';
+    if (ent > 2.70) return 'PARITY';
+    return 'MATCHES';
 }
 
-// ─── CONEXIÓN Y TICK HANDLER ──────────────────────────────────
+// ─── PROTOCOLO FANTASMA: ¿Sería ganador este tick? ────────────
+function updateVirtualPerformance(symbol) {
+    const m = botState.markets[symbol];
+    const hist = m.digitHistory;
+    if (hist.length < 20) return;
+
+    const lastDigit = hist[hist.length - 1];
+    const prevHistory = hist.slice(0, -1);
+    const prevDigit = prevHistory[prevHistory.length - 1];
+    
+    // Simulamos qué habríamos hecho un tick atrás
+    const strat = getBestStrategy(symbol);
+    let virtualWin = false;
+
+    if (strat === 'DIFFERS') {
+        virtualWin = lastDigit !== prevDigit; // Diferir del anterior
+    } else if (strat === 'PARITY') {
+        const probEven = getMarkovParityEdge(prevHistory);
+        const prediction = probEven > 0.5 ? 'even' : 'odd';
+        const actual = lastDigit % 2 === 0 ? 'even' : 'odd';
+        virtualWin = prediction === actual;
+    } else if (strat === 'MATCHES') {
+        virtualWin = lastDigit === prevDigit;
+    }
+
+    m.virtualSuccessHistory.push(virtualWin);
+    if (m.virtualSuccessHistory.length > 10) m.virtualSuccessHistory.shift();
+}
+
+// ─── CONEXIÓN ─────────────────────────────────────────────────
 let ws = null;
 function connectDeriv() {
-    if (ws) ws.terminate();
     ws = new WebSocket(`wss://ws.derivws.com/websockets/v3?app_id=${APP_ID}`);
-
-    ws.on('open', () => {
-        setTimeout(() => ws.send(JSON.stringify({ authorize: DERIV_TOKEN })), 2000);
-    });
-
+    ws.on('open', () => { setTimeout(() => ws.send(JSON.stringify({ authorize: DERIV_TOKEN })), 1000); });
     ws.on('message', (raw) => {
         const msg = JSON.parse(raw);
         if (msg.msg_type === 'authorize') {
             botState.isConnectedToDeriv = true;
-            console.log("✅ CEREBRO CAMALEÓN ONLINE");
             SYMBOLS.forEach(s => ws.send(JSON.stringify({ subscribe: 1, ticks: s })));
             ws.send(JSON.stringify({ balance: 1, subscribe: 1 }));
         }
-
         if (msg.msg_type === 'tick' && msg.tick) {
             const s = msg.tick.symbol;
-            const price = msg.tick.quote;
-            const digit = parseInt(String(price.toFixed(2)).slice(-1));
-            
+            const digit = parseInt(String(msg.tick.quote.toFixed(2)).slice(-1));
             const m = botState.markets[s];
             m.digitHistory.push(digit);
             if (m.digitHistory.length > 200) m.digitHistory.shift();
             m.lastDigit = digit;
             m.entropy = calcEntropy(m.digitHistory);
             m.bestStrategy = getBestStrategy(s);
+            
+            updateVirtualPerformance(s);
 
-            // Actualizar Markov Edge para el dashboard (solo del mercado activo)
             if (s === botState.activeSymbol) {
-                if (m.bestStrategy === 'PARITY') {
-                    getMarkovParity(m.digitHistory); // Esto actualiza botState.markovEdge
-                } else if (m.bestStrategy === 'DIFFERS') {
-                    botState.markovEdge = 90; // Differs siempre tiene ~90% de probabilidad
-                } else {
-                    getMarkovOverUnder(m.digitHistory); // Esto actualiza botState.markovEdge
-                }
+                const wins = m.virtualSuccessHistory.filter(h => h === true).length;
+                botState.virtualWinRate = (wins / m.virtualSuccessHistory.length) * 100 || 0;
+                botState.shannonEntropy = m.entropy;
+                botState.markovEdge = botState.virtualWinRate; // Usamos el WinRate virtual como indicador de "confianza"
             }
 
-            // Si no estamos en un trade, el cerebro elige el mejor mercado disponible
             if (!botState.activeContractId && !botState.isBuying && botState.isRunning) {
                 evaluateAndFire();
             }
         }
-
-        if (msg.msg_type === 'balance') botState.balance = msg.balance.balance;
-        
         if (msg.msg_type === 'buy' && msg.buy) {
             botState.activeContractId = msg.buy.contract_id;
             botState.isBuying = false;
             ws.send(JSON.stringify({ proposal_open_contract: 1, contract_id: msg.buy.contract_id, subscribe: 1 }));
         }
-
         if (msg.msg_type === 'proposal_open_contract' && msg.proposal_open_contract?.is_sold) {
             finalizeTrade(msg.proposal_open_contract);
         }
+        if (msg.msg_type === 'balance') botState.balance = msg.balance.balance;
     });
-
     ws.on('close', () => { botState.isConnectedToDeriv = false; setTimeout(connectDeriv, 5000); });
 }
 
-// ─── EL MOTOR ADAPTATIVO ──────────────────────────────────────
+// ─── MOTOR DE EJECUCIÓN ───────────────────────────────────────
 function evaluateAndFire() {
     const now = Date.now();
     if (now - botState.lastTradeTime < botState.cooldownMs) return;
 
-    // Buscamos el mercado con la MENOR entropía (el más predecible)
+    // 1. ELEGIR MEJOR MERCADO
     let bestSymbol = null;
     let minEntropy = 4;
-
     SYMBOLS.forEach(s => {
         const m = botState.markets[s];
-        if (m.digitHistory.length >= 100 && m.entropy < minEntropy) {
+        if (m.digitHistory.length >= 50 && m.entropy < minEntropy) {
             minEntropy = m.entropy;
             bestSymbol = s;
         }
     });
 
     if (!bestSymbol) return;
-    const targetMarket = botState.markets[bestSymbol];
-    const strategy = targetMarket.bestStrategy;
-    
-    if (strategy === 'WAIT') return;
+    const m = botState.markets[bestSymbol];
+    botState.activeSymbol = bestSymbol;
 
-    // Si estamos en recuperación, forzamos la estrategia de rescate
+    // 2. VALIDACIÓN PROTOCOLO FANTASMA (Solo operar si el virtual va bien)
+    const virtualWins = m.virtualSuccessHistory.filter(h => h === true).length;
+    const vWR = (virtualWins / m.virtualSuccessHistory.length) * 100;
+    
+    // Umbral de seguridad: Solo entramos si en modo virtual habríamos ganado 8 de los últimos 10
+    if (vWR < 80 && botState.recoveryLayer === 0) {
+        // console.log(`🕵️ [GHOST] Esperando racha virtual ganadora en ${bestSymbol}... (Actual: ${vWR}%)`);
+        return; 
+    }
+
+    // 3. DEFINIR CONTRATO
     let contractType = '';
     let barrier = null;
     let stake = botState.stake;
+    const strat = m.bestStrategy;
 
     if (botState.recoveryLayer === 0) {
-        // MODO ATAQUE ADAPTATIVO
-        if (strategy === 'MATCHES') {
+        if (strat === 'MATCHES') {
             contractType = 'DIGITMATCHES';
-            barrier = String(targetMarket.lastDigit); // Sniper al mismo dígito
-            stake = botState.stake * 0.2; // Stake pequeño porque paga 800%
-        } else if (strategy === 'PARITY') {
-            // Lógica Paridad
-            const evenCount = targetMarket.digitHistory.slice(-20).filter(d => d % 2 === 0).length;
-            contractType = evenCount > 10 ? 'DIGITODD' : 'DIGITEVEN'; // Contratendencia de paridad
-        } else {
+            barrier = String(m.lastDigit);
+            stake = botState.stake * 0.2;
+        } else if (strat === 'PARITY') {
+            const pEven = getMarkovParityEdge(m.digitHistory);
+            contractType = pEven > 0.5 ? 'DIGITEVEN' : 'DIGITODD';
+        } else if (strat === 'DIFFERS') {
             contractType = 'DIGITDIFF';
-            barrier = String(targetMarket.lastDigit);
-        }
-    } else if (botState.recoveryLayer === 1) {
-        // DEFENSA SNIPER
-        contractType = 'DIGITDIFF';
-        barrier = String(targetMarket.lastDigit);
-        stake = botState.stake * 1.1; 
+            barrier = String(m.lastDigit);
+        } else return;
     } else {
-        // FÉNIX OVER/UNDER
-        contractType = targetMarket.lastDigit > 4 ? 'DIGITUNDER' : 'DIGITOVER';
-        barrier = targetMarket.lastDigit > 4 ? '5' : '4';
-        stake = botState.stake * 1.5;
+        // Capas de Recuperación (HIDRA)
+        contractType = 'DIGITDIFF';
+        barrier = String(m.lastDigit);
+        stake = botState.stake * (botState.recoveryLayer === 1 ? 1.1 : 2.5);
     }
 
     botState.isBuying = true;
-    botState.activeSymbol = bestSymbol;
     botState.currentBarrier = barrier;
     botState.currentContractType = contractType;
     botState.lastTradeTime = now;
 
-    console.log(`🎯 [CAMALEÓN] Mercado: ${bestSymbol} | Estrategia: ${strategy} | Entropy: ${minEntropy.toFixed(2)}`);
+    console.log(`🚀 [REAL] DISPARO en ${bestSymbol} | Estrategia: ${strat} | V-WinRate: ${vWR}%`);
 
     const req = {
         buy: 1, price: stake,
@@ -282,25 +262,17 @@ function evaluateAndFire() {
         }
     };
     if (barrier !== null) req.parameters.barrier = barrier;
-    
     ws.send(JSON.stringify(req));
 }
 
 function finalizeTrade(c) {
     const profit = parseFloat(c.profit);
     const isWin = profit > 0;
-    
     botState.dailyProfit += isWin ? profit : 0;
     botState.dailyLoss += isWin ? 0 : Math.abs(profit);
     botState.totalTradesSession++;
-    if (isWin) botState.winsSession++; else botState.lossesSession++;
-
-    // Transiciones de capas
-    if (isWin) {
-        botState.recoveryLayer = 0;
-    } else {
-        botState.recoveryLayer = Math.min(botState.recoveryLayer + 1, 2);
-    }
+    if (isWin) { botState.winsSession++; botState.recoveryLayer = 0; } 
+    else { botState.lossesSession++; botState.recoveryLayer = Math.min(botState.recoveryLayer + 1, 2); }
 
     botState.tradeHistory.unshift({
         symbol: c.display_symbol,
@@ -309,63 +281,33 @@ function finalizeTrade(c) {
         result: isWin ? 'WIN ✅' : 'LOSS ❌',
         time: new Date().toLocaleTimeString()
     });
-
     if (botState.tradeHistory.length > 50) botState.tradeHistory.pop();
     botState.activeContractId = null;
-    
-    // Verificación de Meta
+
     const net = botState.dailyProfit - botState.dailyLoss;
     if (net >= botState.takeProfit || botState.dailyLoss >= botState.maxDailyLoss) {
         botState.isRunning = false;
-        console.log(`🏁 OBJETIVO ALCANZADO: $${net.toFixed(2)}`);
+        console.log(`🏁 OBJETIVO: $${net.toFixed(2)}`);
     }
     saveState();
 }
 
-// ─── SERVIDOR ─────────────────────────────────────────────────
+// ─── API ──────────────────────────────────────────────────────
 const app = express();
 app.use(cors()); app.use(express.json()); app.use(express.static(path.join(__dirname, 'public')));
 app.get('/differs/status', (req, res) => {
-    const activeMarket = botState.markets[botState.activeSymbol] || {};
-    const flattenedState = {
-        ...botState,
-        shannonEntropy: activeMarket.entropy || 0,
-        markovEdge: activeMarket.markovEdge || 0,
-        lastDigit: activeMarket.lastDigit,
-        currentBarrier: botState.currentBarrier, // Usar el guardado globalmente
-        symbol: botState.activeSymbol,
-        winRate: botState.totalTradesSession > 0
-            ? ((botState.winsSession / botState.totalTradesSession) * 100).toFixed(1)
-            : '0.0'
-    };
-    res.json({ success: true, data: flattenedState });
+    const m = botState.markets[botState.activeSymbol] || {};
+    res.json({ success: true, data: { ...botState, shannonEntropy: m.entropy, markovEdge: botState.virtualWinRate } });
 });
 app.post('/differs/control', (req, res) => {
-    const { action, stake, takeProfit, maxDailyLoss, isRecoveryEnabled, scanRange } = req.body;
-    
+    const { action, stake, takeProfit, maxDailyLoss } = req.body;
     if (action === 'START' || action === 'SYNC') {
-        if (stake !== undefined) botState.stake = parseFloat(stake);
-        if (takeProfit !== undefined) botState.takeProfit = parseFloat(takeProfit);
-        if (maxDailyLoss !== undefined) botState.maxDailyLoss = parseFloat(maxDailyLoss);
-        if (isRecoveryEnabled !== undefined) botState.isRecoveryEnabled = !!isRecoveryEnabled;
-        
+        if (stake) botState.stake = parseFloat(stake);
+        if (takeProfit) botState.takeProfit = parseFloat(takeProfit);
+        if (maxDailyLoss) botState.maxDailyLoss = parseFloat(maxDailyLoss);
         if (action === 'START') botState.isRunning = true;
-    } else if (action === 'STOP') {
-        botState.isRunning = false;
-    } else if (action === 'RESET_DAY') {
-        botState.dailyProfit = 0; 
-        botState.dailyLoss = 0; 
-        botState.winsSession = 0;
-        botState.lossesSession = 0;
-        botState.totalTradesSession = 0;
-        botState.tradeHistory = [];
-    } else if (action === 'CONFIG') {
-        if (scanRange) botState.scanRange = parseInt(scanRange);
-    }
-    
-    saveState();
-    res.json({ success: true, data: botState });
+    } else if (action === 'STOP') botState.isRunning = false;
+    else if (action === 'RESET_DAY') { botState.dailyProfit = 0; botState.dailyLoss = 0; botState.tradeHistory = []; }
+    saveState(); res.json({ success: true });
 });
-
-const PORT = process.env.PORT || 8080;
-app.listen(PORT, '0.0.0.0', () => { connectDeriv(); });
+app.listen(process.env.PORT || 8080, '0.0.0.0', () => connectDeriv());
