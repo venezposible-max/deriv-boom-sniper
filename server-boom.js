@@ -286,8 +286,11 @@ app.get('/differs/status', (req, res) => {
             shannonEntropy: `Racha: ${activeStreak}/3`,
             markovEdge: streakDigit,
             currentBarrier: streakDigit,
-            inCooldown: false,
-            cooldownRemaining: 0
+            isRunning: botState.isRunning,
+            isFetching: botState.isBuying,
+            activeContractId: botState.activeContractId,
+            strategyMode: botState.strategyMode,
+            matrixSize: botState.markets['R_10'].digitHistory.length
         } 
     });
 });
