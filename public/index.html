@@ -268,7 +268,8 @@
 
     <!-- STRATEGY SELECTOR -->
     <div style="display: flex; gap: 8px; margin-bottom: 20px; justify-content: center;">
-        <button id="btnStratDiffers" class="chip chip-green" style="cursor:default; border:none; background: #059669; color:white; padding: 10px 16px; font-weight: 800;">🐇 UNDER-9 RABBIT-FOOT [90% PROB]</button>
+        <button id="btnStratDiffers" onclick="switchStrategy('DIFFERS')" class="chip chip-green" style="cursor:pointer; border:none; background: #059669; color:white; padding: 10px 16px; font-weight: 800;">🐇 ANTI-RACHA (DIFFERS)</button>
+        <button id="btnStratMatch" onclick="switchStrategy('MATCH')" class="chip chip-gold" style="cursor:pointer; border:none; padding: 10px 16px; font-weight: 800; background: rgba(250,204,21,0.15); color: #fbbf24;">🔥 PRO-RACHA (MATCH)</button>
     </div>
 
     <!-- MARKET SELECTOR -->
@@ -456,20 +457,22 @@
         if (isRunning) return;
         currentStrategy = strat;
         
-        document.getElementById('btnStratDiffers').style.background = strat === 'DIFFERS' ? '#7c3aed' : 'rgba(167,139,250,0.15)';
-        document.getElementById('btnStratDiffers').style.color = strat === 'DIFFERS' ? 'white' : '#a78bfa';
-        document.getElementById('btnStratOU').style.background = strat === 'OVER_UNDER' ? '#7c3aed' : 'rgba(167,139,250,0.15)';
-        document.getElementById('btnStratOU').style.color = strat === 'OVER_UNDER' ? 'white' : '#a78bfa';
+        document.getElementById('btnStratDiffers').style.background = strat === 'DIFFERS' ? '#059669' : 'rgba(52,211,153,0.15)';
+        document.getElementById('btnStratDiffers').style.color = strat === 'DIFFERS' ? 'white' : '#34d399';
         
-        document.getElementById('subTitle').innerText = strat === 'DIFFERS' ? 'Smart Differs (90%)' : 'Ataque Binario Central (60/40)';
+        document.getElementById('btnStratMatch').style.background = strat === 'MATCH' ? '#b45309' : 'rgba(250,204,21,0.15)';
+        document.getElementById('btnStratMatch').style.color = strat === 'MATCH' ? 'white' : '#fbbf24';
+        
+        document.getElementById('subTitle').innerText = strat === 'DIFFERS' ? 'Cazador Anti-Racha (90%)' : 'Cazador Pro-Racha (800%)';
         const theBtn = document.getElementById('btnToggle');
-        if (!isRunning) theBtn.innerText = strat === 'DIFFERS' ? '🎲 Iniciar Differs Sniper' : '🚀 Iniciar Ataque Binario';
+        if (!isRunning) theBtn.innerText = strat === 'DIFFERS' ? '🛡️ Iniciar Anti-Racha' : '🔥 Iniciar Pro-Racha';
 
-        document.getElementById('barrierLabelTitle').innerText = strat === 'DIFFERS' ? 'Diferir De' : 'Estrategia Binaria';
-        document.getElementById('barrierLabelSub').innerText = strat === 'DIFFERS' ? 'El último dígito NO será este' : 'Under(8) + Over(1) Simultáneos';
-        
-        document.getElementById('recoveryLabelTitle').innerText = strat === 'DIFFERS' ? 'Recuperar Tras Pérdida' : 'Doble Cobertura Activa';
-        document.getElementById('recoveryLabelSub').innerText = strat === 'DIFFERS' ? 'Escudo One-Shot Activado' : 'Gana en el Centro (+40%) o Extremos (+20%)';
+        // Sincronizar con el backend
+        fetch('/differs/control', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'SYNC', strategyMode: currentStrategy })
+        });
     }
 
     // Build frequency table
@@ -586,18 +589,10 @@
                 setTimeout(() => { ld.style.transform = 'scale(1)'; }, 150);
             }
 
-            // Barrier - contract type aware
-            const barrier = data.currentBarrier;
-            const cType = data.currentContractType || 'DIGITDIFF';
-            if (cType === 'DIGITDIFF') {
-                document.getElementById('barrierDisplay').innerText = barrier !== null ? `NO-${barrier}` : '-';
-                document.getElementById('barrierLabelSub').innerText = 'El último dígito NO será este';
-            } else if (cType.includes('OVER')) {
-                document.getElementById('barrierDisplay').innerText = `OVER ${barrier}`;
-                document.getElementById('barrierLabelSub').innerText = 'El dígito será MAYOR que este';
-            } else {
-                document.getElementById('barrierDisplay').innerText = `UNDER ${barrier}`;
-                document.getElementById('barrierLabelSub').innerText = 'El dígito será MENOR que este';
+            // Sync strategy globally from backend if another tab changed it
+            if (data.strategyMode && data.strategyMode !== currentStrategy && !isRunning) {
+                currentStrategy = data.strategyMode;
+                switchStrategy(currentStrategy);
             }
 
             // Entropy + Markov indicators

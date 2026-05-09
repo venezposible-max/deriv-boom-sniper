@@ -41,6 +41,7 @@ let botState = {
     lastTradeTime: 0,
     cooldownMs: 2000,
     isBuying: false,
+    strategyMode: 'DIFFERS', // Opciones: 'DIFFERS' o 'MATCH'
     markets: {}
 };
 
@@ -137,12 +138,15 @@ function evaluateInstitutionalSniper() {
     botState.isBuying = true;
     botState.lastTradeTime = now;
 
-    console.log(`🎯 [FRANCOTIRADOR] ${targetSymbol} | Anomalía (Salió el ${targetDigit} tres veces: ${targetDigit},${targetDigit},${targetDigit}) | Disparando DIFFERS...`);
+    const contractType = botState.strategyMode === 'MATCH' ? 'DIGITMATCH' : 'DIGITDIFF';
+    const stratName = botState.strategyMode === 'MATCH' ? 'PRO-RACHA (MATCH)' : 'ANTI-RACHA (DIFFERS)';
+
+    console.log(`🎯 [FRANCOTIRADOR] ${targetSymbol} | Anomalía (Salió el ${targetDigit} tres veces) | Estrategia: ${stratName}`);
 
     ws.send(JSON.stringify({
         buy: 1, price: botState.stake,
         parameters: {
-            amount: botState.stake, basis: 'stake', contract_type: 'DIGITDIFF',
+            amount: botState.stake, basis: 'stake', contract_type: contractType,
             currency: 'USD', symbol: targetSymbol, duration: 1, duration_unit: 't',
             barrier: String(targetDigit)
         }
@@ -166,13 +170,14 @@ function finalizeTrade(c) {
         botState.lossesSession++;
     }
 
-    // Extraer la barrera del string de la API (ej: "Digits Differs from 7")
+    // Extraer la barrera del string de la API (ej: "Digits Differs from 7" o "Digits Matches 7")
     const barrierMatch = c.shortcode.match(/_(\d)_/);
     const barrierDigit = barrierMatch ? barrierMatch[1] : '?';
+    const isMatch = c.shortcode.includes('DIGITMATCH');
 
     botState.tradeHistory.unshift({
         symbol: c.display_symbol,
-        type: `DIFF(≠${barrierDigit})`,
+        type: isMatch ? `MATCH(=${barrierDigit})` : `DIFF(≠${barrierDigit})`,
         profit,
         result: isWin ? 'WIN ✅' : 'LOSS ❌',
         time: new Date().toLocaleTimeString()
@@ -225,14 +230,16 @@ app.get('/differs/status', (req, res) => {
 });
 
 app.post('/differs/control', (req, res) => {
-    const { action, stake, takeProfit, maxDailyLoss } = req.body;
+    const { action, stake, takeProfit, maxDailyLoss, strategyMode } = req.body;
     if (action === 'START' || action === 'SYNC') {
         if (stake) botState.stake = parseFloat(stake);
         if (takeProfit) botState.takeProfit = parseFloat(takeProfit);
         if (maxDailyLoss) botState.maxDailyLoss = parseFloat(maxDailyLoss);
+        if (strategyMode) botState.strategyMode = strategyMode;
+        
         if (action === 'START') {
             botState.isRunning = true;
-            console.log(`🚀 BOT INICIADO | Riesgo Máximo: $${botState.maxDailyLoss} | Meta: $${botState.takeProfit}`);
+            console.log(`🚀 BOT INICIADO | Estrategia: ${botState.strategyMode} | Meta: $${botState.takeProfit}`);
         }
     } else if (action === 'STOP') {
         botState.isRunning = false;
