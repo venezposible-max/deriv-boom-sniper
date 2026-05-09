@@ -574,6 +574,20 @@
                 switchStrategy(currentStrategy);
             }
 
+            // Barrier Display
+            const cType = data.currentContractType || 'DIGITDIFF';
+            const displayBarrier = data.currentBarrier !== null && data.currentBarrier !== undefined ? data.currentBarrier : '-';
+            
+            if (cType === 'DIGITDIFF') {
+                document.getElementById('barrierDisplay').innerText = `NO-${displayBarrier}`;
+                document.getElementById('barrierLabelSub').innerText = 'El último dígito NO será este';
+            } else if (cType === 'DIGITMATCH') {
+                document.getElementById('barrierDisplay').innerText = `MATCH-${displayBarrier}`;
+                document.getElementById('barrierLabelSub').innerText = 'El último dígito DEBE SER este';
+            } else {
+                document.getElementById('barrierDisplay').innerText = '-';
+            }
+
             // Entropy + Markov indicators
             const ent = parseFloat(data.shannonEntropy || 0);
             document.getElementById('entropyDisplay').innerText = ent > 0 ? ent.toFixed(2) : '--';
