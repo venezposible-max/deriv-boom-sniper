@@ -675,6 +675,7 @@
             }
 
             // Digit history freq table
+            const barrier = data.currentBarrier || '?';
             if (data.digitHistory) {
                 buildFreqTable(data.digitHistory, barrier);
             }
