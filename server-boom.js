@@ -72,7 +72,7 @@ function connectDeriv() {
         const msg = JSON.parse(raw);
         if (msg.msg_type === 'authorize') {
             botState.isConnectedToDeriv = true;
-            console.log("🧠 MODO INSTITUCIONAL v9.0 ACTIVADO (Matriz de Markov | Péndulo Dual Over/Under)");
+            console.log("🎯 MODO INSTITUCIONAL v10.0 ACTIVADO (Núcleo Clásico: Puro Differs 3x)");
             SYMBOLS.forEach(s => {
                 ws.send(JSON.stringify({ subscribe: 1, ticks: s }));
             });
@@ -119,90 +119,38 @@ function evaluateInstitutionalSniper() {
     const now = Date.now();
     if (now - botState.lastTradeTime < botState.cooldownMs) return;
 
-    let targetUnderSymbol = null;
-    let targetOverSymbol = null;
-    let maxUnderProb = 0;
-    let maxOverProb = 0;
-    let optimalUnderDigit = null;
-    let optimalOverDigit = null;
+    let targetSymbol = null;
+    let targetDigit = null;
 
-    // MATRIZ DE MARKOV (ADN del Casino)
+    // Escanear los 4 mercados en busca de la "Falla en la Matrix" (3 repeticiones seguidas)
     SYMBOLS.forEach(s => {
         const history = botState.markets[s].digitHistory;
-        // Necesitamos al menos 200 ticks de muestra para que la matriz sea confiable
-        if (history.length < 200) return; 
+        if (history.length < 3) return;
         
-        const currentDigit = history[history.length - 1];
-        
-        let countUnder = 0;
-        let countOver = 0;
-        let totalSamples = 0;
-        
-        // Construimos la matriz en tiempo real para el dígito actual
-        for (let i = 0; i < history.length - 1; i++) {
-            if (history[i] === currentDigit) {
-                totalSamples++;
-                const nextDigit = history[i+1];
-                if (nextDigit < 7) countUnder++;
-                if (nextDigit > 2) countOver++;
-            }
-        }
-        
-        // Exigimos un mínimo de 8 apariciones del dígito para validar la estadística
-        if (totalSamples >= 8) {
-            const probUnder = countUnder / totalSamples;
-            const probOver = countOver / totalSamples;
-            
-            // Si el PRNG está sesgado a tirar el número hacia abajo (prob > 75%)
-            if (probUnder >= 0.75 && probUnder > maxUnderProb) {
-                maxUnderProb = probUnder;
-                targetUnderSymbol = s;
-                optimalUnderDigit = currentDigit;
-            }
-            
-            // Si el PRNG está sesgado a tirar el número hacia arriba (prob > 75%)
-            if (probOver >= 0.75 && probOver > maxOverProb) {
-                maxOverProb = probOver;
-                targetOverSymbol = s;
-                optimalOverDigit = currentDigit;
-            }
+        const last3 = history.slice(-3);
+        if (last3[0] === last3[1] && last3[1] === last3[2]) {
+            // ¡Anomalía encontrada! El mismo dígito salió 3 veces seguidas.
+            targetSymbol = s;
+            targetDigit = last3[0];
         }
     });
 
-    // Disparadores (Prioridad al que tenga mayor certeza matemática)
-    if (targetUnderSymbol && maxUnderProb >= maxOverProb) {
-        botState.activeSymbol = targetUnderSymbol;
-        botState.isBuying = true;
-        botState.lastTradeTime = now;
-        
-        const probText = (maxUnderProb * 100).toFixed(1);
-        console.log(`🧠 [MARKOV - TECHO] ${targetUnderSymbol} | Tras un [${optimalUnderDigit}], cae <7 el ${probText}% de las veces. | Disparo UNDER 7: $${botState.stake}`);
-        
-        ws.send(JSON.stringify({
-            buy: 1, price: botState.stake,
-            parameters: {
-                amount: botState.stake, basis: 'stake', contract_type: 'DIGITUNDER',
-                currency: 'USD', symbol: targetUnderSymbol, duration: 1, duration_unit: 't',
-                barrier: '7'
-            }
-        }));
-    } else if (targetOverSymbol) {
-        botState.activeSymbol = targetOverSymbol;
-        botState.isBuying = true;
-        botState.lastTradeTime = now;
-        
-        const probText = (maxOverProb * 100).toFixed(1);
-        console.log(`🧠 [MARKOV - PISO] ${targetOverSymbol} | Tras un [${optimalOverDigit}], sube >2 el ${probText}% de las veces. | Disparo OVER 2: $${botState.stake}`);
-        
-        ws.send(JSON.stringify({
-            buy: 1, price: botState.stake,
-            parameters: {
-                amount: botState.stake, basis: 'stake', contract_type: 'DIGITOVER',
-                currency: 'USD', symbol: targetOverSymbol, duration: 1, duration_unit: 't',
-                barrier: '2'
-            }
-        }));
-    }
+    if (!targetSymbol || targetDigit === null) return;
+
+    botState.activeSymbol = targetSymbol;
+    botState.isBuying = true;
+    botState.lastTradeTime = now;
+
+    console.log(`🎯 [FRANCOTIRADOR CLÁSICO] ${targetSymbol} | Anomalía (Salió el ${targetDigit} tres veces) | Disparo: DIFFERS con $${botState.stake}`);
+
+    ws.send(JSON.stringify({
+        buy: 1, price: botState.stake,
+        parameters: {
+            amount: botState.stake, basis: 'stake', contract_type: 'DIGITDIFF',
+            currency: 'USD', symbol: targetSymbol, duration: 1, duration_unit: 't',
+            barrier: String(targetDigit)
+        }
+    }));
 }
 
 function finalizeTrade(c) {
@@ -224,16 +172,10 @@ function finalizeTrade(c) {
 
     const barrierMatch = c.shortcode.match(/_(\d)_/);
     const barrierDigit = barrierMatch ? barrierMatch[1] : '?';
-    const isUnder = c.shortcode.includes('DIGITUNDER');
-    const isOver = c.shortcode.includes('DIGITOVER');
-
-    let typeStr = `❓ UNKNOWN`;
-    if (isUnder) typeStr = `📉 UNDER(<${barrierDigit})`;
-    if (isOver) typeStr = `📈 OVER(>${barrierDigit})`;
 
     botState.tradeHistory.unshift({
         symbol: botState.activeSymbol || c.display_symbol,
-        type: typeStr,
+        type: `🔫 DIFF(≠${barrierDigit})`,
         profit,
         result: isWin ? 'WIN ✅' : 'LOSS ❌',
         time: new Date().toLocaleTimeString()
@@ -306,7 +248,7 @@ app.post('/differs/control', (req, res) => {
         
         if (action === 'START') {
             botState.isRunning = true;
-            console.log(`🚀 ESCÁNER MARKOV INICIADO | Meta de Sesión: $${botState.takeProfit}`);
+            console.log(`🚀 FRANCOTIRADOR CLÁSICO INICIADO | Meta de Sesión: $${botState.takeProfit}`);
         }
     } else if (action === 'STOP') {
         botState.isRunning = false;
