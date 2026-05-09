@@ -173,14 +173,14 @@ function finalizeTrade(c) {
         botState.lossesSession++;
     }
 
-    // Extraer la barrera del string de la API (ej: "Digits Differs from 7" o "Digits Matches 7")
     const barrierMatch = c.shortcode.match(/_(\d)_/);
     const barrierDigit = barrierMatch ? barrierMatch[1] : '?';
     const isMatch = c.shortcode.includes('DIGITMATCH');
+    const isHedge = isMatch && botState.strategyMode === 'DIFFERS';
 
     botState.tradeHistory.unshift({
-        symbol: c.display_symbol,
-        type: isMatch ? `MATCH(=${barrierDigit})` : `DIFF(≠${barrierDigit})`,
+        symbol: botState.activeSymbol || c.display_symbol,
+        type: isHedge ? `🛡️ ESCUDO(=${barrierDigit})` : (isMatch ? `MATCH(=${barrierDigit})` : `DIFF(≠${barrierDigit})`),
         profit,
         result: isWin ? 'WIN ✅' : 'LOSS ❌',
         time: new Date().toLocaleTimeString()
@@ -188,6 +188,29 @@ function finalizeTrade(c) {
     
     if (botState.tradeHistory.length > 50) botState.tradeHistory.pop();
     botState.activeContractId = null;
+
+    // 🛡️ ESCUDO ASIMÉTRICO (Contra-Golpe al 20%)
+    // Si estamos en modo ANTI-RACHA (Differs) y perdemos un trade normal (Differs)
+    if (!isWin && !isMatch && botState.strategyMode === 'DIFFERS' && botState.isRunning) {
+        // Calcular el 20% del stake original (Mínimo $0.35 permitido por Deriv)
+        const hedgeStake = Math.max(0.35, parseFloat((botState.stake * 0.20).toFixed(2)));
+        botState.isBuying = true;
+        
+        console.log(`🛡️ [ESCUDO ASIMÉTRICO] Racha terca detectada. Lanzando MATCH(=${barrierDigit}) con $${hedgeStake} (20% del stake) para recuperar.`);
+        
+        ws.send(JSON.stringify({
+            buy: 1, price: hedgeStake,
+            parameters: {
+                amount: hedgeStake, basis: 'stake', contract_type: 'DIGITMATCH',
+                currency: 'USD', symbol: botState.activeSymbol, duration: 1, duration_unit: 't',
+                barrier: String(barrierDigit)
+            }
+        }));
+        
+        // Evitamos calcular parada de sesión hasta que el escudo termine
+        saveState();
+        return;
+    }
 
     const net = botState.dailyProfit - botState.dailyLoss;
     if (net >= botState.takeProfit || botState.dailyLoss >= botState.maxDailyLoss) {
