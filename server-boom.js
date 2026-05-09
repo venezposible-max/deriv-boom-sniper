@@ -87,7 +87,7 @@ function connectDeriv() {
             m.digitHistory.push(digit);
             m.lastDigit = digit;
             m.lastTickPrice = msg.tick.quote;
-            if (m.digitHistory.length > 50) m.digitHistory.shift();
+            if (m.digitHistory.length > 1000) m.digitHistory.shift(); // 1000 ticks para la Matriz de Markov
 
             if (botState.isRunning && !botState.activeContractId && !botState.isBuying) {
                 evaluateInstitutionalSniper();
@@ -121,31 +121,62 @@ function evaluateInstitutionalSniper() {
 
     let targetUnderSymbol = null;
     let targetOverSymbol = null;
+    let maxUnderProb = 0;
+    let maxOverProb = 0;
+    let optimalUnderDigit = null;
+    let optimalOverDigit = null;
 
-    // Escanear los 4 mercados con los dos agentes simultáneamente
+    // MATRIZ DE MARKOV (ADN del Casino)
     SYMBOLS.forEach(s => {
         const history = botState.markets[s].digitHistory;
-        if (history.length < 3) return;
+        // Necesitamos al menos 200 ticks de muestra para que la matriz sea confiable
+        if (history.length < 200) return; 
         
-        const last3 = history.slice(-3);
+        const currentDigit = history[history.length - 1];
         
-        // Agente 1: Techo (UNDER 7) - Busca fatiga de números altos (>= 7)
-        if (last3[0] >= 7 && last3[1] >= 7 && last3[2] >= 7) {
-            targetUnderSymbol = s;
-        } 
-        // Agente 2: Piso (OVER 2) - Busca fatiga de números bajos (<= 2)
-        else if (last3[0] <= 2 && last3[1] <= 2 && last3[2] <= 2) {
-            targetOverSymbol = s;
+        let countUnder = 0;
+        let countOver = 0;
+        let totalSamples = 0;
+        
+        // Construimos la matriz en tiempo real para el dígito actual
+        for (let i = 0; i < history.length - 1; i++) {
+            if (history[i] === currentDigit) {
+                totalSamples++;
+                const nextDigit = history[i+1];
+                if (nextDigit < 7) countUnder++;
+                if (nextDigit > 2) countOver++;
+            }
+        }
+        
+        // Exigimos un mínimo de 10 apariciones del dígito para validar la estadística
+        if (totalSamples >= 10) {
+            const probUnder = countUnder / totalSamples;
+            const probOver = countOver / totalSamples;
+            
+            // Si el PRNG está sesgado a tirar el número hacia abajo (prob > 85%)
+            if (probUnder >= 0.85 && probUnder > maxUnderProb) {
+                maxUnderProb = probUnder;
+                targetUnderSymbol = s;
+                optimalUnderDigit = currentDigit;
+            }
+            
+            // Si el PRNG está sesgado a tirar el número hacia arriba (prob > 85%)
+            if (probOver >= 0.85 && probOver > maxOverProb) {
+                maxOverProb = probOver;
+                targetOverSymbol = s;
+                optimalOverDigit = currentDigit;
+            }
         }
     });
 
-    // Disparadores
-    if (targetUnderSymbol) {
+    // Disparadores (Prioridad al que tenga mayor certeza matemática)
+    if (targetUnderSymbol && maxUnderProb >= maxOverProb) {
         botState.activeSymbol = targetUnderSymbol;
         botState.isBuying = true;
         botState.lastTradeTime = now;
         
-        console.log(`🎯 [PÉNDULO - TECHO] ${targetUnderSymbol} | Fatiga Alta Detectada | Disparo UNDER 7: $${botState.stake}`);
+        const probText = (maxUnderProb * 100).toFixed(1);
+        console.log(`🧠 [MARKOV - TECHO] ${targetUnderSymbol} | Tras un [${optimalUnderDigit}], cae <7 el ${probText}% de las veces. | Disparo UNDER 7: $${botState.stake}`);
         
         ws.send(JSON.stringify({
             buy: 1, price: botState.stake,
@@ -160,7 +191,8 @@ function evaluateInstitutionalSniper() {
         botState.isBuying = true;
         botState.lastTradeTime = now;
         
-        console.log(`🎯 [PÉNDULO - PISO] ${targetOverSymbol} | Fatiga Baja Detectada | Disparo OVER 2: $${botState.stake}`);
+        const probText = (maxOverProb * 100).toFixed(1);
+        console.log(`🧠 [MARKOV - PISO] ${targetOverSymbol} | Tras un [${optimalOverDigit}], sube >2 el ${probText}% de las veces. | Disparo OVER 2: $${botState.stake}`);
         
         ws.send(JSON.stringify({
             buy: 1, price: botState.stake,
