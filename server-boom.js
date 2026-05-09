@@ -90,6 +90,54 @@ function calcEntropy(hist) {
     return entropy;
 }
 
+function getMarkovParity(hist) {
+    if (hist.length < 100) return null;
+    const sub = hist.slice(-200);
+    const matrix = { even: { even: 0, odd: 0, total: 0 }, odd: { even: 0, odd: 0, total: 0 } };
+    for (let k = 1; k < sub.length; k++) {
+        const prev = sub[k-1] % 2 === 0 ? 'even' : 'odd';
+        const curr = sub[k] % 2 === 0 ? 'even' : 'odd';
+        matrix[prev][curr]++;
+        matrix[prev].total++;
+    }
+    const last = hist[hist.length - 1] % 2 === 0 ? 'even' : 'odd';
+    const trans = matrix[last];
+    if (trans.total < 10) return null;
+    const probEven = trans.even / trans.total;
+    const edge = Math.abs(probEven - 0.5);
+    botState.markovEdge = (edge * 100).toFixed(1);
+    if (probEven > 0.55) return { type: 'DIGITEVEN', label: 'PAR (Markov)' };
+    if (probEven < 0.45) return { type: 'DIGITODD', label: 'IMPAR (Markov)' };
+    return null;
+}
+
+function getMarkovOverUnder(hist) {
+    if (hist.length < 100) return null;
+    const sub = hist.slice(-200);
+    const matrix = {};
+    for (let i = 0; i <= 9; i++) {
+        matrix[i] = {};
+        for (let j = 0; j <= 9; j++) matrix[i][j] = 0;
+    }
+    for (let k = 1; k < sub.length; k++) {
+        matrix[sub[k-1]][sub[k]]++;
+    }
+    const lastDigit = hist[hist.length - 1];
+    let total = 0;
+    for (let j = 0; j <= 9; j++) total += matrix[lastDigit][j];
+    if (total < 10) return null;
+    
+    let probOver = 0;
+    for (let d = 5; d <= 9; d++) probOver += matrix[lastDigit][d] / total;
+    const probUnder = 1 - probOver;
+    const edge = Math.abs(probOver - 0.5);
+    botState.markovEdge = (edge * 100).toFixed(1);
+    
+    if (probOver > 0.55) return { type: 'DIGITOVER', barrier: '4', prob: probOver, label: 'OVER 4' };
+    if (probUnder > 0.55) return { type: 'DIGITUNDER', barrier: '5', prob: probUnder, label: 'UNDER 5' };
+    return null;
+}
+
 function getBestStrategy(symbol) {
     const m = botState.markets[symbol];
     const ent = m.entropy;
