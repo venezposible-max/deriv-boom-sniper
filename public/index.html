@@ -794,12 +794,12 @@
     async function switchMarket(symbol) {
         if (isRunning) return;
         try {
-            await fetch('/differs/switch-market', {
+            await fetch('/differs/control', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ symbol })
+                body: JSON.stringify({ action: 'SYNC', symbol })
             });
-            fetchStatus();
+            fetchStatus(true);
         } catch (e) { console.error(e); }
     }
 

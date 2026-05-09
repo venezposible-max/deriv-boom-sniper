@@ -42,6 +42,7 @@ let botState = {
     cooldownMs: 2000,
     isBuying: false,
     strategyMode: 'DIFFERS', // Opciones: 'DIFFERS' o 'MATCH'
+    viewedSymbol: 'R_100',
     markets: {}
 };
 
@@ -84,6 +85,8 @@ function connectDeriv() {
             
             const m = botState.markets[s];
             m.digitHistory.push(digit);
+            m.lastDigit = digit;
+            m.lastTickPrice = msg.tick.quote;
             if (m.digitHistory.length > 50) m.digitHistory.shift();
 
             if (botState.isRunning && !botState.activeContractId && !botState.isBuying) {
@@ -216,10 +219,17 @@ app.get('/differs/status', (req, res) => {
         }
     });
 
+    const viewed = botState.viewedSymbol || 'R_100';
+    const market = botState.markets[viewed] || { digitHistory: [] };
+
     res.json({ 
         success: true, 
         data: { 
             ...botState, 
+            symbol: viewed,
+            lastDigit: market.lastDigit,
+            lastTickPrice: market.lastTickPrice,
+            currentContractType: botState.strategyMode === 'MATCH' ? 'DIGITMATCH' : 'DIGITDIFF',
             shannonEntropy: `Racha: ${activeStreak}/3`,
             markovEdge: streakDigit,
             currentBarrier: streakDigit,
@@ -230,12 +240,13 @@ app.get('/differs/status', (req, res) => {
 });
 
 app.post('/differs/control', (req, res) => {
-    const { action, stake, takeProfit, maxDailyLoss, strategyMode } = req.body;
+    const { action, stake, takeProfit, maxDailyLoss, strategyMode, symbol } = req.body;
     if (action === 'START' || action === 'SYNC') {
         if (stake) botState.stake = parseFloat(stake);
         if (takeProfit) botState.takeProfit = parseFloat(takeProfit);
         if (maxDailyLoss) botState.maxDailyLoss = parseFloat(maxDailyLoss);
         if (strategyMode) botState.strategyMode = strategyMode;
+        if (symbol) botState.viewedSymbol = symbol;
         
         if (action === 'START') {
             botState.isRunning = true;
