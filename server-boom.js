@@ -119,9 +119,8 @@ function evaluateInstitutionalSniper() {
     const now = Date.now();
     if (now - botState.lastTradeTime < botState.cooldownMs) return;
 
-    let targetDiffersSymbol = null;
-    let targetDiffersDigit = null;
     let targetUnderSymbol = null;
+    let targetOverSymbol = null;
 
     // Escanear los 4 mercados con los dos agentes simultáneamente
     SYMBOLS.forEach(s => {
@@ -129,26 +128,24 @@ function evaluateInstitutionalSniper() {
         if (history.length < 3) return;
         
         const last3 = history.slice(-3);
-        const last2 = history.slice(-2);
         
-        // Agente 2: El Péndulo (UNDER 7) - Busca fatiga matemática (3 números altos seguidos >= 7)
+        // Agente 1: Techo (UNDER 7) - Busca fatiga de números altos (>= 7)
         if (last3[0] >= 7 && last3[1] >= 7 && last3[2] >= 7) {
             targetUnderSymbol = s;
         } 
-        // Agente 1: Recolector Constante (DIFFERS) - Busca 2 idénticos
-        else if (last2[0] === last2[1]) {
-            targetDiffersSymbol = s;
-            targetDiffersDigit = last2[0];
+        // Agente 2: Piso (OVER 2) - Busca fatiga de números bajos (<= 2)
+        else if (last3[0] <= 2 && last3[1] <= 2 && last3[2] <= 2) {
+            targetOverSymbol = s;
         }
     });
 
-    // Prioridad absoluta al Agente Péndulo si se da la anomalía de fatiga
+    // Disparadores
     if (targetUnderSymbol) {
         botState.activeSymbol = targetUnderSymbol;
         botState.isBuying = true;
         botState.lastTradeTime = now;
         
-        console.log(`🎯 [FRANCOTIRADOR - PÉNDULO] ${targetUnderSymbol} | Fatiga Alta Detectada | Disparo UNDER 7 con: $${botState.stake}`);
+        console.log(`🎯 [PÉNDULO - TECHO] ${targetUnderSymbol} | Fatiga Alta Detectada | Disparo UNDER 7: $${botState.stake}`);
         
         ws.send(JSON.stringify({
             buy: 1, price: botState.stake,
@@ -158,21 +155,19 @@ function evaluateInstitutionalSniper() {
                 barrier: '7'
             }
         }));
-    } 
-    // Si no hay anomalía extrema, el Agente Recolector hace su trabajo
-    else if (targetDiffersSymbol && targetDiffersDigit !== null) {
-        botState.activeSymbol = targetDiffersSymbol;
+    } else if (targetOverSymbol) {
+        botState.activeSymbol = targetOverSymbol;
         botState.isBuying = true;
         botState.lastTradeTime = now;
         
-        console.log(`🔫 [AMETRALLADORA - DIFFERS] ${targetDiffersSymbol} | Racha Leve (Salió el ${targetDiffersDigit} dos veces) | Disparo: $${botState.stake}`);
+        console.log(`🎯 [PÉNDULO - PISO] ${targetOverSymbol} | Fatiga Baja Detectada | Disparo OVER 2: $${botState.stake}`);
         
         ws.send(JSON.stringify({
             buy: 1, price: botState.stake,
             parameters: {
-                amount: botState.stake, basis: 'stake', contract_type: 'DIGITDIFF',
-                currency: 'USD', symbol: targetDiffersSymbol, duration: 1, duration_unit: 't',
-                barrier: String(targetDiffersDigit)
+                amount: botState.stake, basis: 'stake', contract_type: 'DIGITOVER',
+                currency: 'USD', symbol: targetOverSymbol, duration: 1, duration_unit: 't',
+                barrier: '2'
             }
         }));
     }
@@ -198,10 +193,15 @@ function finalizeTrade(c) {
     const barrierMatch = c.shortcode.match(/_(\d)_/);
     const barrierDigit = barrierMatch ? barrierMatch[1] : '?';
     const isUnder = c.shortcode.includes('DIGITUNDER');
+    const isOver = c.shortcode.includes('DIGITOVER');
+
+    let typeStr = `❓ UNKNOWN`;
+    if (isUnder) typeStr = `📉 UNDER(<${barrierDigit})`;
+    if (isOver) typeStr = `📈 OVER(>${barrierDigit})`;
 
     botState.tradeHistory.unshift({
         symbol: botState.activeSymbol || c.display_symbol,
-        type: isUnder ? `⚖️ UNDER(<${barrierDigit})` : `🔫 DIFF(≠${barrierDigit})`,
+        type: typeStr,
         profit,
         result: isWin ? 'WIN ✅' : 'LOSS ❌',
         time: new Date().toLocaleTimeString()

@@ -421,7 +421,7 @@
         <!-- RECOVERY SWITCH REMOVED -->
 
         <button id="btnToggle" class="btn-main btn-start" onclick="toggleBot()">
-             ⚔️ Iniciar Doble Gatillo
+             ⚖️ Iniciar Péndulo Dual
         </button>
     </div>
 
@@ -659,18 +659,18 @@
             if (data.activeContractId) {
                 tradeCard.style.display = 'block';
                 if (scanningCard) scanningCard.style.display = 'none';
-                const cType = data.currentContractType || 'DIGITDIFF';
+                const cType = data.currentContractType || 'DIGITUNDER';
                 if (cType === 'DIGITUNDER') {
                     document.getElementById('activeBarrierLabel').innerText = `Menor que: UNDER-${barrier}`;
-                } else {
-                    document.getElementById('activeBarrierLabel').innerText = `Diferir de dígito: NO-${barrier}`;
+                } else if (cType === 'DIGITOVER') {
+                    document.getElementById('activeBarrierLabel').innerText = `Mayor que: OVER-${barrier}`;
                 }
             } else {
                 tradeCard.style.display = 'none';
                 if (scanningCard) {
                     scanningCard.style.display = data.isRunning ? 'block' : 'none';
                     if (data.isRunning) {
-                        document.getElementById('scanningText').innerText = 'Agente 1: Differs (2 repetidos) | Agente 2: Under 7 (3 altos)';
+                        document.getElementById('scanningText').innerText = 'Techo: Under 7 (3 altos) | Piso: Over 2 (3 bajos)';
                     }
                 }
             }
@@ -678,7 +678,7 @@
             // Active Straddle Shield card REMOVED
             // Toggle button
             const btn = document.getElementById('btnToggle');
-            const startText = '⚔️ Iniciar Doble Gatillo';
+            const startText = '⚖️ Iniciar Péndulo Dual';
             const stopText = '⏸️ Parar Escáner';
             btn.innerText = isRunning ? stopText : startText;
             btn.className = `btn-main ${isRunning ? 'btn-stop' : 'btn-start'}`;
