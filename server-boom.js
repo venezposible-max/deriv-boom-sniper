@@ -40,7 +40,7 @@ let botState = {
     activeSymbol: 'R_25',
     activeContractId: null,
     lastTradeTime: 0,
-    cooldownMs: 2000,
+    cooldownMs: 1500,
     isBuying: false,
     recoveryLayer: 0,
     lastHotDigit: null,
@@ -49,8 +49,8 @@ let botState = {
     penaltyCooldownMs: 180000, // 3 min de castigo (Differs pierde poco, no necesita 5)
     // Ghost Protocol
     ghostResults: {},
-    ghostMinTrades: 5,        // 5 trades fantasma (podemos exigir más porque Differs gana más)
-    ghostMinWinRate: 0.80,    // Al menos 80% de los ghosts deben ganar
+    ghostMinTrades: 3,        // 3 trades fantasma para validación rápida
+    ghostMinWinRate: 0.66,    // Al menos 2 de 3 ghosts deben ganar (66%)
     // Mercados
     markets: {}
 };
