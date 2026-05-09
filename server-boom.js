@@ -131,6 +131,17 @@ function connectDeriv() {
             m.entropy = calcEntropy(m.digitHistory);
             m.bestStrategy = getBestStrategy(s);
 
+            // Actualizar Markov Edge para el dashboard (solo del mercado activo)
+            if (s === botState.activeSymbol) {
+                if (m.bestStrategy === 'PARITY') {
+                    getMarkovParity(m.digitHistory); // Esto actualiza botState.markovEdge
+                } else if (m.bestStrategy === 'DIFFERS') {
+                    botState.markovEdge = 90; // Differs siempre tiene ~90% de probabilidad
+                } else {
+                    getMarkovOverUnder(m.digitHistory); // Esto actualiza botState.markovEdge
+                }
+            }
+
             // Si no estamos en un trade, el cerebro elige el mejor mercado disponible
             if (!botState.activeContractId && !botState.isBuying && botState.isRunning) {
                 evaluateAndFire();
