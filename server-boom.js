@@ -1,9 +1,10 @@
 /**
  * ============================================================
- *  PROYECTO ANTIGRAVEDAD v6.0 - LA SINGULARIDAD (THE HOLE)
- *  Estrategia: Detección de Sesgos Algorítmicos (PRNG Bias)
- *  Motor: Caza de "Huecos" Estadísticos (Coldest Digit Sniper)
- *  Recuperación: Persistencia Cuántica (Aggressive Double-Down)
+ *  PROYECTO ANTIGRAVEDAD v7.0 - TRIPLE ESCUDO
+ *  Motor: Singularidad Global Multi-Mercado
+ *  Mejora 1: 🧊 Cooldown Inteligente Post-Derrota (5 min)
+ *  Mejora 2: 🎯 Umbral Adaptativo (Auto-Calibración)
+ *  Mejora 3: 👻 Ghost Protocol Revival (Simulación Virtual)
  * ============================================================
  */
 
@@ -40,8 +41,16 @@ let botState = {
     lastTradeTime: 0,
     cooldownMs: 3000,
     isBuying: false,
-    recoveryLayer: 0, // 0=Busca Hueco, 1-3=Insistencia en el Hueco
+    recoveryLayer: 0,
     lastHoleDigit: null,
+    // ─── MEJORA 1: Cooldown Inteligente ───
+    lastRecoveryFailTime: 0,        // Timestamp del último ciclo de recuperación fallido
+    penaltyCooldownMs: 300000,      // 5 minutos de castigo tras un ciclo perdedor completo
+    // ─── MEJORA 3: Ghost Protocol ───
+    ghostMode: true,                // El Ghost Protocol está activo por defecto
+    ghostResults: {},               // Resultados virtuales por símbolo { R_10: { wins: 0, total: 0 } }
+    ghostMinTrades: 3,              // Mínimo de trades fantasma antes de disparar real
+    ghostMinWinRate: 0.33,          // Al menos 1 de 3 fantasmas debe haber ganado (33%)
     // SINGULARIDAD
     markets: {}
 };
@@ -49,10 +58,11 @@ let botState = {
 SYMBOLS.forEach(s => {
     botState.markets[s] = {
         digitHistory: [],
-        lastAppearance: Array(10).fill(0), // Ticks desde la última vez que salió cada dígito
+        lastAppearance: Array(10).fill(0),
         entropy: 0,
         virtualSuccess: 0
     };
+    botState.ghostResults[s] = { wins: 0, total: 0, lastDigit: null };
 });
 
 // ─── PERSISTENCIA ─────────────────────────────────────────────
@@ -77,23 +87,57 @@ function updateHoleStats(symbol, digit) {
     }
 }
 
-function findSingularity(symbol) {
+// ─── MEJORA 2: UMBRAL ADAPTATIVO ─────────────────────────────
+// Calcula el umbral óptimo basándose en la distribución reciente de dígitos del mercado.
+// Si el mercado está muy equilibrado (todos los dígitos salen parejo), sube el umbral.
+// Si el mercado está caótico (algunos dígitos dominan), baja el umbral.
+function calculateAdaptiveThreshold(symbol) {
     const m = botState.markets[symbol];
-    let coldestDigit = 0;
-    let maxWait = -1;
+    if (m.digitHistory.length < 200) return 85; // Default seguro si no hay data
 
-    for (let d = 0; d <= 9; d++) {
-        if (m.lastAppearance[d] > maxWait) {
-            maxWait = m.lastAppearance[d];
-            coldestDigit = d;
-        }
-    }
+    // Analizamos los últimos 500 ticks
+    const recentDigits = m.digitHistory.slice(-500);
+    const freq = Array(10).fill(0);
+    recentDigits.forEach(d => freq[d]++);
 
-    // Un "Hueco" real ocurre cuando un dígito no ha salido en > 70 ticks (Probabilidad extrema de retorno)
-    if (maxWait > 70) {
-        return { digit: coldestDigit, tension: maxWait };
+    // Calcular la desviación estándar de las frecuencias
+    const mean = recentDigits.length / 10; // Frecuencia esperada (50 para 500 ticks)
+    let variance = 0;
+    freq.forEach(f => { variance += Math.pow(f - mean, 2); });
+    const stdDev = Math.sqrt(variance / 10);
+
+    // Interpretar:
+    // stdDev baja (< 5) = mercado muy equilibrado → necesitamos umbral ALTO (más paciencia)
+    // stdDev alta (> 10) = mercado caótico con huecos → podemos bajar el umbral
+    if (stdDev < 4) return 100;      // Mercado ultra-estable: máxima paciencia
+    if (stdDev < 7) return 85;       // Mercado normal: prudente
+    if (stdDev < 12) return 70;      // Mercado con sesgo: agresivo
+    return 60;                        // Mercado muy sesgado: ataque rápido
+}
+
+// ─── MEJORA 3: GHOST PROTOCOL ─────────────────────────────────
+// Simula un trade virtual sin dinero real para validar que el hueco es "de verdad"
+function processGhostTrade(symbol, digit, actualNextDigit) {
+    const ghost = botState.ghostResults[symbol];
+    ghost.total++;
+    ghost.lastDigit = digit;
+    if (actualNextDigit === digit) {
+        ghost.wins++;
+        console.log(`👻 [GHOST] MATCH Virtual en ${symbol} | Dígito ${digit} | ✅ WIN (${ghost.wins}/${ghost.total})`);
+    } else {
+        console.log(`👻 [GHOST] MATCH Virtual en ${symbol} | Dígito ${digit} | ❌ MISS (${ghost.wins}/${ghost.total})`);
     }
-    return null;
+}
+
+function isGhostApproved(symbol) {
+    const ghost = botState.ghostResults[symbol];
+    if (ghost.total < botState.ghostMinTrades) return false;
+    const winRate = ghost.wins / ghost.total;
+    return winRate >= botState.ghostMinWinRate;
+}
+
+function resetGhost(symbol) {
+    botState.ghostResults[symbol] = { wins: 0, total: 0, lastDigit: null };
 }
 
 // ─── CONEXIÓN ─────────────────────────────────────────────────
@@ -105,9 +149,8 @@ function connectDeriv() {
         const msg = JSON.parse(raw);
         if (msg.msg_type === 'authorize') {
             botState.isConnectedToDeriv = true;
-            console.log("🌌 MODO SINGULARIDAD ACTIVADO");
+            console.log("🛡️ TRIPLE ESCUDO v7.0 ACTIVADO (Cooldown + Adaptativo + Ghost)");
             SYMBOLS.forEach(s => {
-                // Pedimos 5000 ticks para detectar huecos de inmediato
                 ws.send(JSON.stringify({ ticks_history: s, count: 5000, end: 'latest', style: 'ticks' }));
                 ws.send(JSON.stringify({ subscribe: 1, ticks: s }));
             });
@@ -119,7 +162,6 @@ function connectDeriv() {
             const prices = msg.history.prices;
             const digits = prices.map(p => parseInt(String(p.toFixed(2)).slice(-1)));
             botState.markets[s].digitHistory = digits;
-            // Calcular lastAppearance desde la historia
             digits.forEach(d => updateHoleStats(s, d));
         }
 
@@ -130,6 +172,11 @@ function connectDeriv() {
             m.digitHistory.push(digit);
             if (m.digitHistory.length > 5000) m.digitHistory.shift();
             updateHoleStats(s, digit);
+
+            // ─── GHOST PROTOCOL: Evaluar trades fantasma en CADA tick ───
+            if (botState.isRunning && botState.ghostMode) {
+                runGhostEvaluation(s, digit);
+            }
 
             if (botState.isRunning && !botState.activeContractId && !botState.isBuying) {
                 evaluateSingularity();
@@ -156,9 +203,49 @@ function connectDeriv() {
     ws.on('close', () => { botState.isConnectedToDeriv = false; setTimeout(connectDeriv, 5000); });
 }
 
-// ─── MOTOR DE CAZA MULTI-MERCADO ──────────────────────────────
+// ─── GHOST EVALUATION (Simulación en cada tick) ───────────────
+function runGhostEvaluation(currentSymbol, currentDigit) {
+    // Para cada mercado, verificamos si hay un hueco que el Ghost debería simular
+    SYMBOLS.forEach(s => {
+        const m = botState.markets[s];
+        const threshold = calculateAdaptiveThreshold(s);
+
+        let coldest = -1, maxT = -1;
+        for (let d = 0; d <= 9; d++) {
+            if (m.lastAppearance[d] > maxT) { maxT = m.lastAppearance[d]; coldest = d; }
+        }
+
+        // Si hay un hueco por encima del umbral adaptativo Y el ghost aún no tiene suficientes datos
+        const ghost = botState.ghostResults[s];
+        if (maxT > threshold && ghost.total < botState.ghostMinTrades && s === currentSymbol) {
+            // Usamos el tick actual como "resultado" del ghost trade anterior
+            if (ghost.lastDigit !== null) {
+                // Ya hay un ghost pendiente, este tick es su resultado
+                processGhostTrade(s, ghost.lastDigit, currentDigit);
+                ghost.lastDigit = null;
+            } else {
+                // Marcamos este dígito frío como el próximo ghost trade
+                ghost.lastDigit = coldest;
+            }
+        }
+    });
+}
+
+// ─── MOTOR DE CAZA MULTI-MERCADO (TRIPLE ESCUDO) ──────────────
 function evaluateSingularity() {
     const now = Date.now();
+
+    // ─── MEJORA 1: Cooldown Inteligente Post-Derrota ───
+    if (botState.lastRecoveryFailTime > 0) {
+        const timeSinceFail = now - botState.lastRecoveryFailTime;
+        if (timeSinceFail < botState.penaltyCooldownMs) {
+            return; // Aún en período de castigo, no operar
+        } else {
+            botState.lastRecoveryFailTime = 0; // Castigo cumplido
+            console.log("⏰ [COOLDOWN] Período de enfriamiento completado. Reanudando cacería.");
+        }
+    }
+
     if (now - botState.lastTradeTime < botState.cooldownMs) return;
 
     let targetHole = null;
@@ -177,10 +264,13 @@ function evaluateSingularity() {
         // MODO BÚSQUEDA GLOBAL: Escaneamos los 4 mercados por el hueco más profundo
         SYMBOLS.forEach(s => {
             const m = botState.markets[s];
-            if (m.digitHistory.length < 100) return; // Necesitamos data base
+            if (m.digitHistory.length < 100) return;
+
+            // ─── MEJORA 2: Umbral Adaptativo por mercado ───
+            const threshold = calculateAdaptiveThreshold(s);
 
             for (let d = 0; d <= 9; d++) {
-                if (m.lastAppearance[d] > maxGlobalTension) {
+                if (m.lastAppearance[d] > threshold && m.lastAppearance[d] > maxGlobalTension) {
                     maxGlobalTension = m.lastAppearance[d];
                     targetSymbol = s;
                     targetHole = { digit: d, tension: maxGlobalTension };
@@ -189,8 +279,17 @@ function evaluateSingularity() {
         });
     }
 
-    // Umbral de disparo: Solo si la tensión supera el límite de seguridad (90 ticks)
-    if (!targetHole || targetHole.tension < 85) return;
+    if (!targetHole) return;
+
+    // ─── MEJORA 3: Ghost Protocol Gate ───
+    // Solo en el primer disparo (no en recuperación), verificar que el Ghost apruebe
+    if (botState.recoveryLayer === 0 && botState.ghostMode) {
+        if (!isGhostApproved(targetSymbol)) {
+            return; // El Ghost aún no tiene suficiente confianza
+        }
+        console.log(`👻 [GHOST APROBADO] ${targetSymbol} pasó la validación virtual. ¡Disparando con dinero real!`);
+        resetGhost(targetSymbol); // Limpiar ghost para el próximo ciclo
+    }
 
     botState.activeSymbol = targetSymbol;
     botState.lastHoleDigit = targetHole.digit;
@@ -202,7 +301,7 @@ function evaluateSingularity() {
     if (botState.recoveryLayer === 1) currentStake = botState.stake * 2;
     if (botState.recoveryLayer >= 2) currentStake = botState.stake * 6;
 
-    console.log(`🚀 [SINGULARIDAD GLOBAL] Caza en ${targetSymbol} | Dígito: ${targetHole.digit} | Tensión: ${targetHole.tension} Ticks`);
+    console.log(`🚀 [SINGULARIDAD] Caza en ${targetSymbol} | Dígito: ${targetHole.digit} | Tensión: ${targetHole.tension} | Capa: ${botState.recoveryLayer} | Stake: $${currentStake}`);
 
     const req = {
         buy: 1, price: currentStake,
@@ -226,13 +325,17 @@ function finalizeTrade(c) {
     if (isWin) {
         console.log(`✨ [HUECO CERRADO] Victoria Maestra +$${profit.toFixed(2)}`);
         botState.winsSession++;
-        botState.recoveryLayer = 0; // Hueco reseteado
+        botState.recoveryLayer = 0;
     } else {
-        console.log(`🌑 [HUECO PERSISTENTE] El dígito no salió. Incrementando tensión.`);
+        console.log(`🌑 [HUECO PERSISTENTE] El dígito no salió. Capa ${botState.recoveryLayer + 1}`);
         botState.lossesSession++;
         botState.recoveryLayer++;
-        // Si tras 4 intentos el hueco no se cierra, abortamos para proteger capital
-        if (botState.recoveryLayer > 3) botState.recoveryLayer = 0;
+        // ─── MEJORA 1: Si el ciclo de recuperación falla por completo, activar castigo ───
+        if (botState.recoveryLayer > 3) {
+            botState.recoveryLayer = 0;
+            botState.lastRecoveryFailTime = Date.now();
+            console.log(`🧊 [COOLDOWN ACTIVADO] Ciclo perdedor completo. Enfriamiento de 5 minutos.`);
+        }
     }
 
     botState.tradeHistory.unshift({
@@ -257,17 +360,31 @@ function finalizeTrade(c) {
 const app = express();
 app.use(cors()); app.use(express.json()); app.use(express.static(path.join(__dirname, 'public')));
 app.get('/differs/status', (req, res) => {
-    // Buscar la mayor tensión actual entre todos los mercados para mostrar en el dashboard
-    let maxT = 0, targetD = '-';
+    // Buscar la mayor tensión actual entre todos los mercados
+    let maxT = 0, targetD = '-', bestSymbol = '-';
     SYMBOLS.forEach(s => {
         const m = botState.markets[s];
         for(let d=0; d<=9; d++) {
             if(m.lastAppearance[d] > maxT) {
                 maxT = m.lastAppearance[d];
                 targetD = d;
+                bestSymbol = s;
             }
         }
     });
+
+    // Calcular el umbral adaptativo del mejor mercado para mostrarlo
+    const adaptiveThreshold = bestSymbol !== '-' ? calculateAdaptiveThreshold(bestSymbol) : 85;
+
+    // Estado del Ghost Protocol
+    const ghostStatus = {};
+    SYMBOLS.forEach(s => { ghostStatus[s] = botState.ghostResults[s]; });
+
+    // ─── MEJORA 1: Mostrar si estamos en cooldown ───
+    const inCooldown = botState.lastRecoveryFailTime > 0 && 
+        (Date.now() - botState.lastRecoveryFailTime < botState.penaltyCooldownMs);
+    const cooldownRemaining = inCooldown ? 
+        Math.ceil((botState.penaltyCooldownMs - (Date.now() - botState.lastRecoveryFailTime)) / 1000) : 0;
 
     res.json({ 
         success: true, 
@@ -275,7 +392,11 @@ app.get('/differs/status', (req, res) => {
             ...botState, 
             shannonEntropy: maxT,
             markovEdge: targetD,
-            currentBarrier: targetD
+            currentBarrier: targetD,
+            adaptiveThreshold,
+            inCooldown,
+            cooldownRemaining,
+            ghostStatus
         } 
     });
 });
@@ -293,7 +414,11 @@ app.post('/differs/control', (req, res) => {
         botState.totalTradesSession = 0;
         botState.winsSession = 0;
         botState.lossesSession = 0;
-        botState.tradeHistory = []; 
+        botState.tradeHistory = [];
+        botState.lastRecoveryFailTime = 0;
+        botState.recoveryLayer = 0;
+        // Reset de Ghost Protocol
+        SYMBOLS.forEach(s => { botState.ghostResults[s] = { wins: 0, total: 0, lastDigit: null }; });
     }
     saveState(); res.json({ success: true });
 });
