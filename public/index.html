@@ -638,23 +638,7 @@
                 document.getElementById('recoveryBox').className = 'recovery-box' + (data.isRecoveryEnabled ? ' active' : '');
             }
 
-            // FÉNIX LAYER STATUS
-            const hidraBox = document.getElementById('hidraStatus');
-            if (data.isRecoveryEnabled && data.recoveryLayer > 0) {
-                hidraBox.style.display = 'block';
-                const layerColors = { 1: '#a78bfa', 2: '#f97316', 3: '#f87171' };
-                const layerTexts = {
-                    1: `🪞 CAPA 1: GOLPE ESPEJO (NO-${data.lastLostBarrier || '?'})`,
-                    2: `🔥 CAPA 2: FÉNIX (${(data.currentContractType || '').includes('OVER') ? 'OVER' : (data.currentContractType || '').includes('UNDER') ? 'UNDER' : 'Differs'} | Edge: ${data.markovEdge || 0}%)`,
-                    3: `🛑 CAPA 3: FRENO (${data.emergencyWaitTicks || 0}/50 ticks)`
-                };
-                document.getElementById('hidraLayerText').innerText = layerTexts[data.recoveryLayer] || 'NORMAL';
-                hidraBox.style.borderColor = layerColors[data.recoveryLayer] || 'rgba(52,211,153,0.15)';
-                hidraBox.style.color = layerColors[data.recoveryLayer] || '#34d399';
-            } else {
-                hidraBox.style.display = 'none';
-            }
-
+            // FENIX LAYER STATUS REMOVED
             // ACCOUNT THEME UPDATE
             const headerElement = document.getElementById('mainHeader');
             const accDemo = document.getElementById('btnAccDemo');
@@ -689,33 +673,7 @@
                 tradeCard.style.display = 'none';
             }
 
-            // Active Straddle Shield card
-            const shieldCard = document.getElementById('shieldCard');
-            if (data.straddleUpId || data.straddleDownId) {
-                shieldCard.style.display = 'block';
-                
-                const upProfit = parseFloat(data.straddleUpProfit || 0);
-                const downProfit = parseFloat(data.straddleDownProfit || 0);
-                const activeProfit = data.straddleUpId ? upProfit : downProfit;
-                const activeLeg = data.straddleUpId ? 'UP' : 'DOWN';
-                
-                const singleEl = document.getElementById('shieldSingleProfit');
-                singleEl.innerText = `${activeProfit >= 0 ? '+' : ''}$${activeProfit.toFixed(2)}`;
-                singleEl.style.color = activeProfit >= 0 ? '#34d399' : '#f87171';
-                
-                document.getElementById('shieldTitle').innerText = `🛡️ RESCATE DIRECCIONAL (${activeLeg})`;
-                
-                const elapsedSecs = Math.floor((Date.now() - (data.straddleOpenTime || Date.now())) / 1000);
-                const remainingSecs = Math.max(0, 300 - elapsedSecs);
-                const m = Math.floor(remainingSecs / 60);
-                const s = remainingSecs % 60;
-                const formattedTime = `${m}:${s.toString().padStart(2, '0')}`;
-                
-                document.getElementById('shieldStatusMsg').innerText = `⏳ Seguro expira en: ${formattedTime} | Cierre Auto de Rescate: +$12.00`;
-            } else {
-                shieldCard.style.display = 'none';
-            }
-
+            // Active Straddle Shield card REMOVED
             // Toggle button
             const btn = document.getElementById('btnToggle');
             const startText = currentStrategy === 'DIFFERS' ? '🎲 Activar La Pata del Conejo' : '🔥 Activar La Pata del Conejo';
