@@ -319,9 +319,9 @@
             <div class="last-digit-badge" id="lastDigitBadge">-</div>
         </div>
         <div class="barrier-card" style="flex:1; margin-bottom:0;">
-            <div class="label" id="barrierLabelTitle">Diferir De</div>
-            <div class="value" id="barrierDisplay">-</div>
-            <div class="sublabel" id="barrierLabelSub">El último dígito NO será este</div>
+            <div class="label" id="barrierLabelTitle">Objetivo PRNG</div>
+            <div class="value" id="barrierDisplay" style="font-size: 1.5rem;">ESPERANDO</div>
+            <div class="sublabel" id="barrierLabelSub">Escaneando Cadenas de Markov...</div>
         </div>
     </div>
 
@@ -549,24 +549,19 @@
                 setTimeout(() => { ld.style.transform = 'scale(1)'; }, 150);
             }
 
-            // Sync strategy globally from backend if another tab changed it
-            if (data.strategyMode && data.strategyMode !== currentStrategy && !isRunning) {
-                currentStrategy = data.strategyMode;
-                switchStrategy(currentStrategy);
-            }
-
             // Barrier Display
-            const cType = data.currentContractType || 'DIGITDIFF';
+            const cType = data.currentContractType || 'NONE';
             const displayBarrier = data.currentBarrier !== null && data.currentBarrier !== undefined ? data.currentBarrier : '-';
             
-            if (cType === 'DIGITDIFF') {
-                document.getElementById('barrierDisplay').innerText = `NO-${displayBarrier}`;
-                document.getElementById('barrierLabelSub').innerText = 'El último dígito NO será este';
-            } else if (cType === 'DIGITMATCH') {
-                document.getElementById('barrierDisplay').innerText = `MATCH-${displayBarrier}`;
-                document.getElementById('barrierLabelSub').innerText = 'El último dígito DEBE SER este';
+            if (cType === 'DIGITUNDER') {
+                document.getElementById('barrierDisplay').innerText = `UNDER < ${displayBarrier}`;
+                document.getElementById('barrierLabelSub').innerText = 'Probabilidad Markov: >85%';
+            } else if (cType === 'DIGITOVER') {
+                document.getElementById('barrierDisplay').innerText = `OVER > ${displayBarrier}`;
+                document.getElementById('barrierLabelSub').innerText = 'Probabilidad Markov: >85%';
             } else {
-                document.getElementById('barrierDisplay').innerText = '-';
+                document.getElementById('barrierDisplay').innerText = 'ESPERANDO';
+                document.getElementById('barrierLabelSub').innerText = 'Escaneando Matriz...';
             }
 
             // Entropy + Markov indicators
