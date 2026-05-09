@@ -373,7 +373,7 @@
 
     <!-- ACTIVE STRADDLE SHIELD -->
     <div class="card shield-active" id="shieldCard" style="display:none; text-align:center;">
-        <div class="stat-label" style="color:#d9f99d;" id="shieldTitle">🐇 RABBIT-HUNTER UNDER-9</div>
+        <div class="card-title" id="subTitle" style="color: #34d399; font-size: 13px;">Doble Gatillo: Differs (90%) + Under 7 (70%)</div>
         <div style="font-size:12px; color:#aaa; margin:6px 0;">Seguro activado (5 min)</div>
         <div style="font-size:2.5rem; font-weight:900; margin:8px 0;" id="shieldSingleProfit">$0.00</div>
 
@@ -660,8 +660,8 @@
                 tradeCard.style.display = 'block';
                 if (scanningCard) scanningCard.style.display = 'none';
                 const cType = data.currentContractType || 'DIGITDIFF';
-                if (cType === 'DIGITMATCH') {
-                    document.getElementById('activeBarrierLabel').innerText = `Igualar dígito: MATCH-${barrier}`;
+                if (cType === 'DIGITUNDER') {
+                    document.getElementById('activeBarrierLabel').innerText = `Menor que: UNDER-${barrier}`;
                 } else {
                     document.getElementById('activeBarrierLabel').innerText = `Diferir de dígito: NO-${barrier}`;
                 }
@@ -670,7 +670,7 @@
                 if (scanningCard) {
                     scanningCard.style.display = data.isRunning ? 'block' : 'none';
                     if (data.isRunning) {
-                        document.getElementById('scanningText').innerText = 'Agente 1: Differs (2 repetidos) | Agente 2: Match (4 repetidos)';
+                        document.getElementById('scanningText').innerText = 'Agente 1: Differs (2 repetidos) | Agente 2: Under 7 (3 altos)';
                     }
                 }
             }

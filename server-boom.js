@@ -121,46 +121,41 @@ function evaluateInstitutionalSniper() {
 
     let targetDiffersSymbol = null;
     let targetDiffersDigit = null;
-    let targetMatchSymbol = null;
-    let targetMatchDigit = null;
+    let targetUnderSymbol = null;
 
     // Escanear los 4 mercados con los dos agentes simultáneamente
     SYMBOLS.forEach(s => {
         const history = botState.markets[s].digitHistory;
-        if (history.length < 2) return;
+        if (history.length < 3) return;
         
-        const last4 = history.slice(-4);
+        const last3 = history.slice(-3);
         const last2 = history.slice(-2);
         
-        // Agente 2: Cazador de Cisnes Negros (MATCH) - Busca 4 idénticos
-        if (last4.length === 4 && last4[0] === last4[1] && last4[1] === last4[2] && last4[2] === last4[3]) {
-            targetMatchSymbol = s;
-            targetMatchDigit = last4[0];
+        // Agente 2: El Péndulo (UNDER 7) - Busca fatiga matemática (3 números altos seguidos >= 7)
+        if (last3[0] >= 7 && last3[1] >= 7 && last3[2] >= 7) {
+            targetUnderSymbol = s;
         } 
         // Agente 1: Recolector Constante (DIFFERS) - Busca 2 idénticos
-        else if (last2.length === 2 && last2[0] === last2[1]) {
+        else if (last2[0] === last2[1]) {
             targetDiffersSymbol = s;
             targetDiffersDigit = last2[0];
         }
     });
 
-    // Prioridad absoluta al Agente de Cisnes Negros si se da la anomalía extrema
-    if (targetMatchSymbol && targetMatchDigit !== null) {
-        botState.activeSymbol = targetMatchSymbol;
+    // Prioridad absoluta al Agente Péndulo si se da la anomalía de fatiga
+    if (targetUnderSymbol) {
+        botState.activeSymbol = targetUnderSymbol;
         botState.isBuying = true;
         botState.lastTradeTime = now;
         
-        // El Agente Match usa solo el 20% del stake para no arriesgar el capital del Recolector
-        const matchStake = Math.max(0.35, parseFloat((botState.stake * 0.20).toFixed(2)));
-        
-        console.log(`🎯 [FRANCOTIRADOR - MATCH] ${targetMatchSymbol} | Anomalía Extrema (Salió el ${targetMatchDigit} cuatro veces) | Disparo: $${matchStake}`);
+        console.log(`🎯 [FRANCOTIRADOR - PÉNDULO] ${targetUnderSymbol} | Fatiga Alta Detectada | Disparo UNDER 7 con: $${botState.stake}`);
         
         ws.send(JSON.stringify({
-            buy: 1, price: matchStake,
+            buy: 1, price: botState.stake,
             parameters: {
-                amount: matchStake, basis: 'stake', contract_type: 'DIGITMATCH',
-                currency: 'USD', symbol: targetMatchSymbol, duration: 1, duration_unit: 't',
-                barrier: String(targetMatchDigit)
+                amount: botState.stake, basis: 'stake', contract_type: 'DIGITUNDER',
+                currency: 'USD', symbol: targetUnderSymbol, duration: 1, duration_unit: 't',
+                barrier: '7'
             }
         }));
     } 
@@ -202,12 +197,11 @@ function finalizeTrade(c) {
 
     const barrierMatch = c.shortcode.match(/_(\d)_/);
     const barrierDigit = barrierMatch ? barrierMatch[1] : '?';
-    const isMatch = c.shortcode.includes('DIGITMATCH');
-    const isHedge = isMatch && c.buy_price < botState.stake; // El escudo siempre entra con menos stake
+    const isUnder = c.shortcode.includes('DIGITUNDER');
 
     botState.tradeHistory.unshift({
         symbol: botState.activeSymbol || c.display_symbol,
-        type: isHedge ? `🛡️ ESCUDO(=${barrierDigit})` : (isMatch ? `🎯 MATCH(=${barrierDigit})` : `🔫 DIFF(≠${barrierDigit})`),
+        type: isUnder ? `⚖️ UNDER(<${barrierDigit})` : `🔫 DIFF(≠${barrierDigit})`,
         profit,
         result: isWin ? 'WIN ✅' : 'LOSS ❌',
         time: new Date().toLocaleTimeString()
@@ -215,29 +209,6 @@ function finalizeTrade(c) {
     
     if (botState.tradeHistory.length > 50) botState.tradeHistory.pop();
     botState.activeContractId = null;
-
-    // 🛡️ ESCUDO ASIMÉTRICO (Contra-Golpe al 20%)
-    // Si perdemos un trade normal (Differs)
-    if (!isWin && !isMatch && botState.isRunning) {
-        // Calcular el 20% del stake original (Mínimo $0.35 permitido por Deriv)
-        const hedgeStake = Math.max(0.35, parseFloat((botState.stake * 0.20).toFixed(2)));
-        botState.isBuying = true;
-        
-        console.log(`🛡️ [ESCUDO ASIMÉTRICO] Racha terca detectada. Lanzando MATCH(=${barrierDigit}) con $${hedgeStake} (20% del stake) para recuperar.`);
-        
-        ws.send(JSON.stringify({
-            buy: 1, price: hedgeStake,
-            parameters: {
-                amount: hedgeStake, basis: 'stake', contract_type: 'DIGITMATCH',
-                currency: 'USD', symbol: botState.activeSymbol, duration: 1, duration_unit: 't',
-                barrier: String(barrierDigit)
-            }
-        }));
-        
-        // Evitamos calcular parada de sesión hasta que el escudo termine
-        saveState();
-        return;
-    }
 
     const net = botState.dailyProfit - botState.dailyLoss;
     if (net >= botState.takeProfit || botState.dailyLoss >= botState.maxDailyLoss) {
