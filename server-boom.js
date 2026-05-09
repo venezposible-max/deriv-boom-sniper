@@ -1,9 +1,9 @@
 /**
  * ============================================================
- *  PROYECTO ANTIGRAVEDAD v5.0 - GHOST PROTOCOL (GANAR-GANAR)
- *  Motor: Cerebro Camaleón Adaptativo
- *  Protocolo: Trading Virtual Pre-Validación (Ghost Mode)
- *  Escaneo: Multi-Mercado (R10, R25, R50, R100)
+ *  PROYECTO ANTIGRAVEDAD v6.0 - LA SINGULARIDAD (THE HOLE)
+ *  Estrategia: Detección de Sesgos Algorítmicos (PRNG Bias)
+ *  Motor: Caza de "Huecos" Estadísticos (Coldest Digit Sniper)
+ *  Recuperación: Persistencia Cuántica (Aggressive Double-Down)
  * ============================================================
  */
 
@@ -38,110 +38,62 @@ let botState = {
     activeSymbol: 'R_25',
     activeContractId: null,
     lastTradeTime: 0,
-    cooldownMs: 2500,
+    cooldownMs: 3000,
     isBuying: false,
-    isRecoveryEnabled: true,
-    recoveryLayer: 0,
-    shannonEntropy: 0,
-    markovEdge: 0,
-    currentBarrier: null,
-    currentContractType: 'DIGITDIFF',
-    // PROTOCOLO FANTASMA
-    isGhostMode: true, // Siempre activo por seguridad
-    virtualWinRate: 0,
+    recoveryLayer: 0, // 0=Busca Hueco, 1-3=Insistencia en el Hueco
+    lastHoleDigit: null,
+    // SINGULARIDAD
     markets: {}
 };
 
 SYMBOLS.forEach(s => {
     botState.markets[s] = {
         digitHistory: [],
+        lastAppearance: Array(10).fill(0), // Ticks desde la última vez que salió cada dígito
         entropy: 0,
-        virtualSuccessHistory: [], // [true, false, ...] de los últimos 10 ticks
-        lastDigit: null,
-        bestStrategy: 'WAIT'
+        virtualSuccess: 0
     };
 });
 
-// ─── CARGAR/GUARDAR ESTADO ────────────────────────────────────
+// ─── PERSISTENCIA ─────────────────────────────────────────────
 if (fs.existsSync(STATE_FILE)) {
     try {
         const saved = JSON.parse(fs.readFileSync(STATE_FILE));
         if (saved.botState) {
             botState = { ...botState, ...saved.botState };
-            botState.isRunning = false; 
+            botState.isRunning = false;
             botState.isBuying = false;
         }
     } catch (e) {}
 }
 const saveState = () => { try { fs.writeFileSync(STATE_FILE, JSON.stringify({ botState })); } catch (e) {} };
 
-// ─── MATEMÁTICAS Y ESTRATEGIAS ────────────────────────────────
-function calcEntropy(hist) {
-    if (hist.length < 50) return 3.32;
-    const sub = hist.slice(-50);
-    const freq = {};
-    for (let d = 0; d <= 9; d++) freq[d] = 0;
-    sub.forEach(d => freq[d]++);
-    let entropy = 0;
+// ─── DETECCIÓN DE HUECOS (SINGULARIDAD) ───────────────────────
+function updateHoleStats(symbol, digit) {
+    const m = botState.markets[symbol];
     for (let d = 0; d <= 9; d++) {
-        const p = freq[d] / sub.length;
-        if (p > 0) entropy -= p * Math.log2(p);
+        if (d === digit) m.lastAppearance[d] = 0;
+        else m.lastAppearance[d]++;
     }
-    return entropy;
 }
 
-function getMarkovParityEdge(hist) {
-    if (hist.length < 50) return 0;
-    const sub = hist.slice(-100);
-    let transitions = { even: { even: 0, odd: 0, total: 0 }, odd: { even: 0, odd: 0, total: 0 } };
-    for (let i = 1; i < sub.length; i++) {
-        const prev = sub[i-1] % 2 === 0 ? 'even' : 'odd';
-        const curr = sub[i] % 2 === 0 ? 'even' : 'odd';
-        transitions[prev][curr]++;
-        transitions[prev].total++;
-    }
-    const last = hist[hist.length-1] % 2 === 0 ? 'even' : 'odd';
-    const t = transitions[last];
-    if (t.total === 0) return 0.5;
-    return t.even / t.total; // Probabilidad de que el siguiente sea PAR
-}
-
-function getBestStrategy(symbol) {
+function findSingularity(symbol) {
     const m = botState.markets[symbol];
-    const ent = m.entropy;
-    if (ent > 3.25) return 'WAIT';
-    if (ent > 3.10) return 'DIFFERS';
-    if (ent > 2.70) return 'PARITY';
-    return 'MATCHES';
-}
+    let coldestDigit = 0;
+    let maxWait = -1;
 
-// ─── PROTOCOLO FANTASMA: ¿Sería ganador este tick? ────────────
-function updateVirtualPerformance(symbol) {
-    const m = botState.markets[symbol];
-    const hist = m.digitHistory;
-    if (hist.length < 20) return;
-
-    const lastDigit = hist[hist.length - 1];
-    const prevHistory = hist.slice(0, -1);
-    const prevDigit = prevHistory[prevHistory.length - 1];
-    
-    // Simulamos qué habríamos hecho un tick atrás
-    const strat = getBestStrategy(symbol);
-    let virtualWin = false;
-
-    if (strat === 'DIFFERS') {
-        virtualWin = lastDigit !== prevDigit; // Diferir del anterior
-    } else if (strat === 'PARITY') {
-        const probEven = getMarkovParityEdge(prevHistory);
-        const prediction = probEven > 0.5 ? 'even' : 'odd';
-        const actual = lastDigit % 2 === 0 ? 'even' : 'odd';
-        virtualWin = prediction === actual;
-    } else if (strat === 'MATCHES') {
-        virtualWin = lastDigit === prevDigit;
+    for (let d = 0; d <= 9; d++) {
+        if (m.lastAppearance[d] > maxWait) {
+            maxWait = m.lastAppearance[d];
+            coldestDigit = d;
+        }
     }
 
-    m.virtualSuccessHistory.push(virtualWin);
-    if (m.virtualSuccessHistory.length > 10) m.virtualSuccessHistory.shift();
+    // Un "Hueco" real ocurre cuando un dígito no ha salido en > 110 ticks (Probabilidad extrema de retorno)
+    if (maxWait > 110) {
+        return { digit: coldestDigit, tension: maxWait };
+    }
+    return null;
 }
 
 // ─── CONEXIÓN ─────────────────────────────────────────────────
@@ -153,37 +105,43 @@ function connectDeriv() {
         const msg = JSON.parse(raw);
         if (msg.msg_type === 'authorize') {
             botState.isConnectedToDeriv = true;
-            SYMBOLS.forEach(s => ws.send(JSON.stringify({ subscribe: 1, ticks: s })));
+            console.log("🌌 MODO SINGULARIDAD ACTIVADO");
+            SYMBOLS.forEach(s => {
+                // Pedimos 5000 ticks para detectar huecos de inmediato
+                ws.send(JSON.stringify({ ticks_history: s, count: 5000, end: 'latest', style: 'ticks' }));
+                ws.send(JSON.stringify({ subscribe: 1, ticks: s }));
+            });
             ws.send(JSON.stringify({ balance: 1, subscribe: 1 }));
         }
+
+        if (msg.msg_type === 'history') {
+            const s = msg.echo_req.ticks_history;
+            const prices = msg.history.prices;
+            const digits = prices.map(p => parseInt(String(p.toFixed(2)).slice(-1)));
+            botState.markets[s].digitHistory = digits;
+            // Calcular lastAppearance desde la historia
+            digits.forEach(d => updateHoleStats(s, d));
+        }
+
         if (msg.msg_type === 'tick' && msg.tick) {
             const s = msg.tick.symbol;
             const digit = parseInt(String(msg.tick.quote.toFixed(2)).slice(-1));
             const m = botState.markets[s];
             m.digitHistory.push(digit);
-            if (m.digitHistory.length > 200) m.digitHistory.shift();
-            m.lastDigit = digit;
-            m.entropy = calcEntropy(m.digitHistory);
-            m.bestStrategy = getBestStrategy(s);
-            
-            updateVirtualPerformance(s);
+            if (m.digitHistory.length > 5000) m.digitHistory.shift();
+            updateHoleStats(s, digit);
 
-            if (s === botState.activeSymbol) {
-                const wins = m.virtualSuccessHistory.filter(h => h === true).length;
-                botState.virtualWinRate = (wins / m.virtualSuccessHistory.length) * 100 || 0;
-                botState.shannonEntropy = m.entropy;
-                botState.markovEdge = botState.virtualWinRate; // Usamos el WinRate virtual como indicador de "confianza"
-            }
-
-            if (!botState.activeContractId && !botState.isBuying && botState.isRunning) {
-                evaluateAndFire();
+            if (botState.isRunning && !botState.activeContractId && !botState.isBuying) {
+                evaluateSingularity();
             }
         }
-        if (msg.msg_type === 'buy' && msg.buy) {
+
+        if (msg.msg_type === 'buy') {
             botState.activeContractId = msg.buy.contract_id;
             botState.isBuying = false;
             ws.send(JSON.stringify({ proposal_open_contract: 1, contract_id: msg.buy.contract_id, subscribe: 1 }));
         }
+
         if (msg.msg_type === 'proposal_open_contract' && msg.proposal_open_contract?.is_sold) {
             finalizeTrade(msg.proposal_open_contract);
         }
@@ -192,93 +150,80 @@ function connectDeriv() {
     ws.on('close', () => { botState.isConnectedToDeriv = false; setTimeout(connectDeriv, 5000); });
 }
 
-// ─── MOTOR DE EJECUCIÓN ───────────────────────────────────────
-function evaluateAndFire() {
+// ─── MOTOR DE CAZA ────────────────────────────────────────────
+function evaluateSingularity() {
     const now = Date.now();
     if (now - botState.lastTradeTime < botState.cooldownMs) return;
 
-    // 1. ELEGIR MEJOR MERCADO
-    let bestSymbol = null;
-    let minEntropy = 4;
-    SYMBOLS.forEach(s => {
-        const m = botState.markets[s];
-        if (m.digitHistory.length >= 50 && m.entropy < minEntropy) {
-            minEntropy = m.entropy;
-            bestSymbol = s;
-        }
-    });
+    let targetHole = null;
+    let targetSymbol = null;
 
-    if (!bestSymbol) return;
-    const m = botState.markets[bestSymbol];
-    botState.activeSymbol = bestSymbol;
-
-    // 2. VALIDACIÓN PROTOCOLO FANTASMA (Solo operar si el virtual va bien)
-    const virtualWins = m.virtualSuccessHistory.filter(h => h === true).length;
-    const vWR = (virtualWins / m.virtualSuccessHistory.length) * 100;
-    
-    // Umbral de seguridad: Solo entramos si en modo virtual habríamos ganado 8 de los últimos 10
-    if (vWR < 80 && botState.recoveryLayer === 0) {
-        // console.log(`🕵️ [GHOST] Esperando racha virtual ganadora en ${bestSymbol}... (Actual: ${vWR}%)`);
-        return; 
-    }
-
-    // 3. DEFINIR CONTRATO
-    let contractType = '';
-    let barrier = null;
-    let stake = botState.stake;
-    const strat = m.bestStrategy;
-
-    if (botState.recoveryLayer === 0) {
-        if (strat === 'MATCHES') {
-            contractType = 'DIGITMATCHES';
-            barrier = String(m.lastDigit);
-            stake = botState.stake * 0.2;
-        } else if (strat === 'PARITY') {
-            const pEven = getMarkovParityEdge(m.digitHistory);
-            contractType = pEven > 0.5 ? 'DIGITEVEN' : 'DIGITODD';
-        } else if (strat === 'DIFFERS') {
-            contractType = 'DIGITDIFF';
-            barrier = String(m.lastDigit);
-        } else return;
+    if (botState.recoveryLayer > 0) {
+        // MODO PERSISTENCIA: Seguimos cazando el MISMO dígito en el mismo mercado
+        targetSymbol = botState.activeSymbol;
+        targetHole = { digit: botState.lastHoleDigit, tension: botState.markets[targetSymbol].lastAppearance[botState.lastHoleDigit] };
     } else {
-        // Capas de Recuperación (HIDRA)
-        contractType = 'DIGITDIFF';
-        barrier = String(m.lastDigit);
-        stake = botState.stake * (botState.recoveryLayer === 1 ? 1.1 : 2.5);
+        // MODO BÚSQUEDA: Escaneamos todos los mercados por un hueco
+        for (const s of SYMBOLS) {
+            const hole = findSingularity(s);
+            if (hole) {
+                targetHole = hole;
+                targetSymbol = s;
+                break; 
+            }
+        }
     }
 
+    if (!targetHole) return;
+
+    botState.activeSymbol = targetSymbol;
+    botState.lastHoleDigit = targetHole.digit;
     botState.isBuying = true;
-    botState.currentBarrier = barrier;
-    botState.currentContractType = contractType;
     botState.lastTradeTime = now;
 
-    console.log(`🚀 [REAL] DISPARO en ${bestSymbol} | Estrategia: ${strat} | V-WinRate: ${vWR}%`);
+    // Gestión de Stake (Persistencia)
+    let currentStake = botState.stake;
+    if (botState.recoveryLayer === 1) currentStake = botState.stake * 1.5;
+    if (botState.recoveryLayer >= 2) currentStake = botState.stake * 3.5;
+
+    console.log(`🌌 [SINGULARIDAD] Caza en ${targetSymbol} | Dígito: ${targetHole.digit} | Tensión: ${targetHole.tension} Ticks`);
 
     const req = {
-        buy: 1, price: stake,
+        buy: 1, price: currentStake,
         parameters: {
-            amount: stake, basis: 'stake', contract_type: contractType,
-            currency: 'USD', symbol: bestSymbol, duration: 1, duration_unit: 't'
+            amount: currentStake, basis: 'stake', contract_type: 'DIGITMATCHES',
+            currency: 'USD', symbol: targetSymbol, duration: 1, duration_unit: 't',
+            barrier: String(targetHole.digit)
         }
     };
-    if (barrier !== null) req.parameters.barrier = barrier;
     ws.send(JSON.stringify(req));
 }
 
 function finalizeTrade(c) {
     const profit = parseFloat(c.profit);
     const isWin = profit > 0;
+    
     botState.dailyProfit += isWin ? profit : 0;
     botState.dailyLoss += isWin ? 0 : Math.abs(profit);
     botState.totalTradesSession++;
-    if (isWin) { botState.winsSession++; botState.recoveryLayer = 0; } 
-    else { botState.lossesSession++; botState.recoveryLayer = Math.min(botState.recoveryLayer + 1, 2); }
+    
+    if (isWin) {
+        console.log(`✨ [HUECO CERRADO] Victoria Maestra +$${profit.toFixed(2)}`);
+        botState.winsSession++;
+        botState.recoveryLayer = 0; // Hueco reseteado
+    } else {
+        console.log(`🌑 [HUECO PERSISTENTE] El dígito no salió. Incrementando tensión.`);
+        botState.lossesSession++;
+        botState.recoveryLayer++;
+        // Si tras 4 intentos el hueco no se cierra, abortamos para proteger capital
+        if (botState.recoveryLayer > 3) botState.recoveryLayer = 0;
+    }
 
     botState.tradeHistory.unshift({
         symbol: c.display_symbol,
-        type: c.contract_type,
+        type: `MATCHES(${botState.lastHoleDigit})`,
         profit,
-        result: isWin ? 'WIN ✅' : 'LOSS ❌',
+        result: isWin ? 'WIN ✨' : 'LOSS 🌑',
         time: new Date().toLocaleTimeString()
     });
     if (botState.tradeHistory.length > 50) botState.tradeHistory.pop();
@@ -287,7 +232,7 @@ function finalizeTrade(c) {
     const net = botState.dailyProfit - botState.dailyLoss;
     if (net >= botState.takeProfit || botState.dailyLoss >= botState.maxDailyLoss) {
         botState.isRunning = false;
-        console.log(`🏁 OBJETIVO: $${net.toFixed(2)}`);
+        console.log(`🏁 SINGULARIDAD ALCANZADA: $${net.toFixed(2)}`);
     }
     saveState();
 }
@@ -297,7 +242,16 @@ const app = express();
 app.use(cors()); app.use(express.json()); app.use(express.static(path.join(__dirname, 'public')));
 app.get('/differs/status', (req, res) => {
     const m = botState.markets[botState.activeSymbol] || {};
-    res.json({ success: true, data: { ...botState, shannonEntropy: m.entropy, markovEdge: botState.virtualWinRate } });
+    const hole = findSingularity(botState.activeSymbol);
+    res.json({ 
+        success: true, 
+        data: { 
+            ...botState, 
+            shannonEntropy: hole ? hole.tension : 0, // Usamos entropy para mostrar la Tensión del hueco
+            markovEdge: hole ? hole.digit : 0,        // Usamos markov para mostrar el dígito objetivo
+            currentBarrier: hole ? hole.digit : '-'
+        } 
+    });
 });
 app.post('/differs/control', (req, res) => {
     const { action, stake, takeProfit, maxDailyLoss } = req.body;
