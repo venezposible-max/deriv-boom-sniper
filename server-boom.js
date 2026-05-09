@@ -137,9 +137,15 @@ function connectDeriv() {
         }
 
         if (msg.msg_type === 'buy') {
-            botState.activeContractId = msg.buy.contract_id;
-            botState.isBuying = false;
-            ws.send(JSON.stringify({ proposal_open_contract: 1, contract_id: msg.buy.contract_id, subscribe: 1 }));
+            if (msg.buy) {
+                botState.activeContractId = msg.buy.contract_id;
+                botState.isBuying = false;
+                ws.send(JSON.stringify({ proposal_open_contract: 1, contract_id: msg.buy.contract_id, subscribe: 1 }));
+            } else {
+                console.error("❌ ERROR AL COMPRAR:", msg.error?.message || "Desconocido");
+                botState.isBuying = false;
+                botState.activeContractId = null;
+            }
         }
 
         if (msg.msg_type === 'proposal_open_contract' && msg.proposal_open_contract?.is_sold) {
@@ -241,15 +247,25 @@ function finalizeTrade(c) {
 const app = express();
 app.use(cors()); app.use(express.json()); app.use(express.static(path.join(__dirname, 'public')));
 app.get('/differs/status', (req, res) => {
-    const m = botState.markets[botState.activeSymbol] || {};
-    const hole = findSingularity(botState.activeSymbol);
+    // Buscar la mayor tensión actual entre todos los mercados para mostrar en el dashboard
+    let maxT = 0, targetD = '-';
+    SYMBOLS.forEach(s => {
+        const m = botState.markets[s];
+        for(let d=0; d<=9; d++) {
+            if(m.lastAppearance[d] > maxT) {
+                maxT = m.lastAppearance[d];
+                targetD = d;
+            }
+        }
+    });
+
     res.json({ 
         success: true, 
         data: { 
             ...botState, 
-            shannonEntropy: hole ? hole.tension : 0, // Usamos entropy para mostrar la Tensión del hueco
-            markovEdge: hole ? hole.digit : 0,        // Usamos markov para mostrar el dígito objetivo
-            currentBarrier: hole ? hole.digit : '-'
+            shannonEntropy: maxT,
+            markovEdge: targetD,
+            currentBarrier: targetD
         } 
     });
 });
