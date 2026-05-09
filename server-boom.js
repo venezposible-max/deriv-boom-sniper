@@ -148,20 +148,20 @@ function evaluateInstitutionalSniper() {
             }
         }
         
-        // Exigimos un mínimo de 10 apariciones del dígito para validar la estadística
-        if (totalSamples >= 10) {
+        // Exigimos un mínimo de 8 apariciones del dígito para validar la estadística
+        if (totalSamples >= 8) {
             const probUnder = countUnder / totalSamples;
             const probOver = countOver / totalSamples;
             
-            // Si el PRNG está sesgado a tirar el número hacia abajo (prob > 85%)
-            if (probUnder >= 0.85 && probUnder > maxUnderProb) {
+            // Si el PRNG está sesgado a tirar el número hacia abajo (prob > 75%)
+            if (probUnder >= 0.75 && probUnder > maxUnderProb) {
                 maxUnderProb = probUnder;
                 targetUnderSymbol = s;
                 optimalUnderDigit = currentDigit;
             }
             
-            // Si el PRNG está sesgado a tirar el número hacia arriba (prob > 85%)
-            if (probOver >= 0.85 && probOver > maxOverProb) {
+            // Si el PRNG está sesgado a tirar el número hacia arriba (prob > 75%)
+            if (probOver >= 0.75 && probOver > maxOverProb) {
                 maxOverProb = probOver;
                 targetOverSymbol = s;
                 optimalOverDigit = currentDigit;
