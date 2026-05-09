@@ -209,6 +209,8 @@ function evaluateAndFire() {
 
     botState.isBuying = true;
     botState.activeSymbol = bestSymbol;
+    botState.currentBarrier = barrier;
+    botState.currentContractType = contractType;
     botState.lastTradeTime = now;
 
     console.log(`🎯 [CAMALEÓN] Mercado: ${bestSymbol} | Estrategia: ${strategy} | Entropy: ${minEntropy.toFixed(2)}`);
@@ -264,7 +266,21 @@ function finalizeTrade(c) {
 // ─── SERVIDOR ─────────────────────────────────────────────────
 const app = express();
 app.use(cors()); app.use(express.json()); app.use(express.static(path.join(__dirname, 'public')));
-app.get('/differs/status', (req, res) => res.json({ success: true, data: { ...botState } }));
+app.get('/differs/status', (req, res) => {
+    const activeMarket = botState.markets[botState.activeSymbol] || {};
+    const flattenedState = {
+        ...botState,
+        shannonEntropy: activeMarket.entropy || 0,
+        markovEdge: activeMarket.markovEdge || 0,
+        lastDigit: activeMarket.lastDigit,
+        currentBarrier: botState.currentBarrier, // Usar el guardado globalmente
+        symbol: botState.activeSymbol,
+        winRate: botState.totalTradesSession > 0
+            ? ((botState.winsSession / botState.totalTradesSession) * 100).toFixed(1)
+            : '0.0'
+    };
+    res.json({ success: true, data: flattenedState });
+});
 app.post('/differs/control', (req, res) => {
     const { action, stake, takeProfit, maxDailyLoss, isRecoveryEnabled, scanRange } = req.body;
     
