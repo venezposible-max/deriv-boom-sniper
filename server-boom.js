@@ -197,7 +197,7 @@ function evaluateSingularity() {
     const req = {
         buy: 1, price: currentStake,
         parameters: {
-            amount: currentStake, basis: 'stake', contract_type: 'DIGITMATCHES',
+            amount: currentStake, basis: 'stake', contract_type: 'DIGITMATCH',
             currency: 'USD', symbol: targetSymbol, duration: 1, duration_unit: 't',
             barrier: String(targetHole.digit)
         }
@@ -227,7 +227,7 @@ function finalizeTrade(c) {
 
     botState.tradeHistory.unshift({
         symbol: c.display_symbol,
-        type: `MATCHES(${botState.lastHoleDigit})`,
+        type: `MATCH(${botState.lastHoleDigit})`,
         profit,
         result: isWin ? 'WIN ✨' : 'LOSS 🌑',
         time: new Date().toLocaleTimeString()
