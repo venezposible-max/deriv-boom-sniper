@@ -307,7 +307,7 @@
                 🎲 Entropía: <span id="entropyDisplay">--</span>
             </div>
             <div id="markovBadge" style="padding: 5px 10px; border-radius: 10px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); font-size: 11px; font-weight: 800;">
-                🧠 Markov: <span id="markovDisplay">--</span>
+                🎯 Gatillo: <span id="markovDisplay">-</span>
             </div>
         </div>
     </div>
@@ -550,18 +550,15 @@
             }
 
             // Barrier Display
-            const cType = data.currentContractType || 'NONE';
-            const displayBarrier = data.currentBarrier !== null && data.currentBarrier !== undefined ? data.currentBarrier : '-';
+            const cType = data.currentContractType || 'DIGITDIFF';
+            const displayBarrier = data.currentBarrier !== null && data.currentBarrier !== undefined && data.currentBarrier !== '-' ? data.currentBarrier : 'ESPERANDO';
             
-            if (cType === 'DIGITUNDER') {
-                document.getElementById('barrierDisplay').innerText = `UNDER < ${displayBarrier}`;
-                document.getElementById('barrierLabelSub').innerText = 'Probabilidad Markov: >75%';
-            } else if (cType === 'DIGITOVER') {
-                document.getElementById('barrierDisplay').innerText = `OVER > ${displayBarrier}`;
-                document.getElementById('barrierLabelSub').innerText = 'Probabilidad Markov: >75%';
+            if (displayBarrier !== 'ESPERANDO') {
+                document.getElementById('barrierDisplay').innerText = `NO-${displayBarrier}`;
+                document.getElementById('barrierLabelSub').innerText = 'El próximo dígito NO será este';
             } else {
                 document.getElementById('barrierDisplay').innerText = 'ESPERANDO';
-                document.getElementById('barrierLabelSub').innerText = 'Escaneando Matriz...';
+                document.getElementById('barrierLabelSub').innerText = 'Buscando anomalía de 3 repeticiones...';
             }
 
             // Entropy + Markov indicators
@@ -572,10 +569,10 @@
             else if (ent > 3.0) { entBadge.style.borderColor = '#fbbf24'; entBadge.style.color = '#fbbf24'; }
             else if (ent > 0) { entBadge.style.borderColor = '#34d399'; entBadge.style.color = '#34d399'; }
             
-            const mEdge = data.markovEdge || '0';
-            document.getElementById('markovDisplay').innerText = `${mEdge}%`;
+            const mEdge = data.markovEdge || '-';
+            document.getElementById('markovDisplay').innerText = mEdge;
             const mBadge = document.getElementById('markovBadge');
-            if (parseFloat(mEdge) >= 5) { mBadge.style.borderColor = '#34d399'; mBadge.style.color = '#34d399'; }
+            if (mEdge !== '-') { mBadge.style.borderColor = '#34d399'; mBadge.style.color = '#34d399'; }
             else { mBadge.style.borderColor = 'rgba(255,255,255,0.1)'; mBadge.style.color = '#fff'; }
 
             // Chips
