@@ -266,19 +266,30 @@ const app = express();
 app.use(cors()); app.use(express.json()); app.use(express.static(path.join(__dirname, 'public')));
 app.get('/differs/status', (req, res) => res.json({ success: true, data: { ...botState } }));
 app.post('/differs/control', (req, res) => {
-    const { action, stake, takeProfit, maxDailyLoss } = req.body;
-    if (action === 'START') {
-        if (stake) botState.stake = parseFloat(stake);
-        if (takeProfit) botState.takeProfit = parseFloat(takeProfit);
-        if (maxDailyLoss) botState.maxDailyLoss = parseFloat(maxDailyLoss);
-        botState.isRunning = true;
+    const { action, stake, takeProfit, maxDailyLoss, isRecoveryEnabled, scanRange } = req.body;
+    
+    if (action === 'START' || action === 'SYNC') {
+        if (stake !== undefined) botState.stake = parseFloat(stake);
+        if (takeProfit !== undefined) botState.takeProfit = parseFloat(takeProfit);
+        if (maxDailyLoss !== undefined) botState.maxDailyLoss = parseFloat(maxDailyLoss);
+        if (isRecoveryEnabled !== undefined) botState.isRecoveryEnabled = !!isRecoveryEnabled;
+        
+        if (action === 'START') botState.isRunning = true;
     } else if (action === 'STOP') {
         botState.isRunning = false;
     } else if (action === 'RESET_DAY') {
-        botState.dailyProfit = 0; botState.dailyLoss = 0; botState.tradeHistory = [];
+        botState.dailyProfit = 0; 
+        botState.dailyLoss = 0; 
+        botState.winsSession = 0;
+        botState.lossesSession = 0;
+        botState.totalTradesSession = 0;
+        botState.tradeHistory = [];
+    } else if (action === 'CONFIG') {
+        if (scanRange) botState.scanRange = parseInt(scanRange);
     }
+    
     saveState();
-    res.json({ success: true });
+    res.json({ success: true, data: botState });
 });
 
 const PORT = process.env.PORT || 8080;
