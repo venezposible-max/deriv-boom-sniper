@@ -1,8 +1,8 @@
 /**
  * ============================================================
- *  EL FÉNIX ENGINE v2.0 (MODO COMPATIBILIDAD RAILWAY)
- *  Estrategias: DIFFERS + OVER/UNDER (Modo Dual)
- *  Markov Chain + Shannon Entropy + Hidra Recovery
+ *  ESTRATEGIA: EL SALTO DEL TIGRE v3.0
+ *  Ataque: Even/Odd (Beneficio 1:1) + Defensa: Differs (Seguro 90%)
+ *  Markov Parity + Shannon Entropy + El Fénix Recovery
  *  Símbolo: Volatility Index (R_10/R_25/R_50/R_100)
  * ============================================================
  */
@@ -61,9 +61,10 @@ let botState = {
     dalembertStep: 0,
     emergencyWaitTicks: 0,
     // ─── MARKOV + ENTROPÍA ───
-    currentContractType: 'DIGITDIFF', // DIGITDIFF o DIGITOVER/DIGITUNDER
+    currentContractType: 'DIGITEVEN', // Ataque inicial: Par/Impar
     shannonEntropy: 0,
     markovEdge: 0,             // Ventaja detectada por Markov
+    parityHistory: [],         // 0=Even, 1=Odd
 };
 
 // ─── CARGAR ESTADO PREVIO ──────────────────────────────────────
@@ -105,67 +106,56 @@ function chooseBestBarrier() {
         }
     }
 
-    // ─── CAPA 1: GOLPE ESPEJO ───
-    if (botState.isRecoveryEnabled && botState.recoveryLayer === 1 && botState.lastLostBarrier !== null) {
-        const mirrorBarrier = String(botState.lastLostBarrier);
-        console.log(`🪞 [HIDRA CAPA 1] GOLPE ESPEJO: Repitiendo barrera NO-${mirrorBarrier} (99% de que no repita)`);
-        return mirrorBarrier;
+    // ─── CAPA 0: ATAQUE (Paridad con Markov) ───
+    if (botState.recoveryLayer === 0) {
+        const paritySignal = getMarkovParity(botState.digitHistory);
+        if (paritySignal) {
+            botState.currentContractType = paritySignal.type;
+            console.log(`🐯 [ATAQUE] ${paritySignal.label} | Edge: ${botState.markovEdge}%`);
+            return "PARITY"; // Marcador para Even/Odd
+        }
+        return null; // Esperar señal clara
     }
 
-    // ─── CAPA 2: FÉNIX (Over/Under con Markov) ───
+    // ─── CAPA 1: DEFENSA (Differs Sniper) ───
+    if (botState.isRecoveryEnabled && botState.recoveryLayer === 1) {
+        // En Capa 1 usamos Differs para asegurar la recuperación del stake perdido en Capa 0
+        const sub = hist.slice(-range);
+        const freq = {};
+        for (let d = 0; d <= 9; d++) freq[d] = 0;
+        sub.forEach(d => freq[d]++);
+        
+        let hotDigit = null;
+        let maxFreq = -1;
+        const recent5 = hist.slice(-5);
+        const lastDigit = hist[hist.length - 1];
+
+        for (let d = 0; d <= 9; d++) {
+            if (d === lastDigit) continue;
+            if (recent5.includes(d) && freq[d] > maxFreq) {
+                maxFreq = freq[d];
+                hotDigit = d;
+            }
+        }
+        
+        if (hotDigit !== null) {
+            botState.currentContractType = 'DIGITDIFF';
+            console.log(`🛡️ [DEFENSA CAPA 1] Recuperando con DIFFERS NO-${hotDigit}`);
+            return String(hotDigit);
+        }
+        return null;
+    }
+
+    // ─── CAPA 2: EL FÉNIX (Over/Under) ───
     if (botState.isRecoveryEnabled && botState.recoveryLayer === 2) {
         const markovSignal = getMarkovOverUnder(hist);
         if (markovSignal) {
             botState.currentContractType = markovSignal.type;
-            console.log(`🔥 [FÉNIX CAPA 2] ${markovSignal.label} | Prob: ${(markovSignal.prob*100).toFixed(1)}% | Edge: ${botState.markovEdge}%`);
+            console.log(`🔥 [FÉNIX CAPA 2] ${markovSignal.label} | Edge: ${botState.markovEdge}%`);
             return markovSignal.barrier;
         }
-        // Si Markov no tiene señal, usar Differs con dígito frío como fallback
-        const subH = hist.slice(-range);
-        const fq = {};
-        for (let d = 0; d <= 9; d++) fq[d] = 0;
-        subH.forEach(d => fq[d]++);
-        let coldDigit = null, minF = Infinity;
-        for (let d = 0; d <= 9; d++) {
-            if (d === hist[hist.length-1]) continue;
-            if (fq[d] < minF) { minF = fq[d]; coldDigit = d; }
-        }
-        if (coldDigit !== null) {
-            botState.currentContractType = 'DIGITDIFF';
-            return String(coldDigit);
-        }
+        return null;
     }
-
-    // ─── CAPA 0: MODO NORMAL (Filtro de Entropía) ───
-    botState.currentContractType = 'DIGITDIFF';
-    
-    // Si la entropía es muy alta (>3.25), el mercado es caótico, no operar
-    if (parseFloat(botState.shannonEntropy) > 3.25) return null;
-    const subHistory = hist.slice(-range);
-    const freq = {};
-    for (let d = 0; d <= 9; d++) freq[d] = 0;
-    subHistory.forEach(d => freq[d]++);
-
-    const recent5 = hist.slice(-5);
-    const lastDigit = hist[hist.length - 1];
-
-    let hotDigit = null;
-    let maxFreq = -1;
-
-    for (let d = 0; d <= 9; d++) {
-        if (d === lastDigit) continue;
-        if (!recent5.includes(d)) continue;
-        if (freq[d] > maxFreq) {
-            maxFreq = freq[d];
-            hotDigit = d;
-        }
-    }
-
-    const threshold = Math.floor(range * 0.12);
-    if (hotDigit === null || freq[hotDigit] < threshold) return null;
-
-    console.log(`🎯 [SNIPER] Dígito caliente: ${hotDigit} (${maxFreq}/${range} = ${((maxFreq/range)*100).toFixed(1)}%) | Barrera: NO-${hotDigit}`);
-    return String(hotDigit);
 }
 
 // ─── GUARDAR ESTADO ───────────────────────────────────────────
@@ -207,6 +197,32 @@ function calcEntropy(hist, range) {
         if (p > 0) entropy -= p * Math.log2(p);
     }
     return entropy; // Max = 3.32 (totalmente aleatorio)
+}
+
+// ─── MARKOV: Paridad (Par/Impar) ───
+function getMarkovParity(hist) {
+    if (hist.length < 100) return null;
+    const sub = hist.slice(-200);
+    const matrix = { even: { even: 0, odd: 0, total: 0 }, odd: { even: 0, odd: 0, total: 0 } };
+    
+    for (let k = 1; k < sub.length; k++) {
+        const prev = sub[k-1] % 2 === 0 ? 'even' : 'odd';
+        const curr = sub[k] % 2 === 0 ? 'even' : 'odd';
+        matrix[prev][curr]++;
+        matrix[prev].total++;
+    }
+
+    const last = hist[hist.length - 1] % 2 === 0 ? 'even' : 'odd';
+    const trans = matrix[last];
+    if (trans.total < 10) return null;
+
+    const probEven = trans.even / trans.total;
+    const edge = Math.abs(probEven - 0.5);
+    botState.markovEdge = (edge * 100).toFixed(1);
+
+    if (probEven > 0.55) return { type: 'DIGITEVEN', label: 'PAR (Markov)' };
+    if (probEven < 0.45) return { type: 'DIGITODD', label: 'IMPAR (Markov)' };
+    return null;
 }
 
 // ─── MARKOV: Decidir Over o Under basado en transiciones ───
@@ -536,15 +552,24 @@ function tryFireTrade() {
             currency: 'USD',
             symbol: SYMBOL,
             duration: 1,
-            duration_unit: 't',
-            barrier: barrier
+            duration_unit: 't'
         }
     };
+
+    // Solo añadir barrera si es Differs o Over/Under
+    if (contractType.includes('DIFF') || contractType.includes('OVER') || contractType.includes('UNDER')) {
+        req.parameters.barrier = barrier;
+    }
 
     botState.isBuying = true;
     botState.lastTradeTime = now;
 
-    const typeLabel = contractType === 'DIGITDIFF' ? `NO-${barrier}` : (contractType.includes('OVER') ? `OVER ${barrier}` : `UNDER ${barrier}`);
+    let typeLabel = "";
+    if (contractType === 'DIGITEVEN') typeLabel = "PAR";
+    else if (contractType === 'DIGITODD') typeLabel = "IMPAR";
+    else if (contractType === 'DIGITDIFF') typeLabel = `NO-${barrier}`;
+    else typeLabel = `${contractType.includes('OVER') ? 'OVER' : 'UNDER'} ${barrier}`;
+
     console.log(`🎲 SHOOT [${layerLabel}] | ${typeLabel} | Stake: $${currentStake.toFixed(2)} | Entropy: ${botState.shannonEntropy}`);
     ws.send(JSON.stringify(req));
 }
@@ -558,10 +583,15 @@ function finalizeTrade(c) {
     botState.totalTradesSession++;
     botState.tradeCount++;
 
-    const layerNames = ['NORMAL', '🪞 ESPEJO', '🔥 FÉNIX', '🛑 FRENO'];
+    const layerNames = ['🐯 ATAQUE', '🛡️ DEFENSA', '🔥 FÉNIX', '🛑 FRENO'];
     const currentLayerName = botState.isRecoveryEnabled ? layerNames[botState.recoveryLayer] : 'NORMAL';
     const cType = botState.currentContractType || 'DIGITDIFF';
-    const typeLabel = cType === 'DIGITDIFF' ? `DIFFERS (NO-${botState.currentBarrier})` : (cType.includes('OVER') ? `OVER ${botState.currentBarrier}` : `UNDER ${botState.currentBarrier}`);
+    
+    let typeLabel = "";
+    if (cType === 'DIGITEVEN') typeLabel = "PARIDAD (PAR)";
+    else if (cType === 'DIGITODD') typeLabel = "PARIDAD (IMPAR)";
+    else if (cType === 'DIGITDIFF') typeLabel = `DIFFERS (NO-${botState.currentBarrier})`;
+    else typeLabel = `${cType.includes('OVER') ? 'OVER' : 'UNDER'} ${botState.currentBarrier}`;
 
     if (isWin) {
         botState.winsSession++;
