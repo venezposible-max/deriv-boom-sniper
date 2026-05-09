@@ -646,13 +646,7 @@
             netEl.innerText = `${net >= 0 ? '+' : ''}$${net.toFixed(2)}`;
             netEl.className = net >= 0 ? 'green' : 'red';
 
-            // Sync UI inputs if they changed on server
-            if (!isRunning) {
-                document.getElementById('isRecoveryEnabled').checked = !!data.isRecoveryEnabled;
-                document.getElementById('recoveryBox').className = 'recovery-box' + (data.isRecoveryEnabled ? ' active' : '');
-            }
-
-            // FENIX LAYER STATUS REMOVED
+            // Sync UI inputs si hubieran inputs adicionales aquí
             // ACCOUNT THEME UPDATE
             const headerElement = document.getElementById('mainHeader');
             const accDemo = document.getElementById('btnAccDemo');
@@ -848,8 +842,7 @@
             action: 'SYNC',
             stake: parseFloat(document.getElementById('stake').value),
             maxDailyLoss: parseFloat(document.getElementById('maxDailyLoss').value),
-            takeProfit: parseFloat(document.getElementById('takeProfit').value),
-            isRecoveryEnabled: document.getElementById('isRecoveryEnabled').checked
+            takeProfit: parseFloat(document.getElementById('takeProfit').value)
         };
         try {
             await fetch('/differs/control', {
