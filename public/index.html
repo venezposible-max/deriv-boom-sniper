@@ -682,7 +682,12 @@
             const tradeCard = document.getElementById('tradeCard');
             if (data.activeContractId) {
                 tradeCard.style.display = 'block';
-                document.getElementById('activeBarrierLabel').innerText = `Diferir de dígito: NO-${barrier}`;
+                const cType = data.currentContractType || 'DIGITDIFF';
+                if (cType === 'DIGITMATCH') {
+                    document.getElementById('activeBarrierLabel').innerText = `Igualar dígito: MATCH-${barrier}`;
+                } else {
+                    document.getElementById('activeBarrierLabel').innerText = `Diferir de dígito: NO-${barrier}`;
+                }
             } else {
                 tradeCard.style.display = 'none';
             }
