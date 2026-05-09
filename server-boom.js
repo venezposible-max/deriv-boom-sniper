@@ -72,7 +72,7 @@ function connectDeriv() {
         const msg = JSON.parse(raw);
         if (msg.msg_type === 'authorize') {
             botState.isConnectedToDeriv = true;
-            console.log("👔 MODO INSTITUCIONAL v8.0 ACTIVADO (Cero Martingala | Solo Anomalías 3x)");
+            console.log("🧠 MODO INSTITUCIONAL v9.0 ACTIVADO (Matriz de Markov | Péndulo Dual Over/Under)");
             SYMBOLS.forEach(s => {
                 ws.send(JSON.stringify({ subscribe: 1, ticks: s }));
             });
@@ -303,7 +303,7 @@ app.post('/differs/control', (req, res) => {
         
         if (action === 'START') {
             botState.isRunning = true;
-            console.log(`🚀 BOT INICIADO | Estrategia: ${botState.strategyMode} | Meta: $${botState.takeProfit}`);
+            console.log(`🚀 ESCÁNER MARKOV INICIADO | Meta de Sesión: $${botState.takeProfit}`);
         }
     } else if (action === 'STOP') {
         botState.isRunning = false;
