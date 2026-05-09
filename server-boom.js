@@ -292,18 +292,25 @@ function evaluateDiffer() {
     botState.isBuying = true;
     botState.lastTradeTime = now;
 
-    // Stake conservador para recuperación
+    // Estrategia Fénix: Differs (Capa 0) -> Match (Capas 1,2,3)
+    let currentContractType = 'DIGITDIFF';
     let currentStake = botState.stake;
-    if (botState.recoveryLayer === 1) currentStake = botState.stake * 1.5;
-    if (botState.recoveryLayer === 2) currentStake = botState.stake * 2.5;
-    if (botState.recoveryLayer >= 3) currentStake = botState.stake * 5;
 
-    console.log(`🎯 [DIFFERS] ${targetSymbol} | Hot Digit: ${targetDigit} (${(bestOverRep*100).toFixed(0)}%) | Capa: ${botState.recoveryLayer} | Stake: $${currentStake}`);
+    if (botState.recoveryLayer > 0) {
+        currentContractType = 'DIGITMATCH';
+        // Multiplicadores Fénix (Bajos, porque Match paga 800%)
+        if (botState.recoveryLayer === 1) currentStake = botState.stake * 1;
+        if (botState.recoveryLayer === 2) currentStake = botState.stake * 1.5;
+        if (botState.recoveryLayer >= 3) currentStake = botState.stake * 2.5;
+        console.log(`🔥 [FÉNIX] ${targetSymbol} | Recuperando con MATCH(=${targetDigit}) | Capa: ${botState.recoveryLayer} | Stake: $${currentStake}`);
+    } else {
+        console.log(`🎯 [DIFFERS] ${targetSymbol} | Hot Digit: ${targetDigit} (${(bestOverRep*100).toFixed(0)}%) | Capa: 0 | Stake: $${currentStake}`);
+    }
 
     ws.send(JSON.stringify({
         buy: 1, price: currentStake,
         parameters: {
-            amount: currentStake, basis: 'stake', contract_type: 'DIGITDIFF',
+            amount: currentStake, basis: 'stake', contract_type: currentContractType,
             currency: 'USD', symbol: targetSymbol, duration: 1, duration_unit: 't',
             barrier: String(targetDigit)
         }
@@ -318,12 +325,15 @@ function finalizeTrade(c) {
     botState.dailyLoss += isWin ? 0 : Math.abs(profit);
     botState.totalTradesSession++;
     
+    const isRecovery = botState.recoveryLayer > 0;
+    const typeLabel = isRecovery ? `MATCH(=${botState.lastHotDigit})` : `DIFF(≠${botState.lastHotDigit})`;
+
     if (isWin) {
-        console.log(`✅ [DIFFER WIN] +$${profit.toFixed(2)} | Balance: $${botState.balance}`);
+        console.log(`✅ [${isRecovery ? 'FÉNIX WIN' : 'DIFFER WIN'}] +$${profit.toFixed(2)} | Balance: $${botState.balance}`);
         botState.winsSession++;
         botState.recoveryLayer = 0;
     } else {
-        console.log(`❌ [DIFFER LOSS] -$${Math.abs(profit).toFixed(2)} | Capa ${botState.recoveryLayer + 1}`);
+        console.log(`❌ [${isRecovery ? 'FÉNIX LOSS' : 'DIFFER LOSS'}] -$${Math.abs(profit).toFixed(2)} | Capa ${botState.recoveryLayer + 1}`);
         botState.lossesSession++;
         botState.recoveryLayer++;
         if (botState.recoveryLayer > 3) {
@@ -335,7 +345,7 @@ function finalizeTrade(c) {
 
     botState.tradeHistory.unshift({
         symbol: c.display_symbol,
-        type: `DIFF(≠${botState.lastHotDigit})`,
+        type: typeLabel,
         profit,
         result: isWin ? 'WIN ✅' : 'LOSS ❌',
         time: new Date().toLocaleTimeString()
