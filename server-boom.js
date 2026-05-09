@@ -296,10 +296,11 @@ function evaluateSingularity() {
     botState.isBuying = true;
     botState.lastTradeTime = now;
 
-    // Gestión de Stake (Persistencia Cuántica)
+    // Gestión de Stake (Recuperación Conservadora)
     let currentStake = botState.stake;
-    if (botState.recoveryLayer === 1) currentStake = botState.stake * 2;
-    if (botState.recoveryLayer >= 2) currentStake = botState.stake * 6;
+    if (botState.recoveryLayer === 1) currentStake = botState.stake * 1.5;
+    if (botState.recoveryLayer === 2) currentStake = botState.stake * 2.5;
+    if (botState.recoveryLayer >= 3) currentStake = botState.stake * 5;
 
     console.log(`🚀 [SINGULARIDAD] Caza en ${targetSymbol} | Dígito: ${targetHole.digit} | Tensión: ${targetHole.tension} | Capa: ${botState.recoveryLayer} | Stake: $${currentStake}`);
 
