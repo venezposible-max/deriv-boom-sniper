@@ -282,7 +282,15 @@ function evaluateDiffer() {
 
     // Ghost Gate (solo en primer disparo)
     if (botState.recoveryLayer === 0) {
-        if (!isGhostApproved(targetSymbol)) return;
+        if (!isGhostApproved(targetSymbol)) {
+            const g = botState.ghostResults[targetSymbol];
+            // Si ya probó los 3 trades y reprobó, resetear para buscar otro hueco
+            if (g.total >= botState.ghostMinTrades) {
+                console.log(`👻 [GHOST RECHAZADO] ${targetSymbol} reprobó (${g.wins}/${g.total}). Buscando otra anomalía...`);
+                resetGhost(targetSymbol);
+            }
+            return;
+        }
         console.log(`👻 [GHOST OK] ${targetSymbol} aprobado (${botState.ghostResults[targetSymbol].wins}/${botState.ghostResults[targetSymbol].total} wins)`);
         resetGhost(targetSymbol);
     }
