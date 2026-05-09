@@ -111,8 +111,8 @@ function calculateAdaptiveThreshold(symbol) {
     // stdDev alta (> 10) = mercado caótico con huecos → podemos bajar el umbral
     if (stdDev < 4) return 100;      // Mercado ultra-estable: máxima paciencia
     if (stdDev < 7) return 85;       // Mercado normal: prudente
-    if (stdDev < 12) return 70;      // Mercado con sesgo: agresivo
-    return 60;                        // Mercado muy sesgado: ataque rápido
+    if (stdDev < 12) return 75;      // Mercado con sesgo: moderado
+    return 70;                        // Piso mínimo: NUNCA bajar de 70
 }
 
 // ─── MEJORA 3: GHOST PROTOCOL ─────────────────────────────────
