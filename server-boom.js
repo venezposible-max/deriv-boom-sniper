@@ -156,43 +156,53 @@ function connectDeriv() {
     ws.on('close', () => { botState.isConnectedToDeriv = false; setTimeout(connectDeriv, 5000); });
 }
 
-// ─── MOTOR DE CAZA ────────────────────────────────────────────
+// ─── MOTOR DE CAZA MULTI-MERCADO ──────────────────────────────
 function evaluateSingularity() {
     const now = Date.now();
     if (now - botState.lastTradeTime < botState.cooldownMs) return;
 
     let targetHole = null;
     let targetSymbol = null;
+    let maxGlobalTension = -1;
 
     if (botState.recoveryLayer > 0) {
         // MODO PERSISTENCIA: Seguimos cazando el MISMO dígito en el mismo mercado
         targetSymbol = botState.activeSymbol;
-        targetHole = { digit: botState.lastHoleDigit, tension: botState.markets[targetSymbol].lastAppearance[botState.lastHoleDigit] };
+        const m = botState.markets[targetSymbol];
+        targetHole = { 
+            digit: botState.lastHoleDigit, 
+            tension: m.lastAppearance[botState.lastHoleDigit] 
+        };
     } else {
-        // MODO BÚSQUEDA: Escaneamos todos los mercados por un hueco
-        for (const s of SYMBOLS) {
-            const hole = findSingularity(s);
-            if (hole) {
-                targetHole = hole;
-                targetSymbol = s;
-                break; 
+        // MODO BÚSQUEDA GLOBAL: Escaneamos los 4 mercados por el hueco más profundo
+        SYMBOLS.forEach(s => {
+            const m = botState.markets[s];
+            if (m.digitHistory.length < 100) return; // Necesitamos data base
+
+            for (let d = 0; d <= 9; d++) {
+                if (m.lastAppearance[d] > maxGlobalTension) {
+                    maxGlobalTension = m.lastAppearance[d];
+                    targetSymbol = s;
+                    targetHole = { digit: d, tension: maxGlobalTension };
+                }
             }
-        }
+        });
     }
 
-    if (!targetHole) return;
+    // Umbral de disparo: Solo si la tensión supera el límite de seguridad (90 ticks)
+    if (!targetHole || targetHole.tension < 85) return;
 
     botState.activeSymbol = targetSymbol;
     botState.lastHoleDigit = targetHole.digit;
     botState.isBuying = true;
     botState.lastTradeTime = now;
 
-    // Gestión de Stake (Persistencia)
+    // Gestión de Stake (Persistencia Cuántica)
     let currentStake = botState.stake;
-    if (botState.recoveryLayer === 1) currentStake = botState.stake * 1.5;
-    if (botState.recoveryLayer >= 2) currentStake = botState.stake * 3.5;
+    if (botState.recoveryLayer === 1) currentStake = botState.stake * 2;
+    if (botState.recoveryLayer >= 2) currentStake = botState.stake * 6;
 
-    console.log(`🌌 [SINGULARIDAD] Caza en ${targetSymbol} | Dígito: ${targetHole.digit} | Tensión: ${targetHole.tension} Ticks`);
+    console.log(`🚀 [SINGULARIDAD GLOBAL] Caza en ${targetSymbol} | Dígito: ${targetHole.digit} | Tensión: ${targetHole.tension} Ticks`);
 
     const req = {
         buy: 1, price: currentStake,
