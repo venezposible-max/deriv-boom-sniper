@@ -94,22 +94,31 @@ let ws = null;
 function connectDeriv() {
     if (ws && ws.readyState === WebSocket.OPEN) return;
     ws = new WebSocket(`wss://ws.derivws.com/websockets/v3?app_id=${APP_ID}`);
-    ws.on('open', () => { setTimeout(() => ws.send(JSON.stringify({ authorize: currentDerivToken })), 1000); });
+    ws.on('open', () => { 
+        console.log("🔌 Conectado al servidor de Deriv. Enviando autorización...");
+        setTimeout(() => ws.send(JSON.stringify({ authorize: currentDerivToken })), 1000); 
+    });
     ws.on('message', (raw) => {
         const msg = JSON.parse(raw);
         if (msg.msg_type === 'authorize') {
+            if (msg.error) {
+                console.error("❌ ERROR DE AUTORIZACIÓN:", msg.error.message);
+                return;
+            }
             botState.isConnectedToDeriv = true;
             if (msg.authorize && msg.authorize.currency) {
                 botState.currency = msg.authorize.currency;
             }
-            console.log(`🥷 ANTIGRAVEDAD v14.0 | A: SOMBRA (R_10/25/100) | B: MATCH (R_50) | Divisa: ${botState.currency}`);
+            console.log(`🥷 ANTIGRAVEDAD v14.0 | A: CISNE NEGRO (R_10/25/100) | B: MATCH (R_50) | Divisa: ${botState.currency}`);
             SYMBOLS.forEach(s => {
+                console.log(`📡 Suscribiendo a ${s}...`);
                 ws.send(JSON.stringify({ subscribe: 1, ticks: s }));
             });
             ws.send(JSON.stringify({ balance: 1, subscribe: 1 }));
         }
 
         if (msg.msg_type === 'tick' && msg.tick) {
+            console.log(`📈 Tick: ${msg.tick.symbol} = ${msg.tick.quote}`);
             const s = msg.tick.symbol;
             const digit = parseInt(String(msg.tick.quote.toFixed(2)).slice(-1));
             
@@ -157,6 +166,9 @@ function connectDeriv() {
         botState.isConnectedToDeriv = false; 
         console.log("⚠️ Conexión WebSocket cerrada. Reconectando en 2s...");
         setTimeout(connectDeriv, 2000); 
+    });
+    ws.on('error', (err) => {
+        console.error("❌ ERROR WEBSOCKET:", err.message || err);
     });
 }
 
