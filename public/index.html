@@ -529,7 +529,16 @@
             const res = await fetch('/differs/status');
             const { data } = await res.json();
 
-            isRunning = data.isRunning;
+            isRunning = !!data.isRunning;
+
+            // URGENT SYNC: Botón de Control
+            const btn = document.getElementById('btnToggle');
+            if (btn) {
+                btn.innerText = isRunning ? '⏸️ Parar Motores' : '🛡️ Iniciar Motor Dual';
+                btn.className = `btn-main ${isRunning ? 'btn-stop' : 'btn-start'}`;
+            }
+            
+            document.getElementById('debugLog').innerText = `Status: ${isRunning ? 'RUNNING' : 'STOPPED'} | Acc: ${data.isRealAccount ? 'REAL' : 'DEMO'}`;
             
             // SINCRONIZACIÓN DE INTERFAZ (Inputs)
             document.getElementById('subTitle').innerText = `Last Digit Strategy · Deriv ${data.symbol}`;
@@ -767,12 +776,11 @@
 
             // Active Straddle Shield card REMOVED
             // Toggle button
-            const btn = document.getElementById('btnToggle');
-            if (btn) {
-                const startText = '🛡️ Iniciar Motor Dual';
-                const stopText = '⏸️ Parar Motores';
-                btn.innerText = data.isRunning ? stopText : startText;
-                btn.className = `btn-main ${data.isRunning ? 'btn-stop' : 'btn-start'}`;
+            // Chips Update
+            const chip = document.getElementById('chipStatus');
+            if (chip) {
+                chip.innerText = isRunning ? '🟢 ACTIVO' : '⚫ OFFLINE';
+                chip.className = `chip ${isRunning ? 'chip-green' : 'chip-purple'}`;
             }
 
             // History rendering
