@@ -65,7 +65,11 @@ let botState = {
     motorBConsecutiveLosses: 0,
     motorBMaxConsecutiveLosses: 3, // Freno: 3 pérdidas seguidas = pausa
     motorBProfit: 0,
-    motorBPaused: false
+    motorBPaused: false,
+    // ─── MODO FANTASMA (TRADES GHOST) ───
+    ghostMode: false,
+    waitingForRealShot: false,
+    ghostTarget: null // { symbol, digit }
 };
 
 SYMBOLS.forEach(s => {
@@ -116,6 +120,17 @@ function connectDeriv() {
             if (m.digitHistory.length > 1000) m.digitHistory.shift(); // 1000 ticks para la Matriz de Markov
 
             if (botState.isRunning && !botState.activeContractId && !botState.isBuying) {
+                // Lógica de validación Ghost (si hay un target pendiente)
+                if (botState.ghostMode && botState.ghostTarget && botState.ghostTarget.symbol === s) {
+                    if (digit === botState.ghostTarget.digit) {
+                        botState.waitingForRealShot = true;
+                        console.log(`🎯 [GHOST LOSS DETECTED] Sombra ${digit} golpeada virtualmente. ¡ARMANDO DISPARO REAL!`);
+                    } else {
+                        // console.log(`👻 [GHOST WIN] Sombra segura. Seguimos acechando...`);
+                    }
+                    botState.ghostTarget = null; // Limpiar después de 1 tick de validación
+                }
+
                 evaluateMotorA();
                 evaluateMotorB(s, digit);
             }
@@ -220,7 +235,17 @@ function evaluateMotorA() {
     let currentStake = botState.stake;
 
     const tHigh = botState.lastTriggerDigit >= 5;
-    console.log(`🥷 [EFECTO SOMBRA] ${targetSymbol} | Gatillo: ${botState.lastTriggerDigit}x3 (${tHigh?'ALTO':'BAJO'}) | Sombra: NO será ${shadowDigit} (${tHigh?'BAJO':'ALTO'}) | DIFF $${currentStake}`);
+    
+    // FILTRO MODO FANTASMA
+    if (botState.ghostMode && !botState.waitingForRealShot) {
+        botState.ghostTarget = { symbol: targetSymbol, digit: shadowDigit };
+        console.log(`👻 [ACECHO GHOST] ${targetSymbol} | Sombra: ${shadowDigit} (${tHigh?'BAJO':'ALTO'}) | Esperando fallo virtual...`);
+        return; 
+    }
+
+    // Si llegamos aquí es un DISPARO REAL
+    botState.waitingForRealShot = false; // Resetear bandera tras disparar
+    console.log(`🥷 [EFECTO SOMBRA REAL] ${targetSymbol} | Gatillo: ${botState.lastTriggerDigit}x3 (${tHigh?'ALTO':'BAJO'}) | Sombra: NO será ${shadowDigit} (${tHigh?'BAJO':'ALTO'}) | DIFF $${currentStake}`);
 
     ws.send(JSON.stringify({
         buy: 1, price: currentStake,
@@ -407,7 +432,9 @@ app.get('/differs/status', (req, res) => {
             motorBStreak: motorBStreak,
             motorBConsecutiveLosses: botState.motorBConsecutiveLosses,
             startTime: botState.startTime,
-            sessionDuration: botState.sessionDuration || 0
+            sessionDuration: botState.sessionDuration || 0,
+            ghostMode: botState.ghostMode,
+            waitingForRealShot: botState.waitingForRealShot
         } 
     });
 });
@@ -425,6 +452,15 @@ app.post('/differs/control', (req, res) => {
         if (!botState.motorBEnabled) botState.motorBPaused = false;
         console.log(`⚡ MOTOR B: ${botState.motorBEnabled ? 'ACTIVADO' : 'DESACTIVADO'}`);
         return res.json({ success: true, motorBEnabled: botState.motorBEnabled });
+    }
+    if (action === 'TOGGLE_GHOST_MODE') {
+        botState.ghostMode = !botState.ghostMode;
+        if (!botState.ghostMode) {
+            botState.waitingForRealShot = false;
+            botState.ghostTarget = null;
+        }
+        console.log(`👻 MODO FANTASMA: ${botState.ghostMode ? 'ACTIVADO' : 'DESACTIVADO'}`);
+        return res.json({ success: true, ghostMode: botState.ghostMode });
     }
     if (action === 'RESET_MOTOR_B') {
         botState.motorBPaused = false;

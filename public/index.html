@@ -400,19 +400,18 @@
         </div>
 
         <!-- Daily P&L info -->
-        <div style="display:flex; justify-content:space-between; padding:10px 14px; background:rgba(255,255,255,0.03); border-radius:10px; margin-bottom:16px; border:1px solid rgba(255,255,255,0.06);">
-            <div style="text-align:center;">
-                <div class="stat-label">Ganancia Hoy</div>
-                <div style="font-size:15px; font-weight:900;" class="green" id="dailyProfit">$0.00</div>
+        </div>
+        
+        <!-- GHOST MODE TOGGLE -->
+        <div style="background: rgba(167,139,250,0.05); border: 1px solid rgba(167,139,250,0.2); padding: 12px; border-radius: 12px; display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+            <div>
+                <div style="font-weight: 800; font-size: 13px; color: #a78bfa;">👻 Modo Fantasma (Filtro 99%)</div>
+                <div style="font-size: 11px; color: #888;" id="ghostStatusText">Espera un fallo virtual antes de disparar real</div>
             </div>
-            <div style="text-align:center;">
-                <div class="stat-label">Pérdida Hoy</div>
-                <div style="font-size:15px; font-weight:900;" class="red" id="dailyLoss">$0.00</div>
-            </div>
-            <div style="text-align:center;">
-                <div class="stat-label">Balance Hoy</div>
-                <div style="font-size:15px; font-weight:900;" id="dailyNet">$0.00</div>
-            </div>
+            <label class="switch">
+                <input type="checkbox" id="ghostToggle" onchange="toggleGhostMode()">
+                <span class="slider"></span>
+            </label>
         </div>
 
 
@@ -470,13 +469,23 @@
     // switchStrategy removed
     
 
-
     async function toggleMotorB() {
         try {
             await fetch('/differs/control', {
                 method: 'POST', headers: {'Content-Type': 'application/json'},
                 body: JSON.stringify({ action: 'TOGGLE_MOTOR_B' })
             });
+            await fetchStatus(true);
+        } catch (e) { console.error(e); }
+    }
+
+    async function toggleGhostMode() {
+        try {
+            await fetch('/differs/control', {
+                method: 'POST', headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ action: 'TOGGLE_GHOST_MODE' })
+            });
+            await fetchStatus(true);
         } catch (e) { console.error(e); }
     }
 
@@ -639,6 +648,25 @@
                 } else {
                     mbStatus.innerText = '⏳ Escaneando R_50...';
                     mbStatus.style.color = '#38bdf8';
+                }
+            }
+
+            // Sync Ghost toggle
+            const gToggle = document.getElementById('ghostToggle');
+            if (gToggle && gToggle.checked !== data.ghostMode) {
+                gToggle.checked = !!data.ghostMode;
+            }
+            const gStatus = document.getElementById('ghostStatusText');
+            if (gStatus) {
+                if (!data.ghostMode) {
+                    gStatus.innerText = 'Espera un fallo virtual antes de disparar real';
+                    gStatus.style.color = '#888';
+                } else if (data.waitingForRealShot) {
+                    gStatus.innerText = '🎯 FALLO DETECTADO: Próximo tiro será REAL';
+                    gStatus.style.color = '#34d399';
+                } else {
+                    gStatus.innerText = '👻 Acechando... Esperando fallo virtual';
+                    gStatus.style.color = '#a78bfa';
                 }
             }
 
