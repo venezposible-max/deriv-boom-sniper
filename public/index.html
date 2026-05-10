@@ -577,8 +577,8 @@
 
             // Streak Radar Update
             const streak = parseInt(data.activeStreak || 0);
-            const streakPct = (streak / 3) * 100;
-            document.getElementById('entropyDisplay').innerText = `${streak}/3`;
+            const streakPct = Math.min((streak / 4) * 100, 100);
+            document.getElementById('entropyDisplay').innerText = `${streak}/4`;
             document.getElementById('streakProgress').style.width = `${streakPct}%`;
             
             const sBadge = document.getElementById('streakBadge');
@@ -609,7 +609,7 @@
                 document.getElementById('barrierLabelSub').innerText = 'El próximo dígito NO será este';
             } else {
                 document.getElementById('barrierDisplay').innerText = 'ESPERANDO';
-                document.getElementById('barrierLabelSub').innerText = 'Buscando distracción (3 repetidos)...';
+                document.getElementById('barrierLabelSub').innerText = 'Buscando Cisne Negro (4 repetidos)...';
             }
 
             // Entropy/Markov (now streak data)
@@ -753,7 +753,7 @@
                 tradeCard.style.display = 'none';
                 if (scanningCard) {
                     scanningCard.style.display = data.isRunning ? 'block' : 'none';
-                    document.getElementById('scanningText').innerText = '🥷 Escaneando Efecto Sombra (Distracción de 3 repetidos)...';
+                    document.getElementById('scanningText').innerText = '🥷 Escaneando Cisne Negro (Racha de 4 repetidos)...';
                 }
             }
 

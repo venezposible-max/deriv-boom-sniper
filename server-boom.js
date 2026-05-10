@@ -173,11 +173,11 @@ function evaluateMotorA() {
         const history = botState.markets[s].digitHistory;
         if (history.length < 100) continue; // Necesitamos contexto para la sombra
         
-        // 1. EL GATILLO: Una racha de 3 repeticiones (Distracción Fuerte)
-        const last3 = history.slice(-3);
-        if (last3[0] !== last3[1] || last3[1] !== last3[2]) continue; 
+        // 1. EL GATILLO: Una racha de 4 repeticiones (Cisne Negro)
+        const last4 = history.slice(-4);
+        if (last4.length < 4 || last4[0] !== last4[1] || last4[1] !== last4[2] || last4[2] !== last4[3]) continue; 
 
-        // 2. BÚSQUEDA DE LA SOMBRA
+        botState.lastTriggerDigit = last4[0];
         const last100 = history.slice(-100);
         const freq = Array(10).fill(0);
         const lastSeen = Array(10).fill(-1);
@@ -245,7 +245,7 @@ function evaluateMotorA() {
 
     // Si llegamos aquí es un DISPARO REAL
     botState.waitingForRealShot = false; // Resetear bandera tras disparar
-    console.log(`🥷 [EFECTO SOMBRA REAL] ${targetSymbol} | Gatillo: ${botState.lastTriggerDigit}x3 (${tHigh?'ALTO':'BAJO'}) | Sombra: NO será ${shadowDigit} (${tHigh?'BAJO':'ALTO'}) | DIFF $${currentStake}`);
+    console.log(`🥷 [CISNE NEGRO REAL] ${targetSymbol} | Gatillo: ${botState.lastTriggerDigit}x4 (${tHigh?'ALTO':'BAJO'}) | Sombra: NO será ${shadowDigit} (${tHigh?'BAJO':'ALTO'}) | DIFF $${currentStake}`);
 
     ws.send(JSON.stringify({
         buy: 1, price: currentStake,
@@ -369,17 +369,22 @@ app.get('/differs/status', (req, res) => {
 
     SYMBOLS.forEach(s => {
         const h = botState.markets[s].digitHistory;
-        if (h.length >= 2) {
-            const last3 = h.slice(-3);
-            const last2 = h.slice(-2);
-            if (h.length >= 3 && last3[0] === last3[1] && last3[1] === last3[2]) {
-                activeStreak = 3;
-                streakDigit = last3[0];
+        if (h.length >= 4) {
+            const last4 = h.slice(-4);
+            if (last4[0] === last4[1] && last4[1] === last4[2] && last4[2] === last4[3]) {
+                activeStreak = 4;
+                streakDigit = last4[0];
                 streakSymbol = s;
-            } else if (last2[0] === last2[1]) {
+            } else if (last4[1] === last4[2] && last4[2] === last4[3]) {
+                if (activeStreak < 3) {
+                    activeStreak = 3;
+                    streakDigit = last4[1];
+                    streakSymbol = s;
+                }
+            } else if (last4[2] === last4[3]) {
                 if (activeStreak < 2) {
                     activeStreak = 2;
-                    streakDigit = last2[0];
+                    streakDigit = last4[2];
                     streakSymbol = s;
                 }
             }
@@ -408,7 +413,7 @@ app.get('/differs/status', (req, res) => {
             lastDigit: market.lastDigit,
             lastTickPrice: market.lastTickPrice,
             digitHistory: market.digitHistory.slice(-20),
-            shannonEntropy: `Racha: ${activeStreak}/3`,
+            shannonEntropy: `Cisne: ${activeStreak}/4`,
             markovEdge: streakDigit,
             streakSymbol: streakSymbol,
             currentBarrier: streakDigit,
