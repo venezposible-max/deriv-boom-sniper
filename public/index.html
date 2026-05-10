@@ -6,12 +6,13 @@
     <title>🐇 La Pata del Conejo - Deriv Sniper Engine</title>
     <link rel="manifest" href="/manifest.json">
     <style>
-        @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;700;900&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700;900&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@700&display=swap');
 
         * { box-sizing: border-box; }
         body {
             margin: 0; padding: 0;
-            font-family: 'Outfit', sans-serif;
+            font-family: 'Inter', sans-serif;
             background: #050510;
             color: #fff;
             min-height: 100vh;
@@ -256,35 +257,18 @@
 
     <div class="header" id="mainHeader">
         <h1>🐾 La Pata del Conejo</h1>
-        <p id="subTitle">SMART-RABBIT · R_100 ACTIVE</p>
+        <p id="subTitle">CISNE NEGRO · ESCUDO NIVEL 4</p>
         <div id="sessionTimer" style="font-size: 13px; color: #a78bfa; font-weight: 700; margin-top: 8px; letter-spacing: 2px;">--:--:--</div>
     </div>
 
-    <!-- ACCOUNT TOGGLE -->
-    <div class="account-selector">
-        <button id="btnAccDemo" onclick="switchAccount(false)" class="account-btn active demo">Virtual Account</button>
-        <button id="btnAccReal" onclick="switchAccount(true)" class="account-btn real">Real Account 🔴</button>
-    </div>
-
-    <!-- STRATEGY SELECTOR REMOVED (Dual-Trigger is active) -->
-
     <!-- MARKET SELECTOR -->
-    <div style="display: flex; gap: 8px; margin-bottom: 20px; justify-content: center;">
+    <div style="display: flex; gap: 6px; margin-bottom: 20px; justify-content: center;">
         <button id="btnV10" onclick="switchMarket('R_10')" class="chip chip-purple" style="cursor:pointer; border:none;">V10</button>
-        <button id="btnV25" onclick="switchMarket('R_25')" class="chip chip-purple" style="cursor:pointer; border:none; background: #7c3aed; color:white;">V25</button>
+        <button id="btnV25" onclick="switchMarket('R_25')" class="chip chip-purple" style="cursor:pointer; border:none;">V25</button>
         <button id="btnV50" onclick="switchMarket('R_50')" class="chip chip-purple" style="cursor:pointer; border:none;">V50</button>
         <button id="btnV100" onclick="switchMarket('R_100')" class="chip chip-purple" style="cursor:pointer; border:none;">V100</button>
     </div>
-
-    <!-- PRECISIÓN FIJA -->
-    <div class="card" style="margin-bottom:20px; padding:15px; text-align:center;">
-        <h4 style="margin:0 0 5px 0; color:#a78bfa; font-size: 0.9em;">
-            🎯 PRECISIÓN DE ANÁLISIS: <span id="scanRangeVal">100</span> TICKS
-        </h4>
-        <p style="font-size:0.75em; color:rgba(255,255,255,0.4);">
-            (Modo Alta Estabilidad Activado)
-        </p>
-    </div>
+    <span id="scanRangeVal" style="display:none">100</span>
 
     <!-- CHIPS -->
     <div class="chip-row">
@@ -298,17 +282,21 @@
         <div class="balance-badge" id="balanceDisplay">SALDO: $0.00</div>
         <div class="price-hero" id="priceDisplay">---</div>
         
-        <!-- INDICADORES -->
+        <!-- STREAK RADAR -->
         <div style="display: flex; justify-content: center; gap: 8px; margin-top: 15px; flex-wrap: wrap;">
-            <div id="rsiBadge" style="padding: 5px 10px; border-radius: 10px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); font-size: 11px; font-weight: 800;">
-                ⚡ RSI: <span id="rsiValueDisplay">--</span>
+            <div id="streakBadge" style="padding: 6px 14px; border-radius: 10px; background: rgba(124,58,237,0.15); border: 1px solid #7c3aed; font-size: 12px; font-weight: 800; color: #a78bfa;">
+                🛡️ Racha: <span id="entropyDisplay">0/4</span>
             </div>
-            <div id="entropyBadge" style="padding: 5px 10px; border-radius: 10px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); font-size: 11px; font-weight: 800;">
-                🎲 Entropía: <span id="entropyDisplay">--</span>
+            <div id="streakSymbolBadge" style="padding: 6px 14px; border-radius: 10px; background: rgba(52,211,153,0.1); border: 1px solid rgba(52,211,153,0.3); font-size: 12px; font-weight: 800; color: #34d399;">
+                🎯 Mercado: <span id="markovDisplay">-</span>
             </div>
-            <div id="markovBadge" style="padding: 5px 10px; border-radius: 10px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); font-size: 11px; font-weight: 800;">
-                🎯 Gatillo: <span id="markovDisplay">-</span>
+        </div>
+        <!-- STREAK PROGRESS BAR -->
+        <div style="margin-top:12px; padding: 0 20px;">
+            <div style="height: 6px; background: rgba(255,255,255,0.06); border-radius: 3px; overflow: hidden;">
+                <div id="streakProgress" style="height: 100%; width: 0%; background: linear-gradient(90deg, #7c3aed, #34d399); border-radius: 3px; transition: width 0.4s ease;"></div>
             </div>
+            <div style="font-size: 9px; color: #555; text-align: center; margin-top: 4px;" id="streakProgressLabel">Esperando anomalía...</div>
         </div>
     </div>
 
@@ -360,7 +348,7 @@
     <!-- SCANNING CARD -->
     <div class="card" id="scanningCard" style="display:none; text-align:center; border: 1px dashed rgba(167, 139, 250, 0.4);">
         <div style="font-size:16px; font-weight:700; color:#a78bfa; margin-bottom: 8px;" class="pulse-anim">📡 Escaneando Mercados...</div>
-        <div style="font-size:12px; color:#aaa;" id="scanningText">Buscando anomalía de 3 dígitos...</div>
+        <div style="font-size:12px; color:#aaa;" id="scanningText">🛡️ Escaneando Escudo Nivel 4 (4 Repeticiones)...</div>
     </div>
 
     <!-- ACTIVE TRADE -->
@@ -371,18 +359,7 @@
         <div class="stat-label">Esperando resultado del tick...</div>
     </div>
 
-    <!-- ACTIVE STRADDLE SHIELD -->
-    <div class="card shield-active" id="shieldCard" style="display:none; text-align:center;">
-        <div class="card-title" id="subTitle" style="color: #34d399; font-size: 13px;">Cazador Anti-Racha (100% Differs)</div>
-        <div style="font-size:12px; color:#aaa; margin:6px 0;">Seguro activado (5 min)</div>
-        <div style="font-size:2.5rem; font-weight:900; margin:8px 0;" id="shieldSingleProfit">$0.00</div>
-
-        
-        <div class="stat-label" id="shieldStatusMsg" style="margin-top:10px; margin-bottom:10px;">Monitoreando cobertura...</div>
-        <button onclick="abortStraddle()" style="width:100%; padding:10px; margin-top:5px; background:linear-gradient(45deg, #f43f5e, #be123c); border:none; border-radius:8px; color:white; font-weight:bold; cursor:pointer;">
-            🚨 ABORTAR RESCATE MANUALMENTE 🚨
-        </button>
-    </div>
+    <!-- STRADDLE REMOVED -->
 
     <!-- CONTROL -->
     <div class="card">
@@ -550,17 +527,23 @@
             const price = parseFloat(data.lastTickPrice || 0);
             document.getElementById('priceDisplay').innerText = price > 0 ? price.toFixed(3) : '---';
 
-            // SYNC RSI INDICATOR
-            const rsi = parseFloat(data.lastRSI || 50);
-            const rsiDisp = document.getElementById('rsiValueDisplay');
-            if (rsiDisp) rsiDisp.innerText = rsi.toFixed(2);
-
-            // Estilos dinámicos RSI
-            const rsiBadge = document.getElementById('rsiBadge');
-            if (rsiBadge) {
-                rsiBadge.style.borderColor = (rsi > 75 || rsi < 25) ? '#34d399' : 'rgba(255,255,255,0.1)';
-                rsiBadge.style.color = (rsi > 75 || rsi < 25) ? '#34d399' : '#fff';
-            }
+            // Streak Radar Update
+            const streak = parseInt(data.activeStreak || 0);
+            const streakPct = (streak / 4) * 100;
+            document.getElementById('entropyDisplay').innerText = `${streak}/4`;
+            document.getElementById('streakProgress').style.width = `${streakPct}%`;
+            
+            const sBadge = document.getElementById('streakBadge');
+            if (streak >= 3) { sBadge.style.borderColor = '#fbbf24'; sBadge.style.color = '#fbbf24'; sBadge.style.background = 'rgba(251,191,36,0.15)'; }
+            else if (streak >= 2) { sBadge.style.borderColor = '#34d399'; sBadge.style.color = '#34d399'; sBadge.style.background = 'rgba(52,211,153,0.1)'; }
+            else { sBadge.style.borderColor = '#7c3aed'; sBadge.style.color = '#a78bfa'; sBadge.style.background = 'rgba(124,58,237,0.15)'; }
+            
+            const pLabel = document.getElementById('streakProgressLabel');
+            if (streak === 0) pLabel.innerText = 'Esperando anomalía...';
+            else if (streak === 1) pLabel.innerText = '1 repetición detectada';
+            else if (streak === 2) pLabel.innerText = '⚠️ 2 repeticiones — calentando';
+            else if (streak === 3) pLabel.innerText = '🔥 3 repeticiones — casi listo!';
+            else pLabel.innerText = '🚨 CISNE NEGRO DETECTADO — DISPARANDO!';
 
             // Last digit
             const ld = document.getElementById('lastDigitBadge');
@@ -582,19 +565,9 @@
                 document.getElementById('barrierLabelSub').innerText = 'Buscando Cisne Negro (4 Repetidos)...';
             }
 
-            // Entropy + Markov indicators
-            const ent = parseFloat(data.shannonEntropy || 0);
-            document.getElementById('entropyDisplay').innerText = ent > 0 ? ent.toFixed(2) : '--';
-            const entBadge = document.getElementById('entropyBadge');
-            if (ent > 3.25) { entBadge.style.borderColor = '#f87171'; entBadge.style.color = '#f87171'; }
-            else if (ent > 3.0) { entBadge.style.borderColor = '#fbbf24'; entBadge.style.color = '#fbbf24'; }
-            else if (ent > 0) { entBadge.style.borderColor = '#34d399'; entBadge.style.color = '#34d399'; }
-            
-            const mEdge = data.markovEdge || '-';
-            document.getElementById('markovDisplay').innerText = mEdge;
-            const mBadge = document.getElementById('markovBadge');
-            if (mEdge !== '-') { mBadge.style.borderColor = '#34d399'; mBadge.style.color = '#34d399'; }
-            else { mBadge.style.borderColor = 'rgba(255,255,255,0.1)'; mBadge.style.color = '#fff'; }
+            // Entropy/Markov (now streak data)
+            const mEdge = data.streakSymbol || data.markovEdge || '-';
+            document.getElementById('markovDisplay').innerText = mEdge !== '-' ? mEdge : '-';
 
             // Chips
             document.getElementById('chipStatus').innerText = data.isRunning ? '🟢 ACTIVO' : '⚫ OFFLINE';
