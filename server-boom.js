@@ -172,14 +172,23 @@ function evaluateMotorA() {
             lastSeen[d] = 99 - i; // Distancia desde el presente (menor es más reciente)
         }
 
-        // Criterios de la Sombra perfecta:
+        // Criterios de la Sombra perfecta (NUEVO FILTRO DE POLARIDAD):
+        // - Debe ser de la polaridad OPUESTA a la racha gatillo
         // - No ha salido en los últimos 5 ticks (invisible)
         // - Salió en los últimos 20 ticks (no es el más frío extremo)
         // - Frecuencia normal (entre 8% y 12%)
+        
+        const triggerDigit = last3[0];
+        const isTriggerHigh = triggerDigit >= 5;
+
         let bestCandidate = null;
         let bestDistTo10 = 100;
 
         for (let d = 0; d <= 9; d++) {
+            // ESCUDO DE POLARIDAD: Si el gatillo es Alto, la Sombra debe ser Baja (y viceversa)
+            const isCandidateHigh = d >= 5;
+            if (isTriggerHigh === isCandidateHigh) continue;
+
             if (lastSeen[d] >= 5 && lastSeen[d] <= 20) {
                 if (freq[d] >= 7 && freq[d] <= 13) {
                     const distTo10 = Math.abs(freq[d] - 10);
@@ -194,6 +203,7 @@ function evaluateMotorA() {
         if (bestCandidate !== null) {
             targetSymbol = s;
             shadowDigit = bestCandidate;
+            botState.lastTriggerDigit = triggerDigit; // Guardar para el log
             break; // Sombra encontrada, dejamos de buscar
         }
     }
@@ -210,7 +220,8 @@ function evaluateMotorA() {
         currentStake = parseFloat((botState.stake * 11.1).toFixed(2));
     }
 
-    console.log(`🥷 [EFECTO SOMBRA] ${targetSymbol} | Disparando a la sombra: NO será el ${shadowDigit} | DIFF $${currentStake} ${botState.isRecovering ? '[COBERTURA 🔥]' : ''}`);
+    const tHigh = botState.lastTriggerDigit >= 5;
+    console.log(`🥷 [EFECTO SOMBRA] ${targetSymbol} | Gatillo: ${botState.lastTriggerDigit}x3 (${tHigh?'ALTO':'BAJO'}) | Sombra: NO será ${shadowDigit} (${tHigh?'BAJO':'ALTO'}) | DIFF $${currentStake}`);
 
     ws.send(JSON.stringify({
         buy: 1, price: currentStake,
