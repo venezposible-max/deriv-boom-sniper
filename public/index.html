@@ -469,14 +469,7 @@
 
     // switchStrategy removed
     
-    async function toggleCobertura() {
-        try {
-            await fetch('/differs/control', {
-                method: 'POST', headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({ action: 'TOGGLE_COBERTURA' })
-            });
-        } catch (e) { console.error(e); }
-    }
+
 
     async function toggleMotorB() {
         try {
@@ -655,11 +648,6 @@
             document.getElementById('chipWinRate').innerText = `WIN ${data.winRate || '0.0'}%`;
             document.getElementById('chipTrades').innerText = `${data.totalTradesSession || 0} TRADES`;
             
-            // Sync Cobertura switch
-            const cobToggle = document.getElementById('coberturaToggle');
-            if (cobToggle.checked !== data.coberturaActiva) {
-                cobToggle.checked = !!data.coberturaActiva;
-            }
 
             // Stats
             const pnl = parseFloat(data.pnlSession || 0);
