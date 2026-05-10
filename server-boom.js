@@ -160,72 +160,30 @@ function connectDeriv() {
     });
 }
 
-// ─── MOTOR A: EFECTO SOMBRA (Evasión de Radar) ────────────────
+// ─── MOTOR A: ESTRATEGIA REAL (Cisne Negro x4) ────────────────
 function evaluateMotorA() {
     const now = Date.now();
     if (now - botState.lastTradeTime < botState.cooldownMs) return;
 
     let targetSymbol = null;
-    let shadowDigit = null;
+    let barrierDigit = null;
 
     // Escanear mercados limpios
     for (const s of MOTOR_A_SYMBOLS) {
         const history = botState.markets[s].digitHistory;
-        if (history.length < 100) continue; // Necesitamos contexto para la sombra
+        if (history.length < 5) continue; 
         
-        // 1. EL GATILLO: Una racha de 4 repeticiones (Cisne Negro)
+        // 1. EL GATILLO REAL: Una racha de 4 repeticiones (Cisne Negro)
         const last4 = history.slice(-4);
         if (last4.length < 4 || last4[0] !== last4[1] || last4[1] !== last4[2] || last4[2] !== last4[3]) continue; 
 
-        botState.lastTriggerDigit = last4[0];
-        const last100 = history.slice(-100);
-        const freq = Array(10).fill(0);
-        const lastSeen = Array(10).fill(-1);
-
-        // Calcular frecuencias y último visto (0 es el tick actual)
-        for (let i = 0; i < 100; i++) {
-            const d = last100[i];
-            freq[d]++;
-            lastSeen[d] = 99 - i; // Distancia desde el presente (menor es más reciente)
-        }
-
-        // Criterios de la Sombra perfecta (NUEVO FILTRO DE POLARIDAD):
-        // - Debe ser de la polaridad OPUESTA a la racha gatillo
-        // - No ha salido en los últimos 5 ticks (invisible)
-        // - Salió en los últimos 20 ticks (no es el más frío extremo)
-        // - Frecuencia normal (entre 8% y 12%)
-        
-        const triggerDigit = last3[0];
-        const isTriggerHigh = triggerDigit >= 5;
-
-        let bestCandidate = null;
-        let bestDistTo10 = 100;
-
-        for (let d = 0; d <= 9; d++) {
-            // ESCUDO DE POLARIDAD: Si el gatillo es Alto, la Sombra debe ser Baja (y viceversa)
-            const isCandidateHigh = d >= 5;
-            if (isTriggerHigh === isCandidateHigh) continue;
-
-            if (lastSeen[d] >= 5 && lastSeen[d] <= 20) {
-                if (freq[d] >= 7 && freq[d] <= 13) {
-                    const distTo10 = Math.abs(freq[d] - 10);
-                    if (distTo10 < bestDistTo10) {
-                        bestDistTo10 = distTo10;
-                        bestCandidate = d;
-                    }
-                }
-            }
-        }
-
-        if (bestCandidate !== null) {
-            targetSymbol = s;
-            shadowDigit = bestCandidate;
-            botState.lastTriggerDigit = triggerDigit; // Guardar para el log
-            break; // Sombra encontrada, dejamos de buscar
-        }
+        targetSymbol = s;
+        barrierDigit = last4[0]; // LA REALIDAD: Apostamos contra el número que se repitió
+        botState.lastTriggerDigit = barrierDigit;
+        break;
     }
 
-    if (!targetSymbol || shadowDigit === null) return;
+    if (!targetSymbol || barrierDigit === null) return;
 
     botState.activeSymbol = targetSymbol;
     botState.activeMotor = 'A';
@@ -234,25 +192,23 @@ function evaluateMotorA() {
 
     let currentStake = botState.stake;
 
-    const tHigh = botState.lastTriggerDigit >= 5;
-    
     // FILTRO MODO FANTASMA
     if (botState.ghostMode && !botState.waitingForRealShot) {
-        botState.ghostTarget = { symbol: targetSymbol, digit: shadowDigit };
-        console.log(`👻 [ACECHO GHOST] ${targetSymbol} | Sombra: ${shadowDigit} (${tHigh?'BAJO':'ALTO'}) | Esperando fallo virtual...`);
+        botState.ghostTarget = { symbol: targetSymbol, digit: barrierDigit };
+        console.log(`👻 [GHOST] ${targetSymbol} | Acechando repetición del ${barrierDigit} | Esperando fallo virtual...`);
         return; 
     }
 
     // Si llegamos aquí es un DISPARO REAL
-    botState.waitingForRealShot = false; // Resetear bandera tras disparar
-    console.log(`🥷 [CISNE NEGRO REAL] ${targetSymbol} | Gatillo: ${botState.lastTriggerDigit}x4 (${tHigh?'ALTO':'BAJO'}) | Sombra: NO será ${shadowDigit} (${tHigh?'BAJO':'ALTO'}) | DIFF $${currentStake}`);
+    botState.waitingForRealShot = false; 
+    console.log(`🚀 [DISPARO REAL] ${targetSymbol} | Detectada racha x4 del dígito ${barrierDigit} | Apostando a que NO se repite x5 | Stake $${currentStake}`);
 
     ws.send(JSON.stringify({
         buy: 1, price: currentStake,
         parameters: {
             amount: currentStake, basis: 'stake', contract_type: 'DIGITDIFF',
             currency: botState.currency, symbol: targetSymbol, duration: 1, duration_unit: 't',
-            barrier: String(shadowDigit)
+            barrier: String(barrierDigit)
         }
     }));
 }
