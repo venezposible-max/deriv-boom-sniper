@@ -216,9 +216,6 @@ function evaluateMotorA() {
     botState.lastTradeTime = now;
 
     let currentStake = botState.stake;
-    if (botState.isRecovering) {
-        currentStake = parseFloat((botState.stake * 11.1).toFixed(2));
-    }
 
     const tHigh = botState.lastTriggerDigit >= 5;
     console.log(`🥷 [EFECTO SOMBRA] ${targetSymbol} | Gatillo: ${botState.lastTriggerDigit}x3 (${tHigh?'ALTO':'BAJO'}) | Sombra: NO será ${shadowDigit} (${tHigh?'BAJO':'ALTO'}) | DIFF $${currentStake}`);
@@ -310,16 +307,9 @@ function finalizeTrade(c) {
         if (isWin) {
             console.log(`🥷 [SOMBRA WIN] +$${profit.toFixed(2)} | Balance: $${botState.balance}`);
             botState.winsSession++;
-            botState.isRecovering = false;
         } else {
             console.log(`🥷 [SOMBRA LOSS] -$${Math.abs(profit).toFixed(2)} | Sombra detectada por la Matrix.`);
             botState.lossesSession++;
-            if (botState.coberturaActiva && !botState.isRecovering) {
-                botState.isRecovering = true;
-                console.log("⚠️ COBERTURA ARMADA: Próximo disparo Sombra usará x11.1");
-            } else {
-                botState.isRecovering = false;
-            }
         }
         botState.tradeHistory.unshift({
             symbol: botState.activeSymbol || c.display_symbol,
