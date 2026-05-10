@@ -244,6 +244,11 @@ app.get('/differs/status', (req, res) => {
     const viewed = botState.viewedSymbol || 'R_100';
     const market = botState.markets[viewed] || { digitHistory: [] };
 
+    const pnlSession = botState.dailyProfit - botState.dailyLoss;
+    const winRate = botState.totalTradesSession > 0 
+        ? ((botState.winsSession / botState.totalTradesSession) * 100).toFixed(1)
+        : '0.0';
+
     res.json({ 
         success: true, 
         data: { 
@@ -251,17 +256,22 @@ app.get('/differs/status', (req, res) => {
             symbol: viewed,
             lastDigit: market.lastDigit,
             lastTickPrice: market.lastTickPrice,
+            digitHistory: market.digitHistory.slice(-20),
             currentContractType: botState.strategyMode === 'MATCH' ? 'DIGITMATCH' : 'DIGITDIFF',
             shannonEntropy: `Racha: ${activeStreak}/4`,
             markovEdge: streakDigit,
+            streakSymbol: streakSymbol,
             currentBarrier: streakDigit,
+            activeStreak: activeStreak,
             isRunning: botState.isRunning,
             isFetching: botState.isBuying,
             activeContractId: botState.activeContractId,
             strategyMode: botState.strategyMode,
             matrixSize: botState.markets['R_10'].digitHistory.length,
             coberturaActiva: botState.coberturaActiva,
-            isRecovering: botState.isRecovering
+            isRecovering: botState.isRecovering,
+            pnlSession: pnlSession,
+            winRate: winRate
         } 
     });
 });
