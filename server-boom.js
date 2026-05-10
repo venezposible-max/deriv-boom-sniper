@@ -1,10 +1,10 @@
 /**
  * ============================================================
- *  PROYECTO ANTIGRAVEDAD v12.0 - MOTOR DUAL
- *  Motor A: DIGITDIFF en R_10/R_25/R_100 (Escudo Nivel 4)
- *  Motor B: DIGITMATCH en R_50 (Explotación de autocorrelación)
- *  Análisis forense reveló que R_50 tiene r=0.495 de autocorrelación
- *  y 43% de probabilidad de repetición vs 10% esperado.
+ *  PROYECTO ANTIGRAVEDAD v14.0 - EL EFECTO SOMBRA
+ *  Estrategia: Motor Sombra (Evasión de Radar)
+ *  Contrato: DIGITDIFF
+ *  Lógica: Usa las rachas de 2 como distracción para apostar
+ *  contra el dígito más 'invisible' de la mesa.
  * ============================================================
  */
 
@@ -131,27 +131,62 @@ function connectDeriv() {
     ws.on('close', () => { botState.isConnectedToDeriv = false; setTimeout(connectDeriv, 5000); });
 }
 
-// ─── MOTOR A: DIGITDIFF (Escudo Nivel 4) ──────────────────────
+// ─── MOTOR A: EFECTO SOMBRA (Evasión de Radar) ────────────────
 function evaluateMotorA() {
     const now = Date.now();
     if (now - botState.lastTradeTime < botState.cooldownMs) return;
 
     let targetSymbol = null;
-    let targetDigit = null;
+    let shadowDigit = null;
 
-    // Solo escanear mercados aleatorios (excluir R_50)
-    MOTOR_A_SYMBOLS.forEach(s => {
+    // Escanear mercados limpios
+    for (const s of MOTOR_A_SYMBOLS) {
         const history = botState.markets[s].digitHistory;
-        if (history.length < 4) return;
+        if (history.length < 100) continue; // Necesitamos contexto para la sombra
         
-        const last4 = history.slice(-4);
-        if (last4[0] === last4[1] && last4[1] === last4[2] && last4[2] === last4[3]) {
-            targetSymbol = s;
-            targetDigit = last4[0];
-        }
-    });
+        // 1. EL GATILLO: Una racha de 2 repeticiones (Distracción del mercado)
+        const last2 = history.slice(-2);
+        if (last2[0] !== last2[1]) continue; 
 
-    if (!targetSymbol || targetDigit === null) return;
+        // 2. BÚSQUEDA DE LA SOMBRA
+        const last100 = history.slice(-100);
+        const freq = Array(10).fill(0);
+        const lastSeen = Array(10).fill(-1);
+
+        // Calcular frecuencias y último visto (0 es el tick actual)
+        for (let i = 0; i < 100; i++) {
+            const d = last100[i];
+            freq[d]++;
+            lastSeen[d] = 99 - i; // Distancia desde el presente (menor es más reciente)
+        }
+
+        // Criterios de la Sombra perfecta:
+        // - No ha salido en los últimos 5 ticks (invisible)
+        // - Salió en los últimos 20 ticks (no es el más frío extremo)
+        // - Frecuencia normal (entre 8% y 12%)
+        let bestCandidate = null;
+        let bestDistTo10 = 100;
+
+        for (let d = 0; d <= 9; d++) {
+            if (lastSeen[d] >= 5 && lastSeen[d] <= 20) {
+                if (freq[d] >= 7 && freq[d] <= 13) {
+                    const distTo10 = Math.abs(freq[d] - 10);
+                    if (distTo10 < bestDistTo10) {
+                        bestDistTo10 = distTo10;
+                        bestCandidate = d;
+                    }
+                }
+            }
+        }
+
+        if (bestCandidate !== null) {
+            targetSymbol = s;
+            shadowDigit = bestCandidate;
+            break; // Sombra encontrada, dejamos de buscar
+        }
+    }
+
+    if (!targetSymbol || shadowDigit === null) return;
 
     botState.activeSymbol = targetSymbol;
     botState.activeMotor = 'A';
@@ -163,14 +198,14 @@ function evaluateMotorA() {
         currentStake = parseFloat((botState.stake * 11.1).toFixed(2));
     }
 
-    console.log(`🛡️ [MOTOR A] ${targetSymbol} | Cisne Negro (${targetDigit}×4) | DIFF $${currentStake} ${botState.isRecovering ? '[COBERTURA 🔥]' : ''}`);
+    console.log(`🥷 [EFECTO SOMBRA] ${targetSymbol} | Disparando a la sombra: NO será el ${shadowDigit} | DIFF $${currentStake} ${botState.isRecovering ? '[COBERTURA 🔥]' : ''}`);
 
     ws.send(JSON.stringify({
         buy: 1, price: currentStake,
         parameters: {
             amount: currentStake, basis: 'stake', contract_type: 'DIGITDIFF',
             currency: 'USD', symbol: targetSymbol, duration: 1, duration_unit: 't',
-            barrier: String(targetDigit)
+            barrier: String(shadowDigit)
         }
     }));
 }
@@ -250,22 +285,22 @@ function finalizeTrade(c) {
     } else {
         // ── MOTOR A RESULT ──
         if (isWin) {
-            console.log(`🛡️ [MOTOR A WIN] +$${profit.toFixed(2)} | Balance: $${botState.balance}`);
+            console.log(`🥷 [SOMBRA WIN] +$${profit.toFixed(2)} | Balance: $${botState.balance}`);
             botState.winsSession++;
             botState.isRecovering = false;
         } else {
-            console.log(`🛡️ [MOTOR A LOSS] -$${Math.abs(profit).toFixed(2)}`);
+            console.log(`🥷 [SOMBRA LOSS] -$${Math.abs(profit).toFixed(2)} | Sombra detectada por la Matrix.`);
             botState.lossesSession++;
             if (botState.coberturaActiva && !botState.isRecovering) {
                 botState.isRecovering = true;
-                console.log("⚠️ COBERTURA ARMADA: Próximo disparo Motor A usará x11.1");
+                console.log("⚠️ COBERTURA ARMADA: Próximo disparo Sombra usará x11.1");
             } else {
                 botState.isRecovering = false;
             }
         }
         botState.tradeHistory.unshift({
             symbol: botState.activeSymbol || c.display_symbol,
-            type: `🛡️ DIFF(≠${barrierDigit})`, profit,
+            type: `🥷 DIFF(≠${barrierDigit})`, profit,
             result: isWin ? 'WIN ✅' : 'LOSS ❌', time: new Date().toLocaleTimeString()
         });
     }
@@ -294,25 +329,12 @@ app.get('/differs/status', (req, res) => {
 
     SYMBOLS.forEach(s => {
         const h = botState.markets[s].digitHistory;
-        if (h.length >= 3) {
-            const last3 = h.slice(-3);
+        if (h.length >= 2) {
             const last2 = h.slice(-2);
-            if (h.length >= 4 && h.slice(-4)[0] === h.slice(-4)[1] && h.slice(-4)[1] === h.slice(-4)[2] && h.slice(-4)[2] === h.slice(-4)[3]) {
-                activeStreak = 4;
-                streakDigit = h.slice(-4)[0];
+            if (last2[0] === last2[1]) {
+                activeStreak = 2;
+                streakDigit = last2[0];
                 streakSymbol = s;
-            } else if (last3[0] === last3[1] && last3[1] === last3[2]) {
-                if (activeStreak < 3) {
-                    activeStreak = 3;
-                    streakDigit = last3[0];
-                    streakSymbol = s;
-                }
-            } else if (last2[0] === last2[1]) {
-                if (activeStreak < 2) {
-                    activeStreak = 2;
-                    streakDigit = last2[0];
-                    streakSymbol = s;
-                }
             }
         }
     });
