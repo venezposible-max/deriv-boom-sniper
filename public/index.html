@@ -269,7 +269,7 @@
 
     <div class="header" id="mainHeader">
         <h1>🐾 La Pata del Conejo</h1>
-        <p id="subTitle">CISNE NEGRO · ESTRATEGIA REAL</p>
+        <p id="subTitle">CISNE NEGRO · v14.2 REAL</p>
         <div id="sessionTimer" style="font-size: 13px; color: #a78bfa; font-weight: 700; margin-top: 8px; letter-spacing: 2px;">--:--:--</div>
         
         <!-- ACCOUNTS TOGGLE -->
@@ -448,6 +448,14 @@
         <button id="btnToggle" class="btn-main btn-start" onclick="toggleBot()">
              🛡️ Iniciar Motor Dual
         </button>
+    </div>
+
+    <!-- DEBUG CONSOLE (Temporary for troubleshooting) -->
+    <div class="card" style="border: 1px solid #333; background: #000;">
+        <div style="font-size: 10px; color: #666; margin-bottom: 5px;">DEBUG LOG</div>
+        <div id="debugLog" style="font-family: monospace; font-size: 10px; color: #34d399; height: 40px; overflow-y: auto;">
+            Esperando conexión...
+        </div>
     </div>
 
     <!-- HISTORY -->
@@ -794,21 +802,29 @@
 
     async function toggleBot() {
         const action = isRunning ? 'STOP' : 'START';
+        console.log("Enviando comando:", action);
+        document.getElementById('btnToggle').innerText = '⌛ Procesando...';
+        
         const body = { action };
         if (action === 'START') {
             body.stake = parseFloat(document.getElementById('stake').value);
             body.maxDailyLoss = parseFloat(document.getElementById('maxDailyLoss').value);
             body.takeProfit = parseFloat(document.getElementById('takeProfit').value);
-            body.strategyMode = currentStrategy;
         }
         try {
-            await fetch('/differs/control', {
+            const res = await fetch('/differs/control', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(body)
             });
+            const rData = await res.json();
+            console.log("Respuesta servidor:", rData);
+            document.getElementById('debugLog').innerText = `Cmd: ${action} -> ${rData.success ? 'OK' : 'FAIL'}`;
             await fetchStatus(true);
-        } catch (e) { console.error(e); }
+        } catch (e) { 
+            console.error(e); 
+            document.getElementById('debugLog').innerText = `Err: ${e.message}`;
+        }
     }
 
     async function resetDay() {
