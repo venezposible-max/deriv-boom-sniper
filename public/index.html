@@ -619,25 +619,7 @@
             netEl.innerText = `${net >= 0 ? '+' : ''}$${net.toFixed(2)}`;
             netEl.className = net >= 0 ? 'green' : 'red';
 
-            // Sync UI inputs si hubieran inputs adicionales aquí
-            // ACCOUNT THEME UPDATE
-            const headerElement = document.getElementById('mainHeader');
-            const accDemo = document.getElementById('btnAccDemo');
-            const accReal = document.getElementById('btnAccReal');
-
-            if (data.isRealAccount) {
-                document.body.classList.add('real-mode');
-                headerElement.classList.add('real-mode');
-                accReal.classList.add('active');
-                accReal.classList.add('real');
-                accDemo.classList.remove('active');
-            } else {
-                document.body.classList.remove('real-mode');
-                headerElement.classList.remove('real-mode');
-                accDemo.classList.add('active');
-                accDemo.classList.add('demo');
-                accReal.classList.remove('active');
-            }
+            // Account theme (simplified)
 
             // Digit history freq table
             const barrier = data.currentBarrier || '?';
