@@ -245,11 +245,23 @@
         .freq-digit { font-size: 14px; font-weight: 900; }
         .freq-count { font-size: 9px; color: #555; margin-top: 2px; }
 
-        /* ── SECTION LABEL ── */
-        .section-label {
             font-size: 10px; color: #555; font-weight: 700; text-transform: uppercase;
             letter-spacing: 2px; margin-bottom: 12px;
         }
+
+        /* ── ACCOUNT SWITCH ── */
+        .account-switch {
+            display: inline-flex; background: rgba(0,0,0,0.5); padding: 4px; border-radius: 12px;
+            border: 1px solid rgba(255,255,255,0.05); margin-top: 15px;
+        }
+        .account-switch button {
+            background: none; border: none; padding: 6px 16px; border-radius: 8px;
+            font-size: 11px; font-weight: 800; color: #888; cursor: pointer; transition: all 0.3s;
+            font-family: inherit; text-transform: uppercase; letter-spacing: 1px;
+        }
+        .account-switch button.active.demo { background: #38bdf8; color: #fff; box-shadow: 0 0 10px rgba(56,189,248,0.4); }
+        .account-switch button.active.real { background: #fbbf24; color: #000; box-shadow: 0 0 10px rgba(251,191,36,0.4); }
+
     </style>
 </head>
 <body>
@@ -257,8 +269,16 @@
 
     <div class="header" id="mainHeader">
         <h1>🐾 La Pata del Conejo</h1>
-        <p id="subTitle">CISNE NEGRO · ESCUDO NIVEL 4</p>
+        <p id="subTitle">EFECTO SOMBRA · EVASIÓN DE RADAR</p>
         <div id="sessionTimer" style="font-size: 13px; color: #a78bfa; font-weight: 700; margin-top: 8px; letter-spacing: 2px;">--:--:--</div>
+        
+        <!-- ACCOUNTS TOGGLE -->
+        <div style="display: flex; justify-content: center;">
+            <div class="account-switch">
+                <button id="btnAccDemo" class="active demo" onclick="switchAccount(false)">Virtual</button>
+                <button id="btnAccReal" onclick="switchAccount(true)">Real USD</button>
+            </div>
+        </div>
     </div>
 
     <!-- MARKET SELECTOR -->
@@ -688,7 +708,23 @@
             netEl.innerText = `${net >= 0 ? '+' : ''}$${net.toFixed(2)}`;
             netEl.className = net >= 0 ? 'green' : 'red';
 
-            // Account theme (simplified)
+            // Account theme update
+            const mHeader = document.getElementById('mainHeader');
+            const balDisplay = document.getElementById('balanceDisplay');
+            const btnDemo = document.getElementById('btnAccDemo');
+            const btnReal = document.getElementById('btnAccReal');
+            
+            if (data.isRealAccount) {
+                mHeader.style.borderBottom = '1px solid rgba(251,191,36,0.3)';
+                balDisplay.style.color = '#fbbf24';
+                btnDemo.classList.remove('active');
+                btnReal.classList.add('active', 'real');
+            } else {
+                mHeader.style.borderBottom = '1px solid rgba(167,139,250,0.1)';
+                balDisplay.style.color = '#38bdf8';
+                btnDemo.classList.add('active', 'demo');
+                btnReal.classList.remove('active', 'real');
+            }
 
             // Digit history freq table
             const barrier = data.currentBarrier || '?';

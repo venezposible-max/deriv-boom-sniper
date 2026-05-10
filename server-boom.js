@@ -19,7 +19,9 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const APP_ID = process.env.DERIV_APP_ID || '36544';
-const DERIV_TOKEN = process.env.DERIV_TOKEN || 'PMIt2RhEjEDbcLD';
+const DERIV_TOKEN_DEMO = process.env.DERIV_TOKEN || 'PMIt2RhEjEDbcLD';
+const DERIV_TOKEN_REAL = process.env.DERIV_TOKEN_REAL || '';
+let currentDerivToken = DERIV_TOKEN_DEMO;
 const STATE_FILE = path.join(__dirname, 'persistent-state-institutional.json');
 const SYMBOLS = ['R_10', 'R_25', 'R_50', 'R_100'];
 const MOTOR_A_SYMBOLS = ['R_10', 'R_25', 'R_100']; // DIGITDIFF (aleatorios)
@@ -28,6 +30,7 @@ const MOTOR_B_SYMBOL = 'R_50';                     // DIGITMATCH (autocorrelado)
 let botState = {
     isRunning: false,
     isConnectedToDeriv: false,
+    isRealAccount: false,
     balance: 0,
     dailyProfit: 0,
     dailyLoss: 0,
@@ -82,8 +85,9 @@ const saveState = () => { try { fs.writeFileSync(STATE_FILE, JSON.stringify({ bo
 // ─── CONEXIÓN A DERIV ─────────────────────────────────────────
 let ws = null;
 function connectDeriv() {
+    if (ws && ws.readyState === WebSocket.OPEN) return;
     ws = new WebSocket(`wss://ws.derivws.com/websockets/v3?app_id=${APP_ID}`);
-    ws.on('open', () => { setTimeout(() => ws.send(JSON.stringify({ authorize: DERIV_TOKEN })), 1000); });
+    ws.on('open', () => { setTimeout(() => ws.send(JSON.stringify({ authorize: currentDerivToken })), 1000); });
     ws.on('message', (raw) => {
         const msg = JSON.parse(raw);
         if (msg.msg_type === 'authorize') {
@@ -128,7 +132,11 @@ function connectDeriv() {
         }
         if (msg.msg_type === 'balance') botState.balance = msg.balance.balance;
     });
-    ws.on('close', () => { botState.isConnectedToDeriv = false; setTimeout(connectDeriv, 5000); });
+    ws.on('close', () => { 
+        botState.isConnectedToDeriv = false; 
+        console.log("⚠️ Conexión WebSocket cerrada. Reconectando en 2s...");
+        setTimeout(connectDeriv, 2000); 
+    });
 }
 
 // ─── MOTOR A: EFECTO SOMBRA (Evasión de Radar) ────────────────
@@ -435,6 +443,27 @@ app.post('/differs/control', (req, res) => {
         console.log(`🔄 Historial limpiado.`);
     }
     saveState(); res.json({ success: true });
+});
+
+app.post('/differs/switch-account', (req, res) => {
+    const { isReal } = req.body;
+    if (botState.isRunning) {
+        return res.status(400).json({ error: "Detén el bot primero" });
+    }
+    
+    botState.isRealAccount = isReal;
+    if (isReal && DERIV_TOKEN_REAL) {
+        currentDerivToken = DERIV_TOKEN_REAL;
+        console.log("🔄 Cambiando a cuenta REAL USD");
+    } else {
+        currentDerivToken = DERIV_TOKEN_DEMO;
+        console.log("🔄 Cambiando a cuenta DEMO VIRTUAL");
+    }
+    
+    // Forzar reconexión para usar el nuevo token
+    if (ws) ws.close();
+    
+    res.json({ success: true, isReal: botState.isRealAccount });
 });
 
 app.listen(process.env.PORT || 8080, '0.0.0.0', () => connectDeriv());
