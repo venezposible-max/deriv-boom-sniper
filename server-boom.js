@@ -317,10 +317,13 @@ function finalizeTrade(c) {
     botState.activeContractId = null;
     botState.activeMotor = null;
 
-    const net = botState.dailyProfit - botState.dailyLoss;
-    if (net >= botState.takeProfit || botState.dailyLoss >= botState.maxDailyLoss) {
+    const net = Number(botState.dailyProfit) - Number(botState.dailyLoss);
+    const maxLoss = Number(botState.maxDailyLoss);
+    const takeProfit = Number(botState.takeProfit);
+
+    if (net >= takeProfit || Number(botState.dailyLoss) >= maxLoss) {
         botState.isRunning = false;
-        console.log(`🏁 META DE SESIÓN ALCANZADA. Bot detenido.`);
+        console.log(`🏁 META/LÍMITE ALCANZADO: Net: ${net.toFixed(2)}, MaxLoss: ${maxLoss}, TP: ${takeProfit}. Bot detenido.`);
     }
     saveState();
 }
@@ -455,7 +458,7 @@ app.post('/differs/control', (req, res) => {
             botState.motorBPaused = false;
             botState.motorBConsecutiveLosses = 0;
             botState.motorBTrades = 0;
-            console.log(`🚀 BOT INICIADO | A: DIFF (Sombra 🥷) | B: MATCH (Autocorrelación ⚡)`);
+            console.log(`▶️ COMANDO RECIBIDO: START. Stake: ${botState.stake}, TP: ${botState.takeProfit}, MaxLoss: ${botState.maxDailyLoss}`);
         }
     } else if (action === 'STOP') {
         botState.isRunning = false;
