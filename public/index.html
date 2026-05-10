@@ -585,18 +585,19 @@
 
             // Streak Radar Update
             const streak = parseInt(data.activeStreak || 0);
-            const streakPct = (streak / 2) * 100;
-            document.getElementById('entropyDisplay').innerText = `${streak}/2`;
+            const streakPct = (streak / 3) * 100;
+            document.getElementById('entropyDisplay').innerText = `${streak}/3`;
             document.getElementById('streakProgress').style.width = `${streakPct}%`;
             
             const sBadge = document.getElementById('streakBadge');
-            if (streak >= 2) { sBadge.style.borderColor = '#fbbf24'; sBadge.style.color = '#fbbf24'; sBadge.style.background = 'rgba(251,191,36,0.15)'; }
-            else if (streak === 1) { sBadge.style.borderColor = '#34d399'; sBadge.style.color = '#34d399'; sBadge.style.background = 'rgba(52,211,153,0.1)'; }
+            if (streak >= 3) { sBadge.style.borderColor = '#fbbf24'; sBadge.style.color = '#fbbf24'; sBadge.style.background = 'rgba(251,191,36,0.15)'; }
+            else if (streak >= 1) { sBadge.style.borderColor = '#34d399'; sBadge.style.color = '#34d399'; sBadge.style.background = 'rgba(52,211,153,0.1)'; }
             else { sBadge.style.borderColor = '#7c3aed'; sBadge.style.color = '#a78bfa'; sBadge.style.background = 'rgba(124,58,237,0.15)'; }
             
             const pLabel = document.getElementById('streakProgressLabel');
             if (streak === 0) pLabel.innerText = 'Esperando anomalía...';
             else if (streak === 1) pLabel.innerText = '1 repetición detectada';
+            else if (streak === 2) pLabel.innerText = '⚠️ 2 repeticiones detectadas';
             else pLabel.innerText = '🥷 SOMBRA ENCONTRADA — DISPARANDO!';
 
             // Last digit
@@ -616,7 +617,7 @@
                 document.getElementById('barrierLabelSub').innerText = 'El próximo dígito NO será este';
             } else {
                 document.getElementById('barrierDisplay').innerText = 'ESPERANDO';
-                document.getElementById('barrierLabelSub').innerText = 'Buscando distracción (2 repetidos)...';
+                document.getElementById('barrierLabelSub').innerText = 'Buscando distracción (3 repetidos)...';
             }
 
             // Entropy/Markov (now streak data)
@@ -746,7 +747,7 @@
                 tradeCard.style.display = 'none';
                 if (scanningCard) {
                     scanningCard.style.display = data.isRunning ? 'block' : 'none';
-                    document.getElementById('scanningText').innerText = '🥷 Escaneando Efecto Sombra (Distracción de 2 repetidos)...';
+                    document.getElementById('scanningText').innerText = '🥷 Escaneando Efecto Sombra (Distracción de 3 repetidos)...';
                 }
             }
 
