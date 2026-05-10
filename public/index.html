@@ -767,22 +767,29 @@
                 btn.className = `btn-main ${data.isRunning ? 'btn-stop' : 'btn-start'}`;
             }
 
-            // History
+            // History rendering
             const hist = data.tradeHistory || [];
-            document.getElementById('history').innerHTML = hist.slice(0, 25).map(t => {
-                const isWin = t.profit >= 0;
+            const historyContainer = document.getElementById('history');
+            if (historyContainer) {
+                historyContainer.innerHTML = hist.slice(0, 25).map(t => {
+                    try {
+                        const isWin = (t.profit || 0) >= 0;
                 const cTypeColor = (t.contractType || '').includes('OVER') ? '#f97316' : (t.contractType || '').includes('UNDER') ? '#38bdf8' : '#a78bfa';
                 const layerTag = t.layer && t.layer !== 'NORMAL' ? `<span style="font-size:9px; color:${cTypeColor}; margin-left:4px;">[${t.layer}]</span>` : '';
-                return `<div class="history-item">
-                    <div>
-                        <div style="font-weight:700;">${t.type}${layerTag}</div>
-                        <div class="history-meta">${t.time}</div>
-                    </div>
-                    <div class="${isWin ? 'green' : 'red'}" style="font-weight:900; font-size:14px;">
-                        ${isWin ? '+' : ''}$${parseFloat(t.profit).toFixed(2)}
-                    </div>
-                </div>`;
-            }).join('') || '<div style="color:#444; text-align:center; padding:20px;">Sin trades aún...</div>';
+                        return `<div class="history-item">
+                            <div>
+                                <div style="font-weight:700;">${t.type || 'TRADE'}${layerTag}</div>
+                                <div class="history-meta">${t.time || ''}</div>
+                            </div>
+                            <div class="${isWin ? 'green' : 'red'}" style="font-weight:900; font-size:14px;">
+                                ${isWin ? '+' : ''}$${parseFloat(t.profit || 0).toFixed(2)}
+                            </div>
+                        </div>`;
+                    } catch (err) {
+                        return '';
+                    }
+                }).join('') || '<div style="color:#444; text-align:center; padding:20px;">Sin trades aún...</div>';
+            }
 
         } catch (e) {
             console.warn('Error fetching status:', e.message);
