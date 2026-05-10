@@ -732,10 +732,12 @@
             // Active Straddle Shield card REMOVED
             // Toggle button
             const btn = document.getElementById('btnToggle');
-            const startText = '🛡️ Iniciar Motor Dual';
-            const stopText = '⏸️ Parar Motores';
-            btn.innerText = isRunning ? stopText : startText;
-            btn.className = `btn-main ${isRunning ? 'btn-stop' : 'btn-start'}`;
+            if (btn) {
+                const startText = '🛡️ Iniciar Motor Dual';
+                const stopText = '⏸️ Parar Motores';
+                btn.innerText = data.isRunning ? stopText : startText;
+                btn.className = `btn-main ${data.isRunning ? 'btn-stop' : 'btn-start'}`;
+            }
 
             // History
             const hist = data.tradeHistory || [];
@@ -776,7 +778,7 @@
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(body)
             });
-            fetchStatus();
+            await fetchStatus(true);
         } catch (e) { console.error(e); }
     }
 

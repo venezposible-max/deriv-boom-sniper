@@ -58,6 +58,8 @@ let botState = {
     motorBStake: 1,          // $1 fijo
     motorBWins: 0,
     motorBLosses: 0,
+    startTime: null,
+    sessionDuration: 0,
     motorBTrades: 0,
     motorBMaxTrades: 5,      // Máx 5 disparos por sesión
     motorBConsecutiveLosses: 0,
@@ -403,7 +405,9 @@ app.get('/differs/status', (req, res) => {
             motorBPaused: botState.motorBPaused,
             motorBStake: botState.motorBStake,
             motorBStreak: motorBStreak,
-            motorBConsecutiveLosses: botState.motorBConsecutiveLosses
+            motorBConsecutiveLosses: botState.motorBConsecutiveLosses,
+            startTime: botState.startTime,
+            sessionDuration: botState.sessionDuration || 0
         } 
     });
 });
@@ -438,6 +442,7 @@ app.post('/differs/control', (req, res) => {
         
         if (action === 'START') {
             botState.isRunning = true;
+            botState.startTime = Date.now();
             botState.motorBPaused = false;
             botState.motorBConsecutiveLosses = 0;
             botState.motorBTrades = 0;
@@ -445,6 +450,10 @@ app.post('/differs/control', (req, res) => {
         }
     } else if (action === 'STOP') {
         botState.isRunning = false;
+        if (botState.startTime) {
+            botState.sessionDuration = (botState.sessionDuration || 0) + (Date.now() - botState.startTime);
+            botState.startTime = null;
+        }
         console.log(`⏸️ BOT PAUSADO.`);
     } else if (action === 'RESET_DAY') { 
         botState.dailyProfit = 0; botState.dailyLoss = 0;
