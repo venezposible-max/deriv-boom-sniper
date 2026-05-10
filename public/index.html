@@ -538,9 +538,29 @@
                 btn.className = `btn-main ${isRunning ? 'btn-stop' : 'btn-start'}`;
             }
             
-            document.getElementById('debugLog').innerText = `Status: ${isRunning ? 'RUNNING' : 'STOPPED'} | Acc: ${data.isRealAccount ? 'REAL' : 'DEMO'}`;
+            document.getElementById('debugLog').innerText = `Status: ${isRunning ? 'RUNNING' : 'STOPPED'} | Acc: ${data.isRealAccount ? 'REAL' : 'DEMO'} | Trades: ${data.tradeHistory ? data.tradeHistory.length : 0}`;
             
-            // SINCRONIZACIÓN DE INTERFAZ (Inputs)
+            // 1. PRIORIDAD: RENDERIZAR HISTORIAL (Antes de que nada más pueda fallar)
+            const hist = data.tradeHistory || [];
+            const historyContainer = document.getElementById('history');
+            if (historyContainer) {
+                historyContainer.innerHTML = hist.slice(0, 30).map(t => {
+                    try {
+                        const isWin = Number(t.profit || 0) > 0;
+                        return `<div class="history-item">
+                            <div>
+                                <div style="font-weight:700; color: #ddd;">${t.type || 'TRADE'}</div>
+                                <div class="history-meta">${t.time || '--:--'}</div>
+                            </div>
+                            <div class="${isWin ? 'green' : 'red'}" style="font-weight:900;">
+                                ${isWin ? '+' : ''}$${Number(t.profit || 0).toFixed(2)}
+                            </div>
+                        </div>`;
+                    } catch (e) { return ''; }
+                }).join('') || '<div style="color:#444; text-align:center; padding:20px;">Sin trades aún...</div>';
+            }
+
+            // 2. RESTO DE LA INTERFAZ
             document.getElementById('subTitle').innerText = `Last Digit Strategy · Deriv ${data.symbol}`;
 
             // Actualización visual de precisión fija
@@ -783,23 +803,8 @@
                 chip.className = `chip ${isRunning ? 'chip-green' : 'chip-purple'}`;
             }
 
-            // History rendering
-            const hist = data.tradeHistory || [];
-            const historyContainer = document.getElementById('history');
-            if (historyContainer) {
-                historyContainer.innerHTML = hist.slice(0, 30).map(t => {
-                    const isWin = (t.profit || 0) > 0;
-                    return `<div class="history-item">
-                        <div>
-                            <div style="font-weight:700; color: #ddd;">${t.type || 'TRADE'}</div>
-                            <div class="history-meta">${t.time || '--:--'}</div>
-                        </div>
-                        <div class="${isWin ? 'green' : 'red'}" style="font-weight:900;">
-                            ${isWin ? '+' : ''}$${parseFloat(t.profit || 0).toFixed(2)}
-                        </div>
-                    </div>`;
-                }).join('') || '<div style="color:#444; text-align:center; padding:20px;">Sin trades aún...</div>';
-            }
+            // History rendering removed from here (already done above)
+
 
         } catch (e) {
             console.warn('Error fetching status:', e.message);
