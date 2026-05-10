@@ -418,7 +418,17 @@
             </div>
         </div>
 
-        <!-- RECOVERY SWITCH REMOVED -->
+        <!-- RECOVERY SWITCH -->
+        <div style="background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.07); padding: 12px; border-radius: 12px; display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+            <div>
+                <div style="font-weight: 800; font-size: 13px; color: #facc15;">🔥 Bala de Cobertura</div>
+                <div style="font-size: 11px; color: #888;">Multiplica x11.1 solo una vez tras pérdida</div>
+            </div>
+            <label class="switch">
+                <input type="checkbox" id="coberturaToggle" onchange="toggleCobertura()">
+                <span class="slider"></span>
+            </label>
+        </div>
 
         <button id="btnToggle" class="btn-main btn-start" onclick="toggleBot()">
              🛡️ Iniciar Escáner Differs
@@ -442,6 +452,17 @@
     let currentStrategy = 'DIFFERS';
 
     // switchStrategy removed
+    
+    async function toggleCobertura() {
+        try {
+            await fetch('/differs/control', {
+                method: 'POST', headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ action: 'TOGGLE_COBERTURA' })
+            });
+        } catch (e) {
+            console.error(e);
+        }
+    }
 
     // Build frequency table
     function buildFreqTable(digitHistory, barrier) {
@@ -580,6 +601,12 @@
             document.getElementById('chipStatus').className = `chip ${data.isRunning ? 'chip-green' : 'chip-purple'}`;
             document.getElementById('chipWinRate').innerText = `WIN ${data.winRate || '0.0'}%`;
             document.getElementById('chipTrades').innerText = `${data.totalTradesSession || 0} TRADES`;
+            
+            // Sync Cobertura switch
+            const cobToggle = document.getElementById('coberturaToggle');
+            if (cobToggle.checked !== data.coberturaActiva) {
+                cobToggle.checked = !!data.coberturaActiva;
+            }
 
             // Stats
             const pnl = parseFloat(data.pnlSession || 0);

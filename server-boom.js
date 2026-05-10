@@ -39,11 +39,13 @@ let botState = {
     activeSymbol: null,
     activeContractId: null,
     lastTradeTime: 0,
-    cooldownMs: 2000,
+    cooldownMs: 5000,
     isBuying: false,
     strategyMode: 'DIFFERS', // Opciones: 'DIFFERS' o 'MATCH'
     viewedSymbol: 'R_100',
-    markets: {}
+    markets: {},
+    coberturaActiva: false,
+    isRecovering: false
 };
 
 SYMBOLS.forEach(s => {
@@ -141,12 +143,17 @@ function evaluateInstitutionalSniper() {
     botState.isBuying = true;
     botState.lastTradeTime = now;
 
-    console.log(`🛡️ [ESCUDO NIVEL 4] ${targetSymbol} | Cisne Negro (Salió el ${targetDigit} CUATRO veces) | Disparo: DIFFERS con $${botState.stake}`);
+    let currentStake = botState.stake;
+    if (botState.isRecovering) {
+        currentStake = parseFloat((botState.stake * 11.1).toFixed(2));
+    }
+
+    console.log(`🛡️ [ESCUDO NIVEL 4] ${targetSymbol} | Cisne Negro (Salió el ${targetDigit} CUATRO veces) | Disparo: DIFFERS con $${currentStake} ${botState.isRecovering ? '[BALA DE RECUPERACIÓN 🔥]' : ''}`);
 
     ws.send(JSON.stringify({
-        buy: 1, price: botState.stake,
+        buy: 1, price: currentStake,
         parameters: {
-            amount: botState.stake, basis: 'stake', contract_type: 'DIGITDIFF',
+            amount: currentStake, basis: 'stake', contract_type: 'DIGITDIFF',
             currency: 'USD', symbol: targetSymbol, duration: 1, duration_unit: 't',
             barrier: String(targetDigit)
         }
@@ -164,10 +171,17 @@ function finalizeTrade(c) {
     if (isWin) {
         console.log(`✅ [WIN] +$${profit.toFixed(2)} | Balance: $${botState.balance}`);
         botState.winsSession++;
+        botState.isRecovering = false;
     } else {
-        // LA REGLA DE ORO: Si pierde, acepta la pérdida con dignidad y mantiene el stake fijo.
-        console.log(`❌ [LOSS] -$${Math.abs(profit).toFixed(2)} | Pérdida asumida. STAKE PROTEGIDO.`);
+        console.log(`❌ [LOSS] -$${Math.abs(profit).toFixed(2)} | Pérdida en Escudo Nivel 4.`);
         botState.lossesSession++;
+        
+        if (botState.coberturaActiva && !botState.isRecovering) {
+            botState.isRecovering = true;
+            console.log("⚠️ ACTIVANDO COBERTURA: El próximo disparo usará x11.1 para recuperar y salir.");
+        } else {
+            botState.isRecovering = false;
+        }
     }
 
     const barrierMatch = c.shortcode.match(/_(\d)_/);
@@ -245,13 +259,22 @@ app.get('/differs/status', (req, res) => {
             isFetching: botState.isBuying,
             activeContractId: botState.activeContractId,
             strategyMode: botState.strategyMode,
-            matrixSize: botState.markets['R_10'].digitHistory.length
+            matrixSize: botState.markets['R_10'].digitHistory.length,
+            coberturaActiva: botState.coberturaActiva,
+            isRecovering: botState.isRecovering
         } 
     });
 });
 
 app.post('/differs/control', (req, res) => {
     const { action, stake, takeProfit, maxDailyLoss, strategyMode, symbol } = req.body;
+    if (action === 'TOGGLE_COBERTURA') {
+        botState.coberturaActiva = !botState.coberturaActiva;
+        if (!botState.coberturaActiva) botState.isRecovering = false;
+        console.log(`🛡️ COBERTURA: ${botState.coberturaActiva ? 'ACTIVADA' : 'DESACTIVADA'}`);
+        return res.json({ success: true, coberturaActiva: botState.coberturaActiva });
+    }
+
     if (action === 'START' || action === 'SYNC') {
         if (stake) botState.stake = parseFloat(stake);
         if (takeProfit) botState.takeProfit = parseFloat(takeProfit);
