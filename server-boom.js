@@ -32,6 +32,7 @@ let botState = {
     isConnectedToDeriv: false,
     isRealAccount: false,
     balance: 0,
+    currency: 'USD',
     dailyProfit: 0,
     dailyLoss: 0,
     totalTradesSession: 0,
@@ -92,7 +93,10 @@ function connectDeriv() {
         const msg = JSON.parse(raw);
         if (msg.msg_type === 'authorize') {
             botState.isConnectedToDeriv = true;
-            console.log("🥷 ANTIGRAVEDAD v14.0 | A: SOMBRA (R_10/25/100) | B: MATCH (R_50)");
+            if (msg.authorize && msg.authorize.currency) {
+                botState.currency = msg.authorize.currency;
+            }
+            console.log(`🥷 ANTIGRAVEDAD v14.0 | A: SOMBRA (R_10/25/100) | B: MATCH (R_50) | Divisa: ${botState.currency}`);
             SYMBOLS.forEach(s => {
                 ws.send(JSON.stringify({ subscribe: 1, ticks: s }));
             });
@@ -212,7 +216,7 @@ function evaluateMotorA() {
         buy: 1, price: currentStake,
         parameters: {
             amount: currentStake, basis: 'stake', contract_type: 'DIGITDIFF',
-            currency: 'USD', symbol: targetSymbol, duration: 1, duration_unit: 't',
+            currency: botState.currency, symbol: targetSymbol, duration: 1, duration_unit: 't',
             barrier: String(shadowDigit)
         }
     }));
@@ -248,7 +252,7 @@ function evaluateMotorB(tickSymbol, tickDigit) {
         buy: 1, price: botState.motorBStake,
         parameters: {
             amount: botState.motorBStake, basis: 'stake', contract_type: 'DIGITMATCH',
-            currency: 'USD', symbol: MOTOR_B_SYMBOL, duration: 1, duration_unit: 't',
+            currency: botState.currency, symbol: MOTOR_B_SYMBOL, duration: 1, duration_unit: 't',
             barrier: String(targetDigit)
         }
     }));
