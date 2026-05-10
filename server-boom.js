@@ -88,7 +88,7 @@ function connectDeriv() {
         const msg = JSON.parse(raw);
         if (msg.msg_type === 'authorize') {
             botState.isConnectedToDeriv = true;
-            console.log("🛡️ MOTOR DUAL v12.0 | A: DIGITDIFF (R_10/R_25/R_100) | B: DIGITMATCH (R_50)");
+            console.log("🥷 ANTIGRAVEDAD v14.0 | A: SOMBRA (R_10/25/100) | B: MATCH (R_50)");
             SYMBOLS.forEach(s => {
                 ws.send(JSON.stringify({ subscribe: 1, ticks: s }));
             });
@@ -421,7 +421,7 @@ app.post('/differs/control', (req, res) => {
             botState.motorBPaused = false;
             botState.motorBConsecutiveLosses = 0;
             botState.motorBTrades = 0;
-            console.log(`🚀 MOTOR DUAL INICIADO | A: DIFF (Escudo Nivel 4) | B: MATCH (R_50)`);
+            console.log(`🚀 BOT INICIADO | A: DIFF (Sombra 🥷) | B: MATCH (Autocorrelación ⚡)`);
         }
     } else if (action === 'STOP') {
         botState.isRunning = false;
