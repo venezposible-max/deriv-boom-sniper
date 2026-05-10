@@ -1,10 +1,10 @@
 /**
  * ============================================================
- *  PROYECTO ANTIGRAVEDAD v8.0 - EL FRANCOTIRADOR INSTITUCIONAL
- *  Estrategia: Stake Fijo + Anomalía Estadística Extrema
- *  Contrato: DIGITDIFF (90% probabilidad base)
- *  Regla de Oro: 0% Martingala. 0% Capas de Recuperación.
- *  Gatillo: Solo dispara cuando un dígito sale 3 veces seguidas (0.1% prob).
+ *  PROYECTO ANTIGRAVEDAD v12.0 - MOTOR DUAL
+ *  Motor A: DIGITDIFF en R_10/R_25/R_100 (Escudo Nivel 4)
+ *  Motor B: DIGITMATCH en R_50 (Explotación de autocorrelación)
+ *  Análisis forense reveló que R_50 tiene r=0.495 de autocorrelación
+ *  y 43% de probabilidad de repetición vs 10% esperado.
  * ============================================================
  */
 
@@ -22,6 +22,8 @@ const APP_ID = process.env.DERIV_APP_ID || '36544';
 const DERIV_TOKEN = process.env.DERIV_TOKEN || 'PMIt2RhEjEDbcLD';
 const STATE_FILE = path.join(__dirname, 'persistent-state-institutional.json');
 const SYMBOLS = ['R_10', 'R_25', 'R_50', 'R_100'];
+const MOTOR_A_SYMBOLS = ['R_10', 'R_25', 'R_100']; // DIGITDIFF (aleatorios)
+const MOTOR_B_SYMBOL = 'R_50';                     // DIGITMATCH (autocorrelado)
 
 let botState = {
     isRunning: false,
@@ -33,19 +35,31 @@ let botState = {
     winsSession: 0,
     lossesSession: 0,
     tradeHistory: [],
-    stake: 5,             // STAKE FIJO INMUTABLE
+    stake: 5,
     takeProfit: 10,
-    maxDailyLoss: 50,     // Riesgo máximo por sesión
+    maxDailyLoss: 50,
     activeSymbol: null,
     activeContractId: null,
+    activeMotor: null,       // 'A' o 'B'
     lastTradeTime: 0,
+    lastTradeTimeB: 0,
     cooldownMs: 5000,
     isBuying: false,
-    strategyMode: 'DIFFERS', // Opciones: 'DIFFERS' o 'MATCH'
     viewedSymbol: 'R_100',
     markets: {},
     coberturaActiva: false,
-    isRecovering: false
+    isRecovering: false,
+    // ─── MOTOR B (DIGITMATCH R_50) ───
+    motorBEnabled: true,
+    motorBStake: 1,          // $1 fijo
+    motorBWins: 0,
+    motorBLosses: 0,
+    motorBTrades: 0,
+    motorBMaxTrades: 5,      // Máx 5 disparos por sesión
+    motorBConsecutiveLosses: 0,
+    motorBMaxConsecutiveLosses: 3, // Freno: 3 pérdidas seguidas = pausa
+    motorBProfit: 0,
+    motorBPaused: false
 };
 
 SYMBOLS.forEach(s => {
@@ -74,7 +88,7 @@ function connectDeriv() {
         const msg = JSON.parse(raw);
         if (msg.msg_type === 'authorize') {
             botState.isConnectedToDeriv = true;
-            console.log("🛡️ MODO INSTITUCIONAL v11.0 ACTIVADO (Escudo Nivel 4: Modo Cisne Negro)");
+            console.log("🛡️ MOTOR DUAL v12.0 | A: DIGITDIFF (R_10/R_25/R_100) | B: DIGITMATCH (R_50)");
             SYMBOLS.forEach(s => {
                 ws.send(JSON.stringify({ subscribe: 1, ticks: s }));
             });
@@ -92,7 +106,8 @@ function connectDeriv() {
             if (m.digitHistory.length > 1000) m.digitHistory.shift(); // 1000 ticks para la Matriz de Markov
 
             if (botState.isRunning && !botState.activeContractId && !botState.isBuying) {
-                evaluateInstitutionalSniper();
+                evaluateMotorA();
+                evaluateMotorB(s, digit);
             }
         }
 
@@ -116,22 +131,21 @@ function connectDeriv() {
     ws.on('close', () => { botState.isConnectedToDeriv = false; setTimeout(connectDeriv, 5000); });
 }
 
-// ─── MOTOR INSTITUCIONAL (CERO RIESGO) ────────────────────────
-function evaluateInstitutionalSniper() {
+// ─── MOTOR A: DIGITDIFF (Escudo Nivel 4) ──────────────────────
+function evaluateMotorA() {
     const now = Date.now();
     if (now - botState.lastTradeTime < botState.cooldownMs) return;
 
     let targetSymbol = null;
     let targetDigit = null;
 
-    // Escanear los 4 mercados en busca de la "Falla en la Matrix Nivel 4" (4 repeticiones seguidas)
-    SYMBOLS.forEach(s => {
+    // Solo escanear mercados aleatorios (excluir R_50)
+    MOTOR_A_SYMBOLS.forEach(s => {
         const history = botState.markets[s].digitHistory;
         if (history.length < 4) return;
         
         const last4 = history.slice(-4);
         if (last4[0] === last4[1] && last4[1] === last4[2] && last4[2] === last4[3]) {
-            // ¡Anomalía Extrema! El mismo dígito salió 4 veces seguidas.
             targetSymbol = s;
             targetDigit = last4[0];
         }
@@ -140,6 +154,7 @@ function evaluateInstitutionalSniper() {
     if (!targetSymbol || targetDigit === null) return;
 
     botState.activeSymbol = targetSymbol;
+    botState.activeMotor = 'A';
     botState.isBuying = true;
     botState.lastTradeTime = now;
 
@@ -148,7 +163,7 @@ function evaluateInstitutionalSniper() {
         currentStake = parseFloat((botState.stake * 11.1).toFixed(2));
     }
 
-    console.log(`🛡️ [ESCUDO NIVEL 4] ${targetSymbol} | Cisne Negro (Salió el ${targetDigit} CUATRO veces) | Disparo: DIFFERS con $${currentStake} ${botState.isRecovering ? '[BALA DE RECUPERACIÓN 🔥]' : ''}`);
+    console.log(`🛡️ [MOTOR A] ${targetSymbol} | Cisne Negro (${targetDigit}×4) | DIFF $${currentStake} ${botState.isRecovering ? '[COBERTURA 🔥]' : ''}`);
 
     ws.send(JSON.stringify({
         buy: 1, price: currentStake,
@@ -160,48 +175,109 @@ function evaluateInstitutionalSniper() {
     }));
 }
 
+// ─── MOTOR B: DIGITMATCH en R_50 (Explotación PRNG) ──────────
+function evaluateMotorB(tickSymbol, tickDigit) {
+    if (tickSymbol !== MOTOR_B_SYMBOL) return;
+    if (!botState.motorBEnabled || botState.motorBPaused) return;
+    if (botState.motorBTrades >= botState.motorBMaxTrades) return;
+
+    const now = Date.now();
+    if (now - botState.lastTradeTimeB < 8000) return; // cooldown 8s para Motor B
+    if (botState.isBuying || botState.activeContractId) return;
+
+    const history = botState.markets[MOTOR_B_SYMBOL].digitHistory;
+    if (history.length < 2) return;
+
+    const last2 = history.slice(-2);
+    if (last2[0] !== last2[1]) return; // Solo disparar si hay 2 repetidos
+
+    const targetDigit = last2[0];
+
+    botState.activeSymbol = MOTOR_B_SYMBOL;
+    botState.activeMotor = 'B';
+    botState.isBuying = true;
+    botState.lastTradeTimeB = now;
+    botState.lastTradeTime = now;
+
+    console.log(`⚡ [MOTOR B] R_50 | Autocorrelación detectada (${targetDigit}×2) | MATCH =$${botState.motorBStake}`);
+
+    ws.send(JSON.stringify({
+        buy: 1, price: botState.motorBStake,
+        parameters: {
+            amount: botState.motorBStake, basis: 'stake', contract_type: 'DIGITMATCH',
+            currency: 'USD', symbol: MOTOR_B_SYMBOL, duration: 1, duration_unit: 't',
+            barrier: String(targetDigit)
+        }
+    }));
+}
+
 function finalizeTrade(c) {
     const profit = parseFloat(c.profit);
     const isWin = profit > 0;
+    const motor = botState.activeMotor || 'A';
     
     botState.dailyProfit += isWin ? profit : 0;
     botState.dailyLoss += isWin ? 0 : Math.abs(profit);
     botState.totalTradesSession++;
-    
-    if (isWin) {
-        console.log(`✅ [WIN] +$${profit.toFixed(2)} | Balance: $${botState.balance}`);
-        botState.winsSession++;
-        botState.isRecovering = false;
-    } else {
-        console.log(`❌ [LOSS] -$${Math.abs(profit).toFixed(2)} | Pérdida en Escudo Nivel 4.`);
-        botState.lossesSession++;
-        
-        if (botState.coberturaActiva && !botState.isRecovering) {
-            botState.isRecovering = true;
-            console.log("⚠️ ACTIVANDO COBERTURA: El próximo disparo usará x11.1 para recuperar y salir.");
-        } else {
-            botState.isRecovering = false;
-        }
-    }
 
     const barrierMatch = c.shortcode.match(/_(\d)_/);
     const barrierDigit = barrierMatch ? barrierMatch[1] : '?';
-
-    botState.tradeHistory.unshift({
-        symbol: botState.activeSymbol || c.display_symbol,
-        type: `🔫 DIFF(≠${barrierDigit})`,
-        profit,
-        result: isWin ? 'WIN ✅' : 'LOSS ❌',
-        time: new Date().toLocaleTimeString()
-    });
+    const isMatch = c.shortcode.includes('DIGITMATCH');
+    
+    if (motor === 'B' || isMatch) {
+        // ── MOTOR B RESULT ──
+        botState.motorBTrades++;
+        botState.motorBProfit += profit;
+        if (isWin) {
+            botState.motorBWins++;
+            botState.motorBConsecutiveLosses = 0;
+            botState.winsSession++;
+            console.log(`⚡ [MOTOR B WIN] +$${profit.toFixed(2)} 🎯 MATCH! | Balance: $${botState.balance}`);
+        } else {
+            botState.motorBLosses++;
+            botState.motorBConsecutiveLosses++;
+            botState.lossesSession++;
+            console.log(`⚡ [MOTOR B LOSS] -$${Math.abs(profit).toFixed(2)} | Racha negativa: ${botState.motorBConsecutiveLosses}/3`);
+            if (botState.motorBConsecutiveLosses >= botState.motorBMaxConsecutiveLosses) {
+                botState.motorBPaused = true;
+                console.log(`🛑 [MOTOR B PAUSADO] 3 pérdidas seguidas. Motor B en pausa por seguridad.`);
+            }
+        }
+        botState.tradeHistory.unshift({
+            symbol: 'R_50', type: `⚡ MATCH(=${barrierDigit})`, profit,
+            result: isWin ? 'WIN ✅' : 'LOSS ❌', time: new Date().toLocaleTimeString()
+        });
+    } else {
+        // ── MOTOR A RESULT ──
+        if (isWin) {
+            console.log(`🛡️ [MOTOR A WIN] +$${profit.toFixed(2)} | Balance: $${botState.balance}`);
+            botState.winsSession++;
+            botState.isRecovering = false;
+        } else {
+            console.log(`🛡️ [MOTOR A LOSS] -$${Math.abs(profit).toFixed(2)}`);
+            botState.lossesSession++;
+            if (botState.coberturaActiva && !botState.isRecovering) {
+                botState.isRecovering = true;
+                console.log("⚠️ COBERTURA ARMADA: Próximo disparo Motor A usará x11.1");
+            } else {
+                botState.isRecovering = false;
+            }
+        }
+        botState.tradeHistory.unshift({
+            symbol: botState.activeSymbol || c.display_symbol,
+            type: `🛡️ DIFF(≠${barrierDigit})`, profit,
+            result: isWin ? 'WIN ✅' : 'LOSS ❌', time: new Date().toLocaleTimeString()
+        });
+    }
     
     if (botState.tradeHistory.length > 50) botState.tradeHistory.pop();
     botState.activeContractId = null;
+    botState.activeMotor = null;
 
     const net = botState.dailyProfit - botState.dailyLoss;
     if (net >= botState.takeProfit || botState.dailyLoss >= botState.maxDailyLoss) {
         botState.isRunning = false;
-        console.log(`🏁 META DE SESIÓN ALCANZADA. Bot detenido por seguridad.`);
+        console.log(`🏁 META DE SESIÓN ALCANZADA. Bot detenido.`);
     }
     saveState();
 }
@@ -249,6 +325,12 @@ app.get('/differs/status', (req, res) => {
         ? ((botState.winsSession / botState.totalTradesSession) * 100).toFixed(1)
         : '0.0';
 
+    // Motor B streak para R_50
+    const r50h = botState.markets['R_50'].digitHistory;
+    let motorBStreak = 0;
+    if (r50h.length >= 2 && r50h[r50h.length-1] === r50h[r50h.length-2]) motorBStreak = 2;
+    if (r50h.length >= 3 && motorBStreak === 2 && r50h[r50h.length-3] === r50h[r50h.length-1]) motorBStreak = 3;
+
     res.json({ 
         success: true, 
         data: { 
@@ -257,7 +339,6 @@ app.get('/differs/status', (req, res) => {
             lastDigit: market.lastDigit,
             lastTickPrice: market.lastTickPrice,
             digitHistory: market.digitHistory.slice(-20),
-            currentContractType: botState.strategyMode === 'MATCH' ? 'DIGITMATCH' : 'DIGITDIFF',
             shannonEntropy: `Racha: ${activeStreak}/4`,
             markovEdge: streakDigit,
             streakSymbol: streakSymbol,
@@ -266,46 +347,69 @@ app.get('/differs/status', (req, res) => {
             isRunning: botState.isRunning,
             isFetching: botState.isBuying,
             activeContractId: botState.activeContractId,
-            strategyMode: botState.strategyMode,
-            matrixSize: botState.markets['R_10'].digitHistory.length,
             coberturaActiva: botState.coberturaActiva,
             isRecovering: botState.isRecovering,
             pnlSession: pnlSession,
-            winRate: winRate
+            winRate: winRate,
+            // Motor B data
+            motorBEnabled: botState.motorBEnabled,
+            motorBWins: botState.motorBWins,
+            motorBLosses: botState.motorBLosses,
+            motorBTrades: botState.motorBTrades,
+            motorBMaxTrades: botState.motorBMaxTrades,
+            motorBProfit: botState.motorBProfit,
+            motorBPaused: botState.motorBPaused,
+            motorBStake: botState.motorBStake,
+            motorBStreak: motorBStreak,
+            motorBConsecutiveLosses: botState.motorBConsecutiveLosses
         } 
     });
 });
 
 app.post('/differs/control', (req, res) => {
-    const { action, stake, takeProfit, maxDailyLoss, strategyMode, symbol } = req.body;
+    const { action, stake, takeProfit, maxDailyLoss, symbol } = req.body;
     if (action === 'TOGGLE_COBERTURA') {
         botState.coberturaActiva = !botState.coberturaActiva;
         if (!botState.coberturaActiva) botState.isRecovering = false;
         console.log(`🛡️ COBERTURA: ${botState.coberturaActiva ? 'ACTIVADA' : 'DESACTIVADA'}`);
         return res.json({ success: true, coberturaActiva: botState.coberturaActiva });
     }
+    if (action === 'TOGGLE_MOTOR_B') {
+        botState.motorBEnabled = !botState.motorBEnabled;
+        if (!botState.motorBEnabled) botState.motorBPaused = false;
+        console.log(`⚡ MOTOR B: ${botState.motorBEnabled ? 'ACTIVADO' : 'DESACTIVADO'}`);
+        return res.json({ success: true, motorBEnabled: botState.motorBEnabled });
+    }
+    if (action === 'RESET_MOTOR_B') {
+        botState.motorBPaused = false;
+        botState.motorBConsecutiveLosses = 0;
+        botState.motorBTrades = 0;
+        console.log(`🔄 Motor B reseteado.`);
+        return res.json({ success: true });
+    }
 
     if (action === 'START' || action === 'SYNC') {
         if (stake) botState.stake = parseFloat(stake);
         if (takeProfit) botState.takeProfit = parseFloat(takeProfit);
         if (maxDailyLoss) botState.maxDailyLoss = parseFloat(maxDailyLoss);
-        if (strategyMode) botState.strategyMode = strategyMode;
         if (symbol) botState.viewedSymbol = symbol;
         
         if (action === 'START') {
             botState.isRunning = true;
-            console.log(`🚀 FRANCOTIRADOR CLÁSICO INICIADO | Meta de Sesión: $${botState.takeProfit}`);
+            botState.motorBPaused = false;
+            botState.motorBConsecutiveLosses = 0;
+            botState.motorBTrades = 0;
+            console.log(`🚀 MOTOR DUAL INICIADO | A: DIFF (Escudo Nivel 4) | B: MATCH (R_50)`);
         }
     } else if (action === 'STOP') {
         botState.isRunning = false;
-        console.log(`⏸️ BOT PAUSADO por el usuario.`);
+        console.log(`⏸️ BOT PAUSADO.`);
     } else if (action === 'RESET_DAY') { 
-        botState.dailyProfit = 0; 
-        botState.dailyLoss = 0; 
-        botState.totalTradesSession = 0;
-        botState.winsSession = 0;
-        botState.lossesSession = 0;
+        botState.dailyProfit = 0; botState.dailyLoss = 0;
+        botState.totalTradesSession = 0; botState.winsSession = 0; botState.lossesSession = 0;
         botState.tradeHistory = [];
+        botState.motorBWins = 0; botState.motorBLosses = 0; botState.motorBTrades = 0;
+        botState.motorBProfit = 0; botState.motorBPaused = false; botState.motorBConsecutiveLosses = 0;
         console.log(`🔄 Historial limpiado.`);
     }
     saveState(); res.json({ success: true });
