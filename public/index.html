@@ -417,33 +417,7 @@
 
 
         <!-- MOTOR B PANEL -->
-        <div id="motorBPanel" style="background: rgba(56,189,248,0.05); border: 1px solid rgba(56,189,248,0.2); padding: 14px; border-radius: 12px; margin-bottom: 20px;">
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
-                <div>
-                    <div style="font-weight: 800; font-size: 13px; color: #38bdf8;">⚡ Motor B — DIGITMATCH R_50</div>
-                    <div style="font-size: 11px; color: #888;">Explota autocorrelación PRNG ($1/disparo)</div>
-                </div>
-                <label class="switch">
-                    <input type="checkbox" id="motorBToggle" onchange="toggleMotorB()" checked>
-                    <span class="slider"></span>
-                </label>
-            </div>
-            <div style="display: flex; gap: 8px; justify-content: space-between; text-align: center;">
-                <div style="flex:1; padding: 8px; background: rgba(255,255,255,0.03); border-radius: 8px;">
-                    <div style="font-size: 9px; color: #555; text-transform: uppercase; letter-spacing: 1px;">Disparos</div>
-                    <div style="font-size: 16px; font-weight: 900; color: #38bdf8;" id="motorBTrades">0/5</div>
-                </div>
-                <div style="flex:1; padding: 8px; background: rgba(255,255,255,0.03); border-radius: 8px;">
-                    <div style="font-size: 9px; color: #555; text-transform: uppercase; letter-spacing: 1px;">W / L</div>
-                    <div style="font-size: 16px; font-weight: 900;" id="motorBWL"><span class="green">0</span>/<span class="red">0</span></div>
-                </div>
-                <div style="flex:1; padding: 8px; background: rgba(255,255,255,0.03); border-radius: 8px;">
-                    <div style="font-size: 9px; color: #555; text-transform: uppercase; letter-spacing: 1px;">PnL</div>
-                    <div style="font-size: 16px; font-weight: 900;" id="motorBPnl">$0.00</div>
-                </div>
-            </div>
-            <div id="motorBStatus" style="font-size: 11px; text-align: center; margin-top: 8px; color: #38bdf8;">⏳ Esperando racha en R_50...</div>
-        </div>
+
 
         <button id="btnToggle" class="btn-main btn-start" onclick="toggleBot()">
              🛡️ Iniciar Motor Dual

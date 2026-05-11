@@ -53,8 +53,9 @@ let botState = {
     markets: {},
     coberturaActiva: false,
     isRecovering: false,
-    // ─── MOTOR B (DIGITMATCH R_50) ───
-    motorBEnabled: true,
+    needsRecovery: false,
+    // ─── MOTOR B REMOVED ───
+    motorBEnabled: false,
     motorBStake: 1,          // $1 fijo
     motorBWins: 0,
     motorBLosses: 0,
@@ -199,10 +200,11 @@ function evaluateMotorA() {
 
     botState.activeSymbol = targetSymbol;
     botState.activeMotor = 'A';
-    botState.isBuying = true;
-    botState.lastTradeTime = now;
-
+    // DISPARO REAL CON COBERTURA SI ES NECESARIO
     let currentStake = botState.stake;
+    if (botState.needsRecovery) {
+        currentStake = botState.stake * 2;
+    }
 
     // FILTRO MODO FANTASMA
     if (botState.ghostMode && !botState.waitingForRealShot) {
@@ -212,8 +214,10 @@ function evaluateMotorA() {
     }
 
     // Si llegamos aquí es un DISPARO REAL
+    botState.isBuying = true;
+    botState.lastTradeTime = Date.now();
     botState.waitingForRealShot = false; 
-    console.log(`🚀 [DISPARO REAL] ${targetSymbol} | Detectada racha x4 del dígito ${barrierDigit} | Apostando a que NO se repite x5 | Stake $${currentStake}`);
+    console.log(`🚀 [DISPARO REAL] ${targetSymbol} | Detectada racha x4 del dígito ${barrierDigit} | ${botState.needsRecovery ? '🛡️ COBERTURA x2' : ''} | Stake $${currentStake}`);
 
     ws.send(JSON.stringify({
         buy: 1, price: currentStake,
@@ -221,42 +225,6 @@ function evaluateMotorA() {
             amount: currentStake, basis: 'stake', contract_type: 'DIGITDIFF',
             currency: botState.currency, symbol: targetSymbol, duration: 1, duration_unit: 't',
             barrier: String(barrierDigit)
-        }
-    }));
-}
-
-// ─── MOTOR B: DIGITMATCH en R_50 (Explotación PRNG) ──────────
-function evaluateMotorB(tickSymbol, tickDigit) {
-    if (tickSymbol !== MOTOR_B_SYMBOL) return;
-    if (!botState.motorBEnabled || botState.motorBPaused) return;
-    if (botState.motorBTrades >= botState.motorBMaxTrades) return;
-
-    const now = Date.now();
-    if (now - botState.lastTradeTimeB < 8000) return; // cooldown 8s para Motor B
-    if (botState.isBuying || botState.activeContractId) return;
-
-    const history = botState.markets[MOTOR_B_SYMBOL].digitHistory;
-    if (history.length < 2) return;
-
-    const last2 = history.slice(-2);
-    if (last2[0] !== last2[1]) return; // Solo disparar si hay 2 repetidos
-
-    const targetDigit = last2[0];
-
-    botState.activeSymbol = MOTOR_B_SYMBOL;
-    botState.activeMotor = 'B';
-    botState.isBuying = true;
-    botState.lastTradeTimeB = now;
-    botState.lastTradeTime = now;
-
-    console.log(`⚡ [MOTOR B] R_50 | Autocorrelación detectada (${targetDigit}×2) | MATCH =$${botState.motorBStake}`);
-
-    ws.send(JSON.stringify({
-        buy: 1, price: botState.motorBStake,
-        parameters: {
-            amount: botState.motorBStake, basis: 'stake', contract_type: 'DIGITMATCH',
-            currency: botState.currency, symbol: MOTOR_B_SYMBOL, duration: 1, duration_unit: 't',
-            barrier: String(targetDigit)
         }
     }));
 }
@@ -272,46 +240,23 @@ function finalizeTrade(c) {
 
     const barrierMatch = c.shortcode.match(/_(\d)_/);
     const barrierDigit = barrierMatch ? barrierMatch[1] : '?';
-    const isMatch = c.shortcode.includes('DIGITMATCH');
     
-    if (motor === 'B' || isMatch) {
-        // ── MOTOR B RESULT ──
-        botState.motorBTrades++;
-        botState.motorBProfit += profit;
-        if (isWin) {
-            botState.motorBWins++;
-            botState.motorBConsecutiveLosses = 0;
-            botState.winsSession++;
-            console.log(`⚡ [MOTOR B WIN] +$${profit.toFixed(2)} 🎯 MATCH! | Balance: $${botState.balance}`);
-        } else {
-            botState.motorBLosses++;
-            botState.motorBConsecutiveLosses++;
-            botState.lossesSession++;
-            console.log(`⚡ [MOTOR B LOSS] -$${Math.abs(profit).toFixed(2)} | Racha negativa: ${botState.motorBConsecutiveLosses}/3`);
-            if (botState.motorBConsecutiveLosses >= botState.motorBMaxConsecutiveLosses) {
-                botState.motorBPaused = true;
-                console.log(`🛑 [MOTOR B PAUSADO] 3 pérdidas seguidas. Motor B en pausa por seguridad.`);
-            }
-        }
-        botState.tradeHistory.unshift({
-            symbol: 'R_50', type: `⚡ MATCH(=${barrierDigit})`, profit,
-            result: isWin ? 'WIN ✅' : 'LOSS ❌', time: new Date().toLocaleTimeString()
-        });
+    // ── RESULTADO ÚNICO MOTOR A ──
+    if (isWin) {
+        console.log(`🥷 [WIN] +$${profit.toFixed(2)} | Balance: $${botState.balance}`);
+        botState.winsSession++;
+        botState.needsRecovery = false; // Resetear cobertura
     } else {
-        // ── MOTOR A RESULT ──
-        if (isWin) {
-            console.log(`🥷 [SOMBRA WIN] +$${profit.toFixed(2)} | Balance: $${botState.balance}`);
-            botState.winsSession++;
-        } else {
-            console.log(`🥷 [SOMBRA LOSS] -$${Math.abs(profit).toFixed(2)} | Sombra detectada por la Matrix.`);
-            botState.lossesSession++;
-        }
-        botState.tradeHistory.unshift({
-            symbol: botState.activeSymbol || c.display_symbol,
-            type: `🥷 DIFF(≠${barrierDigit})`, profit,
-            result: isWin ? 'WIN ✅' : 'LOSS ❌', time: new Date().toLocaleTimeString()
-        });
+        console.log(`🥷 [LOSS] -$${Math.abs(profit).toFixed(2)} | Activando Cobertura x2.`);
+        botState.lossesSession++;
+        botState.needsRecovery = true;  // Activar cobertura para el próximo tiro
     }
+
+    botState.tradeHistory.unshift({
+        symbol: botState.activeSymbol || c.display_symbol,
+        type: `🥷 DIFF(≠${barrierDigit})${botState.needsRecovery ? ' [REC]' : ''}`, profit,
+        result: isWin ? 'WIN ✅' : 'LOSS ❌', time: new Date().toLocaleTimeString()
+    });
     
     if (botState.tradeHistory.length > 50) botState.tradeHistory.pop();
     botState.activeContractId = null;
