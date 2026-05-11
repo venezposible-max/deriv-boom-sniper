@@ -42,7 +42,6 @@ let botState = {
     stake: 5,
     takeProfit: 10,
     maxDailyLoss: 50,
-    maxDailyTrades: 10,
     activeSymbol: null,
     activeContractId: null,
     activeMotor: null,       // 'A' o 'B'
@@ -222,15 +221,6 @@ function connectDeriv() {
 function evaluateMotorA() {
     const now = Date.now();
     if (now - botState.lastTradeTime < botState.cooldownMs) return;
-
-    // Límite de trades diarios
-    if (botState.totalTradesSession >= botState.maxDailyTrades) {
-        if (botState.isRunning) {
-            console.log(`🏁 LÍMITE DE TRADES ALCANZADO (${botState.maxDailyTrades}). Deteniendo bot.`);
-            botState.isRunning = false;
-        }
-        return;
-    }
 
     let targetSymbol = null;
     let barrierDigit = null;
@@ -466,7 +456,6 @@ app.post('/differs/control', (req, res) => {
         if (stake) botState.stake = parseFloat(stake);
         if (takeProfit) botState.takeProfit = parseFloat(takeProfit);
         if (maxDailyLoss) botState.maxDailyLoss = parseFloat(maxDailyLoss);
-        if (req.body.maxDailyTrades) botState.maxDailyTrades = parseInt(req.body.maxDailyTrades);
         if (symbol) botState.viewedSymbol = symbol;
         
         if (action === 'START') {
