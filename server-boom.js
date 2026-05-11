@@ -167,7 +167,6 @@ function connectDeriv() {
                 }
 
                 evaluateMotorA();
-                evaluateMotorB(s, digit);
             }
         }
 
@@ -393,20 +392,8 @@ app.post('/differs/control', (req, res) => {
     const { action, stake, takeProfit, maxDailyLoss, symbol } = req.body;
     if (action === 'TOGGLE_COBERTURA') {
         botState.coberturaActiva = !botState.coberturaActiva;
-        if (!botState.coberturaActiva) botState.isRecovering = false;
-        console.log(`🛡️ COBERTURA: ${botState.coberturaActiva ? 'ACTIVADA' : 'DESACTIVADA'}`);
-        return res.json({ success: true, coberturaActiva: botState.coberturaActiva });
-    }
-    if (action === 'TOGGLE_MOTOR_B') {
-        botState.motorBEnabled = !botState.motorBEnabled;
-        if (!botState.motorBEnabled) botState.motorBPaused = false;
-        console.log(`⚡ MOTOR B: ${botState.motorBEnabled ? 'ACTIVADO' : 'DESACTIVADO'}`);
-        return res.json({ success: true, motorBEnabled: botState.motorBEnabled });
-    }
-    if (action === 'TOGGLE_COBERTURA') {
-        botState.coberturaActiva = !botState.coberturaActiva;
         if (!botState.coberturaActiva) botState.needsRecovery = false;
-        console.log(`🛡️ COBERTURA AUTOMÁTICA: ${botState.coberturaActiva ? 'ACTIVADA' : 'DESACTIVADA'}`);
+        console.log(`🛡️ COBERTURA: ${botState.coberturaActiva ? 'ACTIVADA' : 'DESACTIVADA'}`);
         return res.json({ success: true, coberturaActiva: botState.coberturaActiva });
     }
     if (action === 'TOGGLE_GHOST_MODE') {
@@ -418,14 +405,6 @@ app.post('/differs/control', (req, res) => {
         console.log(`👻 MODO FANTASMA: ${botState.ghostMode ? 'ACTIVADO' : 'DESACTIVADO'}`);
         return res.json({ success: true, ghostMode: botState.ghostMode });
     }
-    if (action === 'RESET_MOTOR_B') {
-        botState.motorBPaused = false;
-        botState.motorBConsecutiveLosses = 0;
-        botState.motorBTrades = 0;
-        console.log(`🔄 Motor B reseteado.`);
-        return res.json({ success: true });
-    }
-
     if (action === 'START' || action === 'SYNC') {
         if (stake) botState.stake = parseFloat(stake);
         if (takeProfit) botState.takeProfit = parseFloat(takeProfit);
@@ -452,8 +431,6 @@ app.post('/differs/control', (req, res) => {
         botState.dailyProfit = 0; botState.dailyLoss = 0;
         botState.totalTradesSession = 0; botState.winsSession = 0; botState.lossesSession = 0;
         botState.tradeHistory = [];
-        botState.motorBWins = 0; botState.motorBLosses = 0; botState.motorBTrades = 0;
-        botState.motorBProfit = 0; botState.motorBPaused = false; botState.motorBConsecutiveLosses = 0;
         console.log(`🔄 Historial limpiado.`);
     }
     saveState(); res.json({ success: true });
