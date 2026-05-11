@@ -397,6 +397,10 @@
                 <label>Meta ($)</label>
                 <input type="number" id="takeProfit" value="10" step="1" onblur="syncConfig()">
             </div>
+            <div class="input-group" style="flex:1; margin-bottom:0;">
+                <label>Máx Trades</label>
+                <input type="number" id="maxDailyTrades" value="10" step="1" onblur="syncConfig()" style="border-color: #fbbf24;">
+            </div>
         </div>
 
         <!-- Daily P&L info -->
@@ -781,6 +785,7 @@
             body.stake = parseFloat(document.getElementById('stake').value);
             body.maxDailyLoss = parseFloat(document.getElementById('maxDailyLoss').value);
             body.takeProfit = parseFloat(document.getElementById('takeProfit').value);
+            body.maxDailyTrades = parseInt(document.getElementById('maxDailyTrades').value);
         }
         try {
             const res = await fetch('/differs/control', {
@@ -900,17 +905,15 @@
 
     // [FRANKLIN SYNC] Enviar cambios de config al instante
     async function syncConfig() {
-        const body = {
-            action: 'SYNC',
-            stake: parseFloat(document.getElementById('stake').value),
-            maxDailyLoss: parseFloat(document.getElementById('maxDailyLoss').value),
-            takeProfit: parseFloat(document.getElementById('takeProfit').value)
-        };
+        const stake = parseFloat(document.getElementById('stake').value);
+        const tp = parseFloat(document.getElementById('takeProfit').value);
+        const ml = parseFloat(document.getElementById('maxDailyLoss').value);
+        const mt = parseInt(document.getElementById('maxDailyTrades').value);
         try {
             await fetch('/differs/control', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(body)
+                body: JSON.stringify({ action: 'SYNC', stake, takeProfit: tp, maxDailyLoss: ml, maxDailyTrades: mt })
             });
         } catch (e) { console.error('Error syncing config:', e); }
     }
