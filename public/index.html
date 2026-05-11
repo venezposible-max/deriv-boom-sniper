@@ -601,8 +601,8 @@
             // Streak Radar Update
             const streak = parseInt(data.activeStreak || 0);
             const streakPct = Math.min((streak / 4) * 100, 100);
-            document.getElementById('entropyDisplay').innerText = `${streak}/4`;
             document.getElementById('streakProgress').style.width = `${streakPct}%`;
+            document.getElementById('entropyDisplay').innerText = data.shannonEntropy || 'Cisne: 0/4';
             
             const sBadge = document.getElementById('streakBadge');
             if (streak >= 3) { sBadge.style.borderColor = '#fbbf24'; sBadge.style.color = '#fbbf24'; sBadge.style.background = 'rgba(251,191,36,0.15)'; }
@@ -635,9 +635,9 @@
                 document.getElementById('barrierLabelSub').innerText = 'Buscando Cisne Negro (4 repetidos)...';
             }
 
-            // Entropy/Markov (now streak data)
-            const mEdge = data.streakSymbol || data.markovEdge || '-';
-            document.getElementById('markovDisplay').innerText = mEdge !== '-' ? mEdge : '-';
+            // Markov Predictive Edge
+            const mEdge = data.markovEdge || '-';
+            document.getElementById('markovDisplay').innerText = mEdge;
 
             // ── MOTOR B UI REMOVED ──
 

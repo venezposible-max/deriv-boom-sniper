@@ -70,11 +70,20 @@ let botState = {
     // ─── MODO FANTASMA (TRADES GHOST) ───
     ghostMode: false,
     waitingForRealShot: false,
-    ghostTarget: null // { symbol, digit }
+    ghostTarget: null, // { symbol, digit }
+    // ─── MATRIZ DE TRANSICIÓN (MARKOV) ───
+    transitionMatrices: {} // { symbol: { digitA: { digitB: count } } }
 };
 
 SYMBOLS.forEach(s => {
-    botState.markets[s] = { digitHistory: [] };
+    botState.markets[s] = { digitHistory: [], lastDigit: null };
+    botState.transitionMatrices[s] = {};
+    for (let i = 0; i <= 9; i++) {
+        botState.transitionMatrices[s][i] = {};
+        for (let j = 0; j <= 9; j++) {
+            botState.transitionMatrices[s][i][j] = 0;
+        }
+    }
 });
 
 const STATE_FILE = path.join('/tmp', 'persistent-state-institutional.json');
@@ -149,10 +158,21 @@ function connectDeriv() {
             const digit = parseInt(String(msg.tick.quote.toFixed(2)).slice(-1));
             
             const m = botState.markets[s];
+            const prevDigit = m.lastDigit;
+            
+            // Actualizar Matriz de Transición (Markov)
+            if (prevDigit !== null && prevDigit !== undefined) {
+                botState.transitionMatrices[s][prevDigit][digit]++;
+            }
+
             m.digitHistory.push(digit);
             m.lastDigit = digit;
             m.lastTickPrice = msg.tick.quote;
-            if (m.digitHistory.length > 1000) m.digitHistory.shift(); // 1000 ticks para la Matriz de Markov
+            if (m.digitHistory.length > 1000) {
+                // Opcional: Podríamos "olvidar" datos viejos para adaptarnos a cambios en el PRNG
+                // Pero por ahora acumulamos para máxima precisión estadística
+                m.digitHistory.shift(); 
+            }
 
             if (botState.isRunning && !botState.activeContractId && !botState.isBuying) {
                 // Lógica de validación Ghost (si hay un target pendiente)
@@ -210,12 +230,31 @@ function evaluateMotorA() {
         const history = botState.markets[s].digitHistory;
         if (history.length < 5) continue; 
         
-        // 1. EL GATILLO REAL: Una racha de 4 repeticiones (Cisne Negro)
+        // 1. EL GATILLO: Una racha de 4 repeticiones (Cisne Negro)
         const last4 = history.slice(-4);
         if (last4.length < 4 || last4[0] !== last4[1] || last4[1] !== last4[2] || last4[2] !== last4[3]) continue; 
 
+        const barrier = last4[0];
+
+        // 2. EL FILTRO MARKOV: ¿Es probable que el número se repita una 5ª vez?
+        // Analizamos cuántas veces el 'barrier' ha seguido al 'barrier' en este mercado
+        const transitions = botState.transitionMatrices[s][barrier];
+        let totalTransitionsFromBarrier = 0;
+        for (let d = 0; d <= 9; d++) totalTransitionsFromBarrier += transitions[d];
+
+        if (totalTransitionsFromBarrier > 50) { // Necesitamos una muestra mínima
+            const repeatCount = transitions[barrier];
+            const repeatProb = (repeatCount / totalTransitionsFromBarrier) * 100;
+            
+            // Si la probabilidad de repetición es > 12% (lo normal es 10%), el mercado está "caliente". ABORTAR.
+            if (repeatProb > 12) {
+                console.log(`⚠️ [MARKOV ABORT] ${s} | El dígito ${barrier} tiene tendencia a repetir (${repeatProb.toFixed(1)}%). Evitando riesgo.`);
+                continue;
+            }
+        }
+
         targetSymbol = s;
-        barrierDigit = last4[0]; // LA REALIDAD: Apostamos contra el número que se repitió
+        barrierDigit = barrier;
         botState.lastTriggerDigit = barrierDigit;
         break;
     }
@@ -335,19 +374,38 @@ app.get('/differs/status', (req, res) => {
         }
     });
 
+    // Cálculo de Confianza Markov para el símbolo visualizado
     const viewed = botState.viewedSymbol || 'R_100';
     const market = botState.markets[viewed] || { digitHistory: [] };
+    const lastD = market.lastDigit;
+    let markovEdge = '-';
+    let markovProb = 0;
+
+    if (lastD !== null && lastD !== undefined) {
+        const trans = botState.transitionMatrices[viewed][lastD];
+        let total = 0;
+        for (let i = 0; i <= 9; i++) total += trans[i];
+        
+        if (total > 20) {
+            // Buscamos el dígito MENOS probable para el siguiente tick (nuestra ventaja)
+            let minProb = 100;
+            let bestDigit = '-';
+            for (let i = 0; i <= 9; i++) {
+                const p = (trans[i] / total) * 100;
+                if (p < minProb) {
+                    minProb = p;
+                    bestDigit = i;
+                }
+            }
+            markovEdge = `NO-${bestDigit} (${(100 - minProb).toFixed(1)}%)`;
+            markovProb = 100 - minProb;
+        }
+    }
 
     const pnlSession = botState.dailyProfit - botState.dailyLoss;
     const winRate = botState.totalTradesSession > 0 
         ? ((botState.winsSession / botState.totalTradesSession) * 100).toFixed(1)
         : '0.0';
-
-    // Motor B streak para R_50
-    const r50h = botState.markets['R_50'].digitHistory;
-    let motorBStreak = 0;
-    if (r50h.length >= 2 && r50h[r50h.length-1] === r50h[r50h.length-2]) motorBStreak = 2;
-    if (r50h.length >= 3 && motorBStreak === 2 && r50h[r50h.length-3] === r50h[r50h.length-1]) motorBStreak = 3;
 
     res.json({ 
         success: true, 
@@ -358,7 +416,8 @@ app.get('/differs/status', (req, res) => {
             lastTickPrice: market.lastTickPrice,
             digitHistory: market.digitHistory.slice(-20),
             shannonEntropy: `Cisne: ${activeStreak}/4`,
-            markovEdge: streakDigit,
+            markovEdge: markovEdge,
+            markovProb: markovProb,
             streakSymbol: streakSymbol,
             currentBarrier: streakDigit,
             activeStreak: activeStreak,
@@ -366,20 +425,8 @@ app.get('/differs/status', (req, res) => {
             isFetching: botState.isBuying,
             activeContractId: botState.activeContractId,
             coberturaActiva: botState.coberturaActiva,
-            isRecovering: botState.isRecovering,
             pnlSession: pnlSession,
             winRate: winRate,
-            // Motor B data
-            motorBEnabled: botState.motorBEnabled,
-            motorBWins: botState.motorBWins,
-            motorBLosses: botState.motorBLosses,
-            motorBTrades: botState.motorBTrades,
-            motorBMaxTrades: botState.motorBMaxTrades,
-            motorBProfit: botState.motorBProfit,
-            motorBPaused: botState.motorBPaused,
-            motorBStake: botState.motorBStake,
-            motorBStreak: motorBStreak,
-            motorBConsecutiveLosses: botState.motorBConsecutiveLosses,
             startTime: botState.startTime,
             sessionDuration: botState.sessionDuration || 0,
             ghostMode: botState.ghostMode,
