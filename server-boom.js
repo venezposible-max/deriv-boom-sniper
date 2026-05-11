@@ -415,6 +415,16 @@ app.post('/differs/control', (req, res) => {
             botState.motorBConsecutiveLosses = 0;
             botState.motorBTrades = 0;
             console.log(`▶️ COMANDO RECIBIDO: START. Stake: ${botState.stake}, TP: ${botState.takeProfit}, MaxLoss: ${botState.maxDailyLoss}`);
+            
+            // Validar límites antes de arrancar
+            const net = Number(botState.dailyProfit) - Number(botState.dailyLoss);
+            const tp = Number(botState.takeProfit);
+            const ml = Number(botState.maxDailyLoss);
+
+            if (net >= tp || Number(botState.dailyLoss) >= ml) {
+                console.log(`⚠️ No se puede arrancar: Límites ya alcanzados (PnL: ${net.toFixed(2)}, ML: ${ml}). Resetea el día.`);
+                botState.isRunning = false;
+            }
         }
     } else if (action === 'STOP') {
         botState.isRunning = false;

@@ -794,6 +794,8 @@
 
         } catch (e) {
             console.warn('Error fetching status:', e.message);
+            const debug = document.getElementById('debugLog');
+            if (debug) debug.innerText = `UI Error: ${e.message}`;
         } finally {
             isFetching = false;
         }
