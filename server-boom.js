@@ -266,7 +266,7 @@ function evaluateMotorA() {
     // DISPARO REAL CON COBERTURA SI ES NECESARIO
     let currentStake = botState.stake;
     if (botState.needsRecovery) {
-        currentStake = botState.stake * 2;
+        currentStake = botState.stake * 10; // Recuperación agresiva x10 para cubrir pérdida de Differs
     }
 
     // FILTRO MODO FANTASMA
