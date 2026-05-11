@@ -636,40 +636,7 @@
             const mEdge = data.streakSymbol || data.markovEdge || '-';
             document.getElementById('markovDisplay').innerText = mEdge !== '-' ? mEdge : '-';
 
-            // ── MOTOR B UI BINDING ──
-            const mBToggle = document.getElementById('motorBToggle');
-            if (mBToggle.checked !== data.motorBEnabled) {
-                mBToggle.checked = !!data.motorBEnabled;
-            }
-            
-            document.getElementById('motorBTrades').innerText = `${data.motorBTrades || 0}/${data.motorBMaxTrades || 5}`;
-            document.getElementById('motorBWL').innerHTML = `<span class="green">${data.motorBWins || 0}</span>/<span class="red">${data.motorBLosses || 0}</span>`;
-            
-            const mbPnl = parseFloat(data.motorBProfit || 0);
-            const mbPnlEl = document.getElementById('motorBPnl');
-            mbPnlEl.innerText = `${mbPnl >= 0 ? '+' : ''}$${mbPnl.toFixed(2)}`;
-            mbPnlEl.className = mbPnl >= 0 ? 'green' : 'red';
-
-            const mbStatus = document.getElementById('motorBStatus');
-            if (!data.motorBEnabled) {
-                mbStatus.innerText = '⏸️ Motor B apagado';
-                mbStatus.style.color = '#555';
-            } else if (data.motorBPaused) {
-                mbStatus.innerText = '🛑 Pausado por seguridad (3 pérdidas)';
-                mbStatus.style.color = '#f87171';
-            } else if (!data.isRunning) {
-                mbStatus.innerText = '💤 Esperando inicio del sistema...';
-                mbStatus.style.color = '#888';
-            } else {
-                const bStreak = data.motorBStreak || 0;
-                if (bStreak >= 2) {
-                    mbStatus.innerText = '⚡ AUTOCORRELACIÓN DETECTADA — DISPARANDO!';
-                    mbStatus.style.color = '#fbbf24';
-                } else {
-                    mbStatus.innerText = '⏳ Escaneando R_50...';
-                    mbStatus.style.color = '#38bdf8';
-                }
-            }
+            // ── MOTOR B UI REMOVED ──
 
             // Sync Ghost toggle
             const gToggle = document.getElementById('ghostToggle');
