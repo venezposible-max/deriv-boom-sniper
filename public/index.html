@@ -416,8 +416,17 @@
 
 
 
-        <!-- MOTOR B PANEL -->
-
+        <!-- AUTO RECOVERY TOGGLE -->
+        <div style="background: rgba(251, 191, 36, 0.05); border: 1px solid rgba(251, 191, 36, 0.2); padding: 12px; border-radius: 12px; display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+            <div>
+                <div style="font-weight: 800; font-size: 13px; color: #fbbf24;">🛡️ Cobertura Automática (x2)</div>
+                <div style="font-size: 11px; color: #888;" id="coberturaStatusText">Doblar stake tras una pérdida para recuperar</div>
+            </div>
+            <label class="switch">
+                <input type="checkbox" id="coberturaToggle" onchange="toggleCobertura()" checked>
+                <span class="slider"></span>
+            </label>
+        </div>
 
         <button id="btnToggle" class="btn-main btn-start" onclick="toggleBot()">
              🛡️ Iniciar Motor Dual
@@ -451,11 +460,11 @@
     // switchStrategy removed
     
 
-    async function toggleMotorB() {
+    async function toggleCobertura() {
         try {
             await fetch('/differs/control', {
                 method: 'POST', headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({ action: 'TOGGLE_MOTOR_B' })
+                body: JSON.stringify({ action: 'TOGGLE_COBERTURA' })
             });
             await fetchStatus(true);
         } catch (e) { console.error(e); }
@@ -667,17 +676,20 @@
             if (gToggle && gToggle.checked !== data.ghostMode) {
                 gToggle.checked = !!data.ghostMode;
             }
-            const gStatus = document.getElementById('ghostStatusText');
-            if (gStatus) {
-                if (!data.ghostMode) {
-                    gStatus.innerText = 'Espera un fallo virtual antes de disparar real';
-                    gStatus.style.color = '#888';
-                } else if (data.waitingForRealShot) {
-                    gStatus.innerText = '🎯 FALLO DETECTADO: Próximo tiro será REAL';
-                    gStatus.style.color = '#34d399';
+            
+            // Sync Cobertura toggle
+            const cToggle = document.getElementById('coberturaToggle');
+            if (cToggle && cToggle.checked !== data.coberturaActiva) {
+                cToggle.checked = !!data.coberturaActiva;
+            }
+            const cStatus = document.getElementById('coberturaStatusText');
+            if (cStatus) {
+                if (data.needsRecovery) {
+                    cStatus.innerText = '🛡️ COBERTURA ARMADA: Siguiente tiro x2';
+                    cStatus.style.color = '#fbbf24';
                 } else {
-                    gStatus.innerText = '👻 Acechando... Esperando fallo virtual';
-                    gStatus.style.color = '#a78bfa';
+                    cStatus.innerText = data.coberturaActiva ? 'Cobertura Automática x2 (Activa)' : 'Cobertura Desactivada';
+                    cStatus.style.color = '#888';
                 }
             }
 

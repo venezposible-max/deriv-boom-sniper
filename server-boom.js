@@ -31,6 +31,7 @@ let botState = {
     isRunning: false,
     isConnectedToDeriv: false,
     isRealAccount: false,
+    coberturaActiva: true,
     balance: 0,
     currency: 'USD',
     dailyProfit: 0,
@@ -247,9 +248,13 @@ function finalizeTrade(c) {
         botState.winsSession++;
         botState.needsRecovery = false; // Resetear cobertura
     } else {
-        console.log(`🥷 [LOSS] -$${Math.abs(profit).toFixed(2)} | Activando Cobertura x2.`);
+        console.log(`🥷 [LOSS] -$${Math.abs(profit).toFixed(2)}`);
         botState.lossesSession++;
-        botState.needsRecovery = true;  // Activar cobertura para el próximo tiro
+        // Solo activar cobertura si el usuario lo tiene habilitado
+        if (botState.coberturaActiva) {
+            console.log(`🛡️ Activando Cobertura x2 para el próximo tiro.`);
+            botState.needsRecovery = true; 
+        }
     }
 
     botState.tradeHistory.unshift({
@@ -373,6 +378,12 @@ app.post('/differs/control', (req, res) => {
         if (!botState.motorBEnabled) botState.motorBPaused = false;
         console.log(`⚡ MOTOR B: ${botState.motorBEnabled ? 'ACTIVADO' : 'DESACTIVADO'}`);
         return res.json({ success: true, motorBEnabled: botState.motorBEnabled });
+    }
+    if (action === 'TOGGLE_COBERTURA') {
+        botState.coberturaActiva = !botState.coberturaActiva;
+        if (!botState.coberturaActiva) botState.needsRecovery = false;
+        console.log(`🛡️ COBERTURA AUTOMÁTICA: ${botState.coberturaActiva ? 'ACTIVADA' : 'DESACTIVADA'}`);
+        return res.json({ success: true, coberturaActiva: botState.coberturaActiva });
     }
     if (action === 'TOGGLE_GHOST_MODE') {
         botState.ghostMode = !botState.ghostMode;
