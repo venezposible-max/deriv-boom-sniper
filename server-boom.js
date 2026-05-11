@@ -22,7 +22,6 @@ const APP_ID = process.env.DERIV_APP_ID || '36544';
 const DERIV_TOKEN_DEMO = process.env.DERIV_TOKEN || 'PMIt2RhEjEDbcLD';
 const DERIV_TOKEN_REAL = process.env.DERIV_TOKEN_REAL || '';
 let currentDerivToken = DERIV_TOKEN_DEMO;
-const STATE_FILE = path.join(__dirname, 'persistent-state-institutional.json');
 const SYMBOLS = ['R_10', 'R_25', 'R_50', 'R_100'];
 const MOTOR_A_SYMBOLS = ['R_10', 'R_25', 'R_100']; // DIGITDIFF (aleatorios)
 const MOTOR_B_SYMBOL = 'R_50';                     // DIGITMATCH (autocorrelado)
