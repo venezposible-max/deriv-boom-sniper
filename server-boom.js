@@ -78,7 +78,9 @@ SYMBOLS.forEach(s => {
     botState.markets[s] = { digitHistory: [] };
 });
 
-// ─── PERSISTENCIA ─────────────────────────────────────────────
+const STATE_FILE = path.join('/tmp', 'persistent-state-institutional.json');
+
+// Cargar estado inicial
 if (fs.existsSync(STATE_FILE)) {
     try {
         const saved = JSON.parse(fs.readFileSync(STATE_FILE));
@@ -86,10 +88,33 @@ if (fs.existsSync(STATE_FILE)) {
             botState = { ...botState, ...saved.botState };
             botState.isRunning = false;
             botState.isBuying = false;
+            console.log("📥 Estado persistente cargado desde /tmp");
         }
-    } catch (e) {}
+    } catch (e) {
+        console.error("⚠️ Error cargando estado:", e.message);
+    }
 }
-const saveState = () => { try { fs.writeFileSync(STATE_FILE, JSON.stringify({ botState })); } catch (e) {} };
+
+const saveState = () => { 
+    try { 
+        const stateToSave = {
+            stake: botState.stake,
+            takeProfit: botState.takeProfit,
+            maxDailyLoss: botState.maxDailyLoss,
+            dailyProfit: botState.dailyProfit,
+            dailyLoss: botState.dailyLoss,
+            winsSession: botState.winsSession,
+            lossesSession: botState.lossesSession,
+            totalTradesSession: botState.totalTradesSession,
+            coberturaActiva: botState.coberturaActiva,
+            ghostMode: botState.ghostMode,
+            tradeHistory: (botState.tradeHistory || []).slice(0, 20)
+        };
+        fs.writeFileSync(STATE_FILE, JSON.stringify({ botState: stateToSave })); 
+    } catch (e) {
+        console.error("⚠️ Error guardando estado:", e.message);
+    } 
+};
 
 // ─── CONEXIÓN A DERIV ─────────────────────────────────────────
 let ws = null;
