@@ -319,10 +319,11 @@ function finalizeTrade(c) {
         }
     }
 
+    const timeVE = new Date().toLocaleString('es-VE', { timeZone: 'America/Caracas', hour12: true });
     botState.tradeHistory.unshift({
         symbol: botState.activeSymbol || c.display_symbol,
         type: `🥷 DIFF(≠${barrierDigit})${botState.needsRecovery ? ' [REC]' : ''}`, profit,
-        result: isWin ? 'WIN ✅' : 'LOSS ❌', time: new Date().toLocaleTimeString()
+        result: isWin ? 'WIN ✅' : 'LOSS ❌', time: timeVE
     });
     
     if (botState.tradeHistory.length > 50) botState.tradeHistory.pop();
