@@ -3,8 +3,8 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>HYDRA ENGINE — Bot de Trading Inteligente</title>
-<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🐍</text></svg>">
+<title>🐙 KRAKEN ENGINE v2.0 — Bot de Trading Ultra-Optimizado</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🐙</text></svg>">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
@@ -255,7 +255,7 @@ body::before {
    ═══════════════════════════════════════════════════════════ */
 .engines-row {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(4, 1fr);
   gap: 16px;
   margin-bottom: 24px;
 }
@@ -288,6 +288,9 @@ body::before {
 }
 .engine-card.engine-match::before {
   box-shadow: inset 0 0 40px rgba(168,85,247,0.06), 0 0 30px rgba(168,85,247,0.08);
+}
+.engine-card.engine-differ::before {
+  box-shadow: inset 0 0 40px rgba(245,158,11,0.06), 0 0 30px rgba(245,158,11,0.08);
 }
 
 .engine-card.pulse-trade {
@@ -328,6 +331,7 @@ body::before {
 .engine-evenodd .engine-icon { background: var(--accent-green-dim); }
 .engine-overunder .engine-icon { background: var(--accent-blue-dim); }
 .engine-match .engine-icon { background: var(--accent-purple-dim); }
+.engine-differ .engine-icon { background: rgba(245,158,11,0.15); }
 
 .engine-name {
   font-size: 14px;
@@ -422,6 +426,25 @@ body::before {
 .engine-status-text.disabled {
   background: rgba(255,255,255,0.04);
   color: var(--text-muted);
+}
+
+/* Darwin Badge */
+.darwin-badge {
+  font-size: 11px;
+  padding: 6px 12px;
+  background: rgba(239,68,68,0.1);
+  color: var(--accent-red);
+  border-radius: 8px;
+  text-align: center;
+  margin: 12px 24px 0;
+  border: 1px solid rgba(239,68,68,0.2);
+  display: none;
+  animation: badge-slide-down 0.3s ease forwards;
+}
+
+@keyframes badge-slide-down {
+  from { opacity: 0; transform: translateY(-8px); }
+  to { opacity: 1; transform: translateY(0); }
 }
 
 /* Engine Stats */
@@ -630,6 +653,96 @@ body::before {
   font-weight: 700;
   margin-top: 4px;
   font-variant-numeric: tabular-nums;
+}
+
+/* ═══════════════════════════════════════════════════════════
+   MOMENTUM SHIELD
+   ═══════════════════════════════════════════════════════════ */
+.shield-bar {
+  padding: 20px 24px;
+  margin-bottom: 24px;
+}
+
+.shield-grid {
+  display: flex;
+  gap: 8px;
+}
+
+.shield-level {
+  flex: 1;
+  padding: 10px;
+  border-radius: 8px;
+  text-align: center;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  background: rgba(255,255,255,0.02);
+  color: var(--text-muted);
+  border: 1px solid transparent;
+  transition: all var(--transition);
+}
+
+.shield-level.level-0-active {
+  background: var(--accent-green-dim);
+  color: var(--accent-green);
+  border: 1px solid rgba(16,185,129,0.3);
+  box-shadow: 0 0 10px rgba(16,185,129,0.1);
+}
+
+.shield-level.level-1-active {
+  background: rgba(245,158,11,0.1);
+  color: var(--accent-yellow);
+  border: 1px solid rgba(245,158,11,0.3);
+  box-shadow: 0 0 10px rgba(245,158,11,0.1);
+}
+
+.shield-level.level-2-active {
+  background: rgba(245,158,11,0.18);
+  color: var(--accent-yellow);
+  border: 1px solid rgba(245,158,11,0.4);
+  box-shadow: 0 0 12px rgba(245,158,11,0.15);
+}
+
+.shield-level.level-3-active {
+  background: rgba(239,68,68,0.1);
+  color: var(--accent-red);
+  border: 1px solid rgba(239,68,68,0.3);
+  box-shadow: 0 0 12px rgba(239,68,68,0.1);
+}
+
+.shield-level.level-4-active {
+  background: rgba(239,68,68,0.18);
+  color: var(--accent-red);
+  border: 1px solid rgba(239,68,68,0.4);
+  animation: pulse-red-border 1.5s infinite;
+}
+
+@keyframes pulse-red-border {
+  0%, 100% { box-shadow: 0 0 8px rgba(239,68,68,0.2); border-color: rgba(239,68,68,0.4); }
+  50% { box-shadow: 0 0 20px rgba(239,68,68,0.5); border-color: rgba(239,68,68,0.8); }
+}
+
+.shield-info {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 12px;
+  align-items: center;
+}
+
+.shield-status {
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.shield-cooldown {
+  font-size: 12px;
+  color: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
+  background: rgba(255,255,255,0.04);
+  padding: 4px 10px;
+  border-radius: 20px;
+  border: 1px solid var(--border-card);
 }
 
 /* ═══════════════════════════════════════════════════════════
@@ -911,7 +1024,7 @@ body::before {
 
 .risk-grid {
   display: grid;
-  grid-template-columns: repeat(5, 1fr);
+  grid-template-columns: repeat(6, 1fr);
   gap: 20px;
   align-items: start;
 }
@@ -1037,9 +1150,12 @@ body::before {
 /* ═══════════════════════════════════════════════════════════
    RESPONSIVE
    ═══════════════════════════════════════════════════════════ */
-@media (max-width: 1100px) {
+@media (max-width: 1200px) {
   .engines-row { grid-template-columns: repeat(2, 1fr); }
   .risk-grid { grid-template-columns: repeat(3, 1fr); }
+}
+
+@media (max-width: 1100px) {
   .stats-row { grid-template-columns: repeat(2, 1fr); }
 }
 
@@ -1066,6 +1182,8 @@ body::before {
   .risk-grid { grid-template-columns: 1fr; }
   .digit-metrics { flex-direction: column; }
   .topbar-logo h1 { font-size: 15px; }
+  .shield-grid { flex-wrap: wrap; }
+  .shield-level { flex: 1 1 45%; font-size: 10px; padding: 6px; }
 }
 </style>
 </head>
@@ -1075,8 +1193,8 @@ body::before {
   <!-- ═══════════════════════════ TOP BAR ═══════════════════════════ -->
   <header class="topbar">
     <div class="topbar-logo">
-      <h1>🐍 HYDRA ENGINE</h1>
-      <span class="version">v1.0</span>
+      <h1>🐙 KRAKEN ENGINE</h1>
+      <span class="version">v2.0</span>
     </div>
     <div class="topbar-center">
       <div class="conn-dot" id="connDot"></div>
@@ -1093,6 +1211,7 @@ body::before {
     <div class="stat-card glass">
       <div class="stat-label">PnL Sesión</div>
       <div class="stat-value neutral" id="statPnl">$0.00</div>
+      <canvas id="pnlSparkline" width="200" height="40" style="margin-top:8px;width:100%;height:40px;"></canvas>
       <div class="stat-sub">Ganancia / Pérdida del día</div>
     </div>
     <div class="stat-card glass">
@@ -1135,6 +1254,9 @@ body::before {
           <span>●</span> Desactivado
         </span>
       </div>
+      <div class="darwin-badge" id="darwinBadgeEvenOdd">
+        🦎 Auto-desactivado por Darwin
+      </div>
       <div class="engine-stats">
         <div class="engine-stat">
           <span class="es-label">Ganadas</span>
@@ -1175,6 +1297,9 @@ body::before {
         <span class="engine-status-text disabled" id="statusOverUnder">
           <span>●</span> Desactivado
         </span>
+      </div>
+      <div class="darwin-badge" id="darwinBadgeOverUnder">
+        🦎 Auto-desactivado por Darwin
       </div>
       <div class="engine-stats">
         <div class="engine-stat">
@@ -1217,6 +1342,9 @@ body::before {
           <span>●</span> Desactivado
         </span>
       </div>
+      <div class="darwin-badge" id="darwinBadgeMatch">
+        🦎 Auto-desactivado por Darwin
+      </div>
       <div class="engine-stats">
         <div class="engine-stat">
           <span class="es-label">Ganadas</span>
@@ -1233,6 +1361,50 @@ body::before {
         <div class="engine-stat">
           <span class="es-label">Win Rate</span>
           <span class="es-value neutral" id="maWinRate">0.0%</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- DIFFER -->
+    <div class="engine-card glass engine-differ" id="engineCardDiffer">
+      <div class="engine-header">
+        <div class="engine-info">
+          <div class="engine-icon">🔪</div>
+          <div>
+            <div class="engine-name">DIFFER</div>
+            <div class="engine-subtitle">El Cirujano</div>
+          </div>
+        </div>
+        <label class="toggle">
+          <input type="checkbox" id="toggleDiffer" checked>
+          <div class="toggle-track"></div>
+          <div class="toggle-thumb"></div>
+        </label>
+      </div>
+      <div class="engine-status">
+        <span class="engine-status-text disabled" id="statusDiffer">
+          <span>●</span> Desactivado
+        </span>
+      </div>
+      <div class="darwin-badge" id="darwinBadgeDiffer">
+        🦎 Auto-desactivado por Darwin
+      </div>
+      <div class="engine-stats">
+        <div class="engine-stat">
+          <span class="es-label">Ganadas</span>
+          <span class="es-value positive" id="diWins">0</span>
+        </div>
+        <div class="engine-stat">
+          <span class="es-label">Perdidas</span>
+          <span class="es-value negative" id="diLosses">0</span>
+        </div>
+        <div class="engine-stat">
+          <span class="es-label">PnL</span>
+          <span class="es-value neutral" id="diPnl">$0.00</span>
+        </div>
+        <div class="engine-stat">
+          <span class="es-label">Win Rate</span>
+          <span class="es-value neutral" id="diWinRate">0.0%</span>
         </div>
       </div>
     </div>
@@ -1351,6 +1523,22 @@ body::before {
     </div>
   </div>
 
+  <!-- ═══════════════════════════ MOMENTUM SHIELD ═══════════════════════════ -->
+  <div class="section-title">⚡ Momentum Shield</div>
+  <div class="shield-bar glass">
+    <div class="shield-grid">
+      <div class="shield-level" id="shieldLevel0">Nivel 0</div>
+      <div class="shield-level" id="shieldLevel1">Nivel 1</div>
+      <div class="shield-level" id="shieldLevel2">Nivel 2</div>
+      <div class="shield-level" id="shieldLevel3">Nivel 3</div>
+      <div class="shield-level" id="shieldLevel4">Nivel 4</div>
+    </div>
+    <div class="shield-info">
+      <span class="shield-status" id="shieldStatusText">Normal — Todos los motores activos</span>
+      <span class="shield-cooldown" id="shieldCooldown">Cooldown: 6s</span>
+    </div>
+  </div>
+
   <!-- ═══════════════════════════ RISK METRICS ═══════════════════════════ -->
   <div class="section-title">🛡️ Métricas de Riesgo</div>
   <div class="risk-bar glass">
@@ -1374,6 +1562,16 @@ body::before {
         </div>
       </div>
       <div class="risk-item">
+        <div class="ri-header">
+          <span class="ri-label">Profit Lock</span>
+          <span class="ri-value positive" id="riskProfitLock">$0.00</span>
+        </div>
+        <div class="progress-track">
+          <div class="progress-fill green" id="progressProfitLock" style="width:0%"></div>
+        </div>
+        <div style="font-size:10px;color:var(--text-muted);margin-top:4px;" id="profitLockInfo">Piso: $0.00 | Pico: $0.00</div>
+      </div>
+      <div class="risk-item">
         <div class="ri-label">Operaciones Restantes</div>
         <div class="ri-value" id="riskTradesRemaining" style="font-size:20px;margin-top:4px;">50 / 50</div>
       </div>
@@ -1394,7 +1592,7 @@ body::before {
 
 <script>
 /* ═══════════════════════════════════════════════════════════════════════════
-   HYDRA ENGINE — Frontend Controller
+   KRAKEN ENGINE — Frontend Controller
    ═══════════════════════════════════════════════════════════════════════════ */
 
 // ── State ──────────────────────────────────────────────────────────────────
@@ -1418,10 +1616,12 @@ let state = {
   engineEvenOdd: true,
   engineOverUnder: true,
   engineMatch: true,
+  engineDiffer: true,
   engineStats: {
-    EVEN_ODD: { wins: 0, losses: 0, pnl: 0 },
-    OVER_UNDER: { wins: 0, losses: 0, pnl: 0 },
-    MATCH: { wins: 0, losses: 0, pnl: 0 }
+    EVEN_ODD: { wins: 0, losses: 0, pnl: 0, autoDisabled: false },
+    OVER_UNDER: { wins: 0, losses: 0, pnl: 0, autoDisabled: false },
+    MATCH: { wins: 0, losses: 0, pnl: 0, autoDisabled: false },
+    DIFFER: { wins: 0, losses: 0, pnl: 0, autoDisabled: false }
   },
   shannonEntropy: 0,
   markovEdge: 0,
@@ -1434,13 +1634,18 @@ let state = {
   winRate: '0.0',
   currentEngine: null,
   currentContractType: null,
-  currentBarrier: null
+  currentBarrier: null,
+  momentumShieldLevel: 0,
+  consecutiveWins: 0,
+  profitPeak: 0,
+  profitFloor: 0
 };
 
 let prevDigitHistoryLength = 0;
 let prevLastDigit = null;
 let prevTotalTrades = 0;
 let historyData = [];
+let pnlHistory = [0];
 let animatingBalance = false;
 let displayedBalance = 0;
 let configDebounce = null;
@@ -1558,16 +1763,38 @@ function updateUI(data) {
   $('toggleEvenOdd').checked = data.engineEvenOdd;
   $('toggleOverUnder').checked = data.engineOverUnder;
   $('toggleMatch').checked = data.engineMatch;
+  $('toggleDiffer').checked = data.engineDiffer;
 
   // Engine cards active state
   updateEngineCard('engineCardEvenOdd', 'statusEvenOdd', data.engineEvenOdd, data.isRunning, data.currentEngine === 'EVEN_ODD');
   updateEngineCard('engineCardOverUnder', 'statusOverUnder', data.engineOverUnder, data.isRunning, data.currentEngine === 'OVER_UNDER');
   updateEngineCard('engineCardMatch', 'statusMatch', data.engineMatch, data.isRunning, data.currentEngine === 'MATCH');
+  updateEngineCard('engineCardDiffer', 'statusDiffer', data.engineDiffer, data.isRunning, data.currentEngine === 'DIFFER');
 
   // Engine stats
   updateEngineStats('eo', data.engineStats.EVEN_ODD);
   updateEngineStats('ou', data.engineStats.OVER_UNDER);
   updateEngineStats('ma', data.engineStats.MATCH);
+  updateEngineStats('di', data.engineStats.DIFFER);
+
+  // Darwin mode badges toggling
+  ['EVEN_ODD', 'OVER_UNDER', 'MATCH', 'DIFFER'].forEach(eng => {
+    const stats = data.engineStats[eng];
+    const badgeId = {
+      'EVEN_ODD': 'darwinBadgeEvenOdd',
+      'OVER_UNDER': 'darwinBadgeOverUnder',
+      'MATCH': 'darwinBadgeMatch',
+      'DIFFER': 'darwinBadgeDiffer'
+    }[eng];
+    const badge = $(badgeId);
+    if (badge) {
+      if (stats && stats.autoDisabled) {
+        badge.style.display = 'block';
+      } else {
+        badge.style.display = 'none';
+      }
+    }
+  });
 
   // Detect trade fired for pulse
   if (data.totalTradesSession > prevTotalTrades && data.currentEngine) {
@@ -1575,7 +1802,7 @@ function updateUI(data) {
   }
   prevTotalTrades = data.totalTradesSession;
 
-  // Digit display — update whenever there's a new digit (not just when array length changes)
+  // Digit display
   if (data.digitHistory && data.digitHistory.length > 0) {
     if (data.digitHistory.length !== prevDigitHistoryLength || data.lastDigit !== prevLastDigit) {
       renderDigitCircles(data.digitHistory, data.lastDigit);
@@ -1621,6 +1848,14 @@ function updateUI(data) {
   $('progressLoss').style.width = lossPct + '%';
   $('progressProfit').style.width = profitPct + '%';
 
+  // Profit Lock visual sync
+  const profitLockVal = data.profitFloor || 0;
+  const peakVal = data.profitPeak || 0;
+  $('riskProfitLock').textContent = '$' + profitLockVal.toFixed(2);
+  $('profitLockInfo').textContent = `Piso: $${profitLockVal.toFixed(2)} | Pico: $${peakVal.toFixed(2)}`;
+  const progressLockPct = Math.min((profitLockVal / Math.max(peakVal, tp, 1)) * 100, 100);
+  $('progressProfitLock').style.width = progressLockPct + '%';
+
   const remaining = (data.maxTradesPerDay || 50) - (data.totalTradesSession || 0);
   $('riskTradesRemaining').textContent = remaining + ' / ' + (data.maxTradesPerDay || 50);
 
@@ -1639,7 +1874,44 @@ function updateUI(data) {
     cbEl.textContent = '✓ Inactivo';
   }
 
-  // Store previous state
+  // Momentum Shield visual sync
+  const shieldLevel = data.momentumShieldLevel || 0;
+  for (let i = 0; i <= 4; i++) {
+    const el = $('shieldLevel' + i);
+    if (el) {
+      el.className = 'shield-level';
+      if (i === shieldLevel) {
+        el.classList.add('level-' + i + '-active');
+      }
+    }
+  }
+
+  const shieldTexts = {
+    0: 'Normal — Todos los motores activos',
+    1: 'Alerta — Stake al 75% | Cooldown +3s',
+    2: 'Defensa — Stake al 50% | Motor MATCH desactivado | Cooldown +10s',
+    3: 'Crítico — Stake al 35% | Solo PAR/IMPAR activo | Cooldown +25s',
+    4: 'LOCKDOWN — Circuit Breaker activo'
+  };
+  $('shieldStatusText').textContent = shieldTexts[shieldLevel] || shieldTexts[0];
+
+  const cooldownSecs = (data.dynamicCooldown || 6000) / 1000;
+  $('shieldCooldown').textContent = `Cooldown: ${cooldownSecs.toFixed(0)}s`;
+
+  // Sparkline Chart update on every status poll
+  const currentPnl = data.pnlSession || 0;
+  if (data.totalTradesSession === 0 && pnlHistory.length > 1) {
+    pnlHistory = [0];
+    drawSparkline(pnlHistory);
+  } else if (pnlHistory.length === 0 || pnlHistory[pnlHistory.length - 1] !== currentPnl) {
+    pnlHistory.push(currentPnl);
+    if (pnlHistory.length > 50) {
+      pnlHistory.shift();
+    }
+    drawSparkline(pnlHistory);
+  }
+
+  // Store state
   Object.assign(state, data);
 }
 
@@ -1667,6 +1939,7 @@ function updateEngineCard(cardId, statusId, enabled, running, isCurrent) {
 }
 
 function updateEngineStats(prefix, stats) {
+  if (!stats) return;
   const w = stats.wins || 0;
   const l = stats.losses || 0;
   const pnl = stats.pnl || 0;
@@ -1686,7 +1959,8 @@ function pulseEngine(engineKey) {
   const map = {
     'EVEN_ODD': 'engineCardEvenOdd',
     'OVER_UNDER': 'engineCardOverUnder',
-    'MATCH': 'engineCardMatch'
+    'MATCH': 'engineCardMatch',
+    'DIFFER': 'engineCardDiffer'
   };
   const card = $(map[engineKey]);
   if (!card) return;
@@ -1737,11 +2011,9 @@ function renderDigitFrequency(freq) {
 }
 
 // Helper robusto para formatear la hora en zona horaria de Venezuela (America/Caracas)
-// Evita fallos de "Invalid Date" tanto para cadenas del backend formateadas previamente como para nuevas cadenas ISO.
 function formatTimeVE(timeVal) {
   if (!timeVal) return '—';
   
-  // Intentar parsear como objeto Date (funciona para cadenas ISO estándar)
   let d = new Date(timeVal);
   if (!isNaN(d.getTime())) {
     return d.toLocaleTimeString('es-VE', { 
@@ -1752,7 +2024,6 @@ function formatTimeVE(timeVal) {
     });
   }
   
-  // Failsafe: Si es la cadena previa formateada con coma como "20/5/2026, 6:43:50 p. m.", extraemos la hora directamente
   if (typeof timeVal === 'string') {
     if (timeVal.includes(',')) {
       const parts = timeVal.split(',');
@@ -1795,7 +2066,8 @@ function renderHistory(history) {
     const engineLabel = {
       'EVEN_ODD': 'Even/Odd',
       'OVER_UNDER': 'Over/Under',
-      'MATCH': 'Match'
+      'MATCH': 'Match',
+      'DIFFER': 'Differ'
     }[t.engine] || t.engine || '—';
 
     return `<tr class="${rowClass}">
@@ -1814,6 +2086,65 @@ function renderHistory(history) {
   tbody.innerHTML = newHTML;
 }
 
+// ── Draw Sparkline Chart ───────────────────────────────────────────────────
+function drawSparkline(points) {
+  const canvas = $('pnlSparkline');
+  if (!canvas) return;
+  const ctx = canvas.getContext('2d');
+  const width = canvas.width;
+  const height = canvas.height;
+
+  ctx.clearRect(0, 0, width, height);
+
+  if (points.length < 2) {
+    ctx.beginPath();
+    ctx.strokeStyle = 'var(--text-muted)';
+    ctx.lineWidth = 2;
+    ctx.moveTo(0, height / 2);
+    ctx.lineTo(width, height / 2);
+    ctx.stroke();
+    return;
+  }
+
+  const min = Math.min(...points);
+  const max = Math.max(...points);
+  const range = max - min === 0 ? 1 : max - min;
+
+  const isUp = points[points.length - 1] >= points[0];
+  const color = isUp ? '#10b981' : '#ef4444';
+  const colorDim = isUp ? 'rgba(16,185,129,0.12)' : 'rgba(239,68,68,0.12)';
+
+  ctx.beginPath();
+  
+  const coords = points.map((p, idx) => {
+    const x = (idx / (points.length - 1)) * width;
+    const y = height - 4 - ((p - min) / range) * (height - 8);
+    return { x, y };
+  });
+
+  ctx.moveTo(coords[0].x, coords[0].y);
+  for (let i = 1; i < coords.length; i++) {
+    ctx.lineTo(coords[i].x, coords[i].y);
+  }
+
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 2.5;
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+  ctx.stroke();
+
+  // Area under
+  ctx.lineTo(width, height);
+  ctx.lineTo(0, height);
+  ctx.closePath();
+  
+  const gradient = ctx.createLinearGradient(0, 0, 0, height);
+  gradient.addColorStop(0, colorDim);
+  gradient.addColorStop(1, 'transparent');
+  ctx.fillStyle = gradient;
+  ctx.fill();
+}
+
 // ── API Calls ──────────────────────────────────────────────────────────────
 async function fetchStatus() {
   try {
@@ -1823,7 +2154,6 @@ async function fetchStatus() {
       updateUI(json.data);
     }
   } catch (e) {
-    // silent — just means server unreachable
     $('connDot').classList.remove('connected');
     $('connLabel').textContent = 'Sin conexión al servidor';
   }
@@ -1837,6 +2167,16 @@ async function fetchHistory() {
       if (JSON.stringify(json.history) !== JSON.stringify(historyData)) {
         historyData = json.history;
         renderHistory(historyData);
+        
+        // Reconstruct PnL history path
+        const reconstructedPnl = [0];
+        let currentSum = 0;
+        historyData.forEach(t => {
+          currentSum += t.profit || 0;
+          reconstructedPnl.push(currentSum);
+        });
+        pnlHistory = reconstructedPnl.slice(-50);
+        drawSparkline(pnlHistory);
       }
     }
   } catch (e) { /* silent */ }
@@ -1855,7 +2195,7 @@ async function handleStart() {
     });
     const json = await res.json();
     if (json.success) {
-      showToast('Bot iniciado correctamente', 'success');
+      showToast('Kraken v2.0 Iniciado', 'success');
     } else {
       showToast('Error: ' + (json.error || 'No se pudo iniciar'), 'error');
     }
@@ -1874,7 +2214,7 @@ async function handleStop() {
     });
     const json = await res.json();
     if (json.success) {
-      showToast('Bot detenido', 'info');
+      showToast('Kraken v2.0 Detenido', 'info');
     } else {
       showToast('Error al detener el bot', 'error');
     }
@@ -1894,6 +2234,8 @@ async function handleResetDay() {
     const json = await res.json();
     if (json.success) {
       showToast('Estadísticas del día reseteadas', 'success');
+      pnlHistory = [0];
+      drawSparkline(pnlHistory);
     } else {
       showToast('Error al resetear', 'error');
     }
@@ -1914,7 +2256,8 @@ async function handleEngineToggle(engine, enabled) {
     const engineNames = {
       'EVEN_ODD': 'Even/Odd',
       'OVER_UNDER': 'Over/Under',
-      'MATCH': 'Match'
+      'MATCH': 'Match',
+      'DIFFER': 'Differ'
     };
     showToast(`Motor ${engineNames[engine]} ${enabled ? 'activado' : 'desactivado'}`, 'info');
   } catch (e) {
@@ -1967,6 +2310,9 @@ $('toggleOverUnder').addEventListener('change', function() {
 });
 $('toggleMatch').addEventListener('change', function() {
   handleEngineToggle('MATCH', this.checked);
+});
+$('toggleDiffer').addEventListener('change', function() {
+  handleEngineToggle('DIFFER', this.checked);
 });
 
 // ── Toast System ───────────────────────────────────────────────────────────
