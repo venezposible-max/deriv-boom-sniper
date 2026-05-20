@@ -542,7 +542,7 @@ app.use(express.static(path.join(__dirname, 'public')));
 
 // Ruta principal — sirve la interfaz web
 app.get('/', (req, res) => {
-    res.sendFile(path.join(__dirname, 'public', 'hybrid.html'));
+    res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
 // ─── API: Estado completo del bot ───

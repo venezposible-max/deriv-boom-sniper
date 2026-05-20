@@ -1,0 +1,938 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🐇 La Pata del Conejo - Deriv Sniper Engine</title>
+    <link rel="manifest" href="/manifest.json">
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700;900&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@700&display=swap');
+
+        * { box-sizing: border-box; }
+        body {
+            margin: 0; padding: 0;
+            font-family: 'Inter', sans-serif;
+            background: #050510;
+            color: #fff;
+            min-height: 100vh;
+            transition: background 0.5s ease;
+        }
+        body.real-mode { background: #0a0505; }
+        .card.real-mode { border: 1px solid rgba(220,38,38,0.3); }
+
+        .container { max-width: 480px; margin: 0 auto; padding: 20px 16px 40px; }
+
+        /* ── HEADER ── */
+        .header { text-align: center; margin-bottom: 20px; padding-top: 10px; }
+        .header h1 {
+            font-size: 26px; font-weight: 900; margin: 0;
+            background: linear-gradient(135deg, #34d399, #059669);
+            -webkit-background-clip: text;
+            background-clip: text;
+            -webkit-text-fill-color: transparent;
+            text-shadow: none;
+            filter: drop-shadow(0 0 18px rgba(52,211,153,0.5));
+        }
+        .header.real-mode h1 {
+            background: linear-gradient(135deg, #f87171, #dc2626);
+            filter: drop-shadow(0 0 18px rgba(220,38,38,0.5));
+        }
+        .header p { color: #666; font-size: 12px; margin: 6px 0 0; letter-spacing: 3px; text-transform: uppercase; }
+
+        /* ── ACCOUNT TOGGLE ── */
+        .account-selector {
+            display: flex; background: rgba(255,255,255,0.05); border-radius: 12px;
+            padding: 4px; margin-bottom: 24px; border: 1px solid rgba(255,255,255,0.1);
+        }
+        .account-btn {
+            flex: 1; padding: 10px; border-radius: 8px; border: none; cursor: pointer;
+            font-size: 11px; font-weight: 900; letter-spacing: 1px; text-transform: uppercase;
+            transition: all 0.3s; color: #666; background: transparent;
+        }
+        .account-btn.active.demo { background: #7c3aed; color: #fff; box-shadow: 0 4px 15px rgba(124,58,237,0.3); }
+        .account-btn.active.real { background: #dc2626; color: #fff; box-shadow: 0 4px 15px rgba(220,38,38,0.3); }
+
+        /* ── CHIPS ── */
+        .chip-row { display: flex; justify-content: center; gap: 8px; margin-bottom: 20px; }
+        .chip {
+            padding: 4px 14px; border-radius: 30px; font-size: 11px; font-weight: 700;
+            text-transform: uppercase; letter-spacing: 1px;
+        }
+        .chip-purple { background: rgba(167,139,250,0.15); border: 1px solid #7c3aed; color: #a78bfa; }
+        .chip-green  { background: rgba(52,211,153,0.15);  border: 1px solid #059669; color: #34d399; }
+        .chip-gold   { background: rgba(250,204,21,0.15);  border: 1px solid #b45309; color: #fbbf24; }
+
+        /* ── PRICE HERO ── */
+        .price-block { text-align: center; margin-bottom: 20px; }
+        .balance-badge {
+            display: inline-block;
+            background: rgba(167,139,250,0.1); border: 1px solid #7c3aed;
+            color: #a78bfa; padding: 5px 16px; border-radius: 30px;
+            font-size: 12px; font-weight: 700; margin-bottom: 12px;
+        }
+        .price-hero {
+            font-size: 3.8rem; font-weight: 900; line-height: 1;
+            color: #a78bfa;
+            text-shadow: 0 0 40px rgba(167,139,250,0.4);
+        }
+        .last-digit-badge {
+            display: inline-flex; align-items: center; justify-content: center;
+            width: 64px; height: 64px; border-radius: 50%;
+            background: rgba(167,139,250,0.1); border: 2px solid #7c3aed;
+            font-size: 2.2rem; font-weight: 900; color: #fff;
+            margin: 10px auto; text-shadow: 0 0 20px #a78bfa;
+            transition: transform 0.1s;
+        }
+        .digit-label { font-size: 11px; color: #666; letter-spacing: 2px; text-transform: uppercase; margin-bottom: 6px; }
+
+        /* ── CARDS ── */
+        .card {
+            background: rgba(255,255,255,0.03); border-radius: 20px;
+            padding: 22px; border: 1px solid rgba(255,255,255,0.07);
+            margin-bottom: 16px;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+            backdrop-filter: blur(10px);
+        }
+
+        /* ── STATS ── */
+        .stat-row { display: flex; justify-content: space-between; gap: 12px; }
+        .stat-box { flex: 1; text-align: center; }
+        .stat-label { font-size: 10px; color: #555; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 6px; }
+        .stat-value { font-size: 22px; font-weight: 900; }
+        .green { color: #34d399; }
+        .red   { color: #f87171; }
+        .purple { color: #a78bfa; }
+
+        /* ── WIN RATE BAR ── */
+        .winrate-bar {
+            height: 8px; background: #1a1a2e; border-radius: 4px;
+            margin-top: 14px; overflow: hidden; position: relative;
+        }
+        .winrate-fill {
+            height: 100%; border-radius: 4px;
+            background: linear-gradient(90deg, #7c3aed, #34d399);
+            transition: width 0.6s ease;
+        }
+
+        /* ── DIGIT HISTORY ── */
+        .digit-track {
+            display: flex; gap: 6px; flex-wrap: wrap;
+            margin-top: 8px; justify-content: flex-start;
+        }
+        .digit-pill {
+            width: 30px; height: 30px; border-radius: 8px;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 13px; font-weight: 900;
+            transition: all 0.3s;
+        }
+        .digit-hot  { background: rgba(167,139,250,0.3); border: 1px solid #7c3aed; color: #c4b5fd; }
+        .digit-cold { background: rgba(255,255,255,0.04); border: 1px solid #333; color: #555; }
+        .digit-barrier { background: rgba(251,191,36,0.2); border: 1px solid #b45309; color: #fbbf24; }
+
+        /* ── BARRIER DISPLAY ── */
+        .barrier-card {
+            text-align: center; padding: 16px;
+            background: rgba(251,191,36,0.06); border: 1px solid rgba(251,191,36,0.2);
+            border-radius: 16px; margin-bottom: 16px;
+        }
+        .barrier-card .label { font-size: 10px; color: #666; text-transform: uppercase; letter-spacing: 2px; margin-bottom: 8px; }
+        .barrier-card .value { font-size: 2rem; font-weight: 900; color: #fbbf24; }
+        .barrier-card .sublabel { font-size: 11px; color: #888; margin-top: 4px; }
+
+        /* ── ACTIVE TRADE ── */
+        .trade-active {
+            border: 1px solid rgba(167,139,250,0.4) !important;
+            animation: pulse-border 2s infinite alternate;
+        }
+        @keyframes pulse-border {
+            from { box-shadow: 0 0 10px rgba(167,139,250,0.1); }
+            to   { box-shadow: 0 0 30px rgba(167,139,250,0.4); }
+        }
+
+        /* ── ACTIVE SHIELD (MULTIPLIER) ── */
+        .shield-active {
+            border: 1px solid rgba(52,211,153,0.4) !important;
+            animation: pulse-border-shield 2s infinite alternate;
+        }
+        @keyframes pulse-border-shield {
+            from { box-shadow: 0 0 10px rgba(52,211,153,0.1); }
+            to   { box-shadow: 0 0 30px rgba(52,211,153,0.4); }
+        }
+
+        /* ── BUTTONS ── */
+        .btn-main {
+            width: 100%; padding: 18px; border-radius: 15px; border: none;
+            font-size: 16px; font-weight: 900; cursor: pointer;
+            text-transform: uppercase; transition: all 0.3s; letter-spacing: 1px;
+            font-family: inherit;
+        }
+        .btn-start {
+            background: linear-gradient(135deg, #7c3aed 0%, #4c1d95 100%);
+            color: #fff; box-shadow: 0 10px 30px rgba(124,58,237,0.4);
+        }
+        .btn-start:hover { transform: translateY(-2px); box-shadow: 0 14px 35px rgba(124,58,237,0.5); }
+        .btn-stop {
+            background: linear-gradient(135deg, #dc2626, #991b1b);
+            color: #fff; box-shadow: 0 10px 20px rgba(220,38,38,0.3);
+        }
+        .btn-danger {
+            background: none; border: 1px solid #7c3aed; color: #a78bfa;
+            padding: 10px; border-radius: 10px;
+            font-size: 12px; font-weight: 700; cursor: pointer; font-family: inherit;
+        }
+
+        /* ── INPUTS ── */
+        .input-group { margin-bottom: 16px; }
+        .input-group label { display: block; font-size: 11px; color: #666; font-weight: 700; margin-bottom: 8px; text-transform: uppercase; letter-spacing: 1px; }
+        .input-group input {
+            width: 100%; background: rgba(255,255,255,0.04); border: 1px solid #2a2a3e;
+            padding: 14px; border-radius: 12px; color: #fff; font-size: 15px;
+            font-family: inherit; font-weight: 700;
+            transition: border-color 0.2s;
+        }
+
+        /* ── RECOVERY SWITCH ── */
+        .recovery-box {
+            display: flex; align-items: center; justify-content: space-between;
+            background: rgba(167,139,250,0.05); border: 1px solid rgba(167,139,250,0.1);
+            padding: 14px 18px; border-radius: 12px; margin-bottom: 24px;
+            transition: all 0.3s;
+        }
+        .recovery-box.active {
+            background: rgba(52,211,153,0.08); border-color: rgba(52,211,153,0.3);
+            box-shadow: 0 0 15px rgba(52,211,153,0.1);
+        }
+        .rec-label { font-size: 13px; font-weight: 700; color: #a78bfa; display: flex; align-items: center; gap: 8px; }
+        .recovery-box.active .rec-label { color: #34d399; }
+        
+        .switch {
+            position: relative; display: inline-block; width: 44px; height: 24px;
+        }
+        .switch input { opacity: 0; width: 0; height: 0; }
+        .slider {
+            position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0;
+            background-color: #2a2a3e; transition: .4s; border-radius: 24px;
+        }
+        .slider:before {
+            position: absolute; content: ""; height: 18px; width: 18px; left: 3px; bottom: 3px;
+            background-color: white; transition: .4s; border-radius: 50%;
+        }
+        input:checked + .slider { background-color: #059669; }
+        input:checked + .slider:before { transform: translateX(20px); }
+        .input-group input:focus { outline: none; border-color: #7c3aed; }
+
+        /* ── HISTORY ── */
+        .history-item {
+            display: flex; justify-content: space-between; align-items: center;
+            padding: 12px 0; border-bottom: 1px solid rgba(255,255,255,0.05);
+            font-size: 12px;
+        }
+        .history-item:last-child { border-bottom: none; }
+        .history-meta { color: #555; font-size: 11px; margin-top: 2px; }
+
+        /* ── FREQUENCY TABLE ── */
+        .freq-row {
+            display: flex; gap: 4px; justify-content: space-between; margin-top: 10px;
+        }
+        .freq-cell {
+            flex: 1; text-align: center; padding: 8px 4px;
+            background: rgba(255,255,255,0.03); border-radius: 8px;
+            border: 1px solid #1a1a2e; transition: all 0.3s;
+        }
+        .freq-cell.hot-cell { border-color: #7c3aed; background: rgba(124,58,237,0.15); }
+        .freq-cell.barrier-cell { border-color: #b45309; background: rgba(251,191,36,0.1); }
+        .freq-digit { font-size: 14px; font-weight: 900; }
+        .freq-count { font-size: 9px; color: #555; margin-top: 2px; }
+
+            font-size: 10px; color: #555; font-weight: 700; text-transform: uppercase;
+            letter-spacing: 2px; margin-bottom: 12px;
+        }
+
+        /* ── ACCOUNT SWITCH ── */
+        .account-switch {
+            display: inline-flex; background: rgba(0,0,0,0.5); padding: 4px; border-radius: 12px;
+            border: 1px solid rgba(255,255,255,0.05); margin-top: 15px;
+        }
+        .account-switch button {
+            background: none; border: none; padding: 6px 16px; border-radius: 8px;
+            font-size: 11px; font-weight: 800; color: #888; cursor: pointer; transition: all 0.3s;
+            font-family: inherit; text-transform: uppercase; letter-spacing: 1px;
+        }
+        .account-switch button.active.demo { background: #38bdf8; color: #fff; box-shadow: 0 0 10px rgba(56,189,248,0.4); }
+        .account-switch button.active.real { background: #fbbf24; color: #000; box-shadow: 0 0 10px rgba(251,191,36,0.4); }
+
+    </style>
+</head>
+<body>
+<div class="container">
+
+    <div class="header" id="mainHeader">
+        <h1>🐾 La Pata del Conejo</h1>
+        <p id="subTitle">CISNE NEGRO · v14.2 REAL</p>
+        <div id="sessionTimer" style="font-size: 13px; color: #a78bfa; font-weight: 700; margin-top: 8px; letter-spacing: 2px;">--:--:--</div>
+        
+        <!-- ACCOUNTS TOGGLE -->
+        <div style="display: flex; justify-content: center;">
+            <div class="account-switch">
+                <button id="btnAccDemo" class="active demo" onclick="switchAccount(false)">Virtual</button>
+                <button id="btnAccReal" onclick="switchAccount(true)">Real USD</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- MARKET SELECTOR -->
+    <div style="display: flex; gap: 6px; margin-bottom: 20px; justify-content: center;">
+        <button id="btnV10" onclick="switchMarket('R_10')" class="chip chip-purple" style="cursor:pointer; border:none;">V10</button>
+        <button id="btnV25" onclick="switchMarket('R_25')" class="chip chip-purple" style="cursor:pointer; border:none;">V25</button>
+        <button id="btnV50" onclick="switchMarket('R_50')" class="chip chip-purple" style="cursor:pointer; border:none;">V50</button>
+        <button id="btnV100" onclick="switchMarket('R_100')" class="chip chip-purple" style="cursor:pointer; border:none;">V100</button>
+    </div>
+    <span id="scanRangeVal" style="display:none">100</span>
+
+    <!-- CHIPS -->
+    <div class="chip-row">
+        <span class="chip chip-purple" id="chipStatus">OFFLINE</span>
+        <span class="chip chip-green" id="chipWinRate">WIN 0%</span>
+        <span class="chip chip-gold" id="chipTrades">0 TRADES</span>
+    </div>
+
+    <!-- PRICE + BALANCE -->
+    <div class="price-block">
+        <div class="balance-badge" id="balanceDisplay">SALDO: $0.00</div>
+        <div class="price-hero" id="priceDisplay">---</div>
+        
+        <!-- STREAK RADAR -->
+        <div style="display: flex; justify-content: center; gap: 8px; margin-top: 15px; flex-wrap: wrap;">
+            <div id="streakBadge" style="padding: 6px 14px; border-radius: 10px; background: rgba(124,58,237,0.15); border: 1px solid #7c3aed; font-size: 12px; font-weight: 800; color: #a78bfa;">
+                🛡️ Racha: <span id="entropyDisplay">0/4</span>
+            </div>
+            <div id="streakSymbolBadge" style="padding: 6px 14px; border-radius: 10px; background: rgba(52,211,153,0.1); border: 1px solid rgba(52,211,153,0.3); font-size: 12px; font-weight: 800; color: #34d399;">
+                🎯 Mercado: <span id="markovDisplay">-</span>
+            </div>
+        </div>
+        <!-- STREAK PROGRESS BAR -->
+        <div style="margin-top:12px; padding: 0 20px;">
+            <div style="height: 6px; background: rgba(255,255,255,0.06); border-radius: 3px; overflow: hidden;">
+                <div id="streakProgress" style="height: 100%; width: 0%; background: linear-gradient(90deg, #7c3aed, #34d399); border-radius: 3px; transition: width 0.4s ease;"></div>
+            </div>
+            <div style="font-size: 9px; color: #555; text-align: center; margin-top: 4px;" id="streakProgressLabel">Esperando anomalía...</div>
+        </div>
+    </div>
+
+    <!-- LAST DIGIT + BARRIER -->
+    <div style="display:flex; gap:12px; margin-bottom:16px;">
+        <div style="flex:1; text-align:center; background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.07); border-radius:16px; padding:16px;">
+            <div class="digit-label">Último Dígito</div>
+            <div class="last-digit-badge" id="lastDigitBadge">-</div>
+        </div>
+        <div class="barrier-card" style="flex:1; margin-bottom:0;">
+            <div class="label" id="barrierLabelTitle">Diferir De</div>
+            <div class="value" id="barrierDisplay" style="font-size: 1.5rem;">ESPERANDO</div>
+            <div class="sublabel" id="barrierLabelSub">Buscando Cisne Negro (4 Repetidos)...</div>
+        </div>
+    </div>
+
+    <!-- STATS -->
+    <div class="card">
+        <div class="stat-row">
+            <div class="stat-box">
+                <div class="stat-label">PnL Sesión</div>
+                <div class="stat-value" id="pnlValue">$0.00</div>
+            </div>
+            <div class="stat-box">
+                <div class="stat-label">Ganados ✅</div>
+                <div class="stat-value green" id="winsValue">0</div>
+            </div>
+            <div class="stat-box">
+                <div class="stat-label">Perdidos ❌</div>
+                <div class="stat-value red" id="lossesValue">0</div>
+            </div>
+        </div>
+        <div class="winrate-bar">
+            <div class="winrate-fill" id="winrateFill" style="width:0%"></div>
+        </div>
+        <div style="display:flex; justify-content:space-between; margin-top:6px;">
+            <span style="font-size:10px; color:#555;">Win Rate</span>
+            <span style="font-size:11px; color:#a78bfa; font-weight:700;" id="winrateText">0%</span>
+        </div>
+    </div>
+
+    <!-- DIGIT FREQUENCY -->
+    <div class="card">
+        <div class="section-label">Frecuencia de Dígitos (últimos 20 ticks)</div>
+        <div class="freq-row" id="freqTable">
+            <!-- Generated by JS -->
+        </div>
+    </div>
+    <!-- SCANNING CARD -->
+    <div class="card" id="scanningCard" style="display:none; text-align:center; border: 1px dashed rgba(167, 139, 250, 0.4);">
+        <div style="font-size:16px; font-weight:700; color:#a78bfa; margin-bottom: 8px;" class="pulse-anim">📡 Escaneando Mercados...</div>
+        <div style="font-size:12px; color:#aaa;" id="scanningText">🛡️ Escaneando Escudo Nivel 4 (4 Repeticiones)...</div>
+    </div>
+
+    <!-- ACTIVE TRADE -->
+    <div class="card trade-active" id="tradeCard" style="display:none; text-align:center;">
+        <div class="stat-label">⚡ CONTRATO ACTIVO</div>
+        <div style="font-size:14px; font-weight:900; color:#a78bfa; margin:6px 0;" id="activeBarrierLabel">NO-?</div>
+        <div style="font-size:2rem; font-weight:900; margin:8px 0;" id="tradeProfit">$0.00</div>
+        <div class="stat-label">Esperando resultado del tick...</div>
+    </div>
+
+    <!-- STRADDLE REMOVED -->
+
+    <!-- CONTROL -->
+    <div class="card">
+        <div class="section-label">Configuración</div>
+        <div style="display:flex; gap:8px; margin-bottom:14px;">
+            <div class="input-group" style="flex:1; margin-bottom:0;">
+                <label>Stake Base ($)</label>
+                <input type="number" id="stake" value="1.00" step="1" onblur="syncConfig()" style="border-color: #7c3aed; box-shadow: 0 0 10px rgba(124,58,237,0.2);">
+            </div>
+            <div class="input-group" style="flex:1; margin-bottom:0;">
+                <label>Max Loss ($)</label>
+                <input type="number" id="maxDailyLoss" value="20" step="5" onblur="syncConfig()">
+            </div>
+            <div class="input-group" style="flex:1; margin-bottom:0;">
+                <label>Meta ($)</label>
+                <input type="number" id="takeProfit" value="10" step="1" onblur="syncConfig()">
+            </div>
+        </div>
+
+        <!-- Daily P&L info -->
+        <div style="display:flex; justify-content:space-between; font-size:10px; color:#555; margin-bottom:12px; padding:0 4px;">
+            <div>Hoy: <span id="dailyProfit" style="color:#34d399; font-weight:700;">$0.00</span> | <span id="dailyLoss" style="color:#f87171; font-weight:700;">$0.00</span></div>
+            <div>Neto: <span id="dailyNet" style="font-weight:900;">$0.00</span></div>
+        </div>
+        
+        <!-- GHOST MODE TOGGLE -->
+        <div style="background: rgba(167,139,250,0.05); border: 1px solid rgba(167,139,250,0.2); padding: 12px; border-radius: 12px; display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+            <div>
+                <div style="font-weight: 800; font-size: 13px; color: #a78bfa;">👻 Modo Fantasma (Filtro 99%)</div>
+                <div style="font-size: 11px; color: #888;" id="ghostStatusText">Espera un fallo virtual antes de disparar real</div>
+            </div>
+            <label class="switch">
+                <input type="checkbox" id="ghostToggle" onchange="toggleGhostMode()">
+                <span class="slider"></span>
+            </label>
+        </div>
+
+
+
+        <!-- AUTO RECOVERY TOGGLE -->
+        <div style="background: rgba(251, 191, 36, 0.05); border: 1px solid rgba(251, 191, 36, 0.2); padding: 12px; border-radius: 12px; display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+            <div>
+                <div style="font-weight: 800; font-size: 13px; color: #fbbf24;">🛡️ Cobertura Automática (x10)</div>
+                <div style="font-size: 11px; color: #888;" id="coberturaStatusText">Multiplicar stake x10 tras pérdida para recuperar</div>
+            </div>
+            <label class="switch">
+                <input type="checkbox" id="coberturaToggle" onchange="toggleCobertura()" checked>
+                <span class="slider"></span>
+            </label>
+        </div>
+
+        <button id="btnToggle" class="btn-main btn-start" onclick="toggleBot()">
+             🛡️ Iniciar Motor Dual
+        </button>
+    </div>
+
+    <!-- DEBUG CONSOLE (Temporary for troubleshooting) -->
+    <div class="card" style="border: 1px solid #333; background: #000;">
+        <div style="font-size: 10px; color: #666; margin-bottom: 5px;">DEBUG LOG</div>
+        <div id="debugLog" style="font-family: monospace; font-size: 10px; color: #34d399; height: 40px; overflow-y: auto;">
+            Esperando conexión...
+        </div>
+    </div>
+
+    <!-- HISTORY -->
+    <div class="card">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px;">
+            <div class="section-label" style="margin:0;">Historial Reciente</div>
+            <button class="btn-danger" onclick="resetDay()">Resetear Día</button>
+        </div>
+        <div id="history"></div>
+    </div>
+</div>
+
+<script>
+    let isRunning = false;
+    let isFetching = false;
+    let lastDigitHistory = [];
+    let currentStrategy = 'DIFFERS';
+
+    // switchStrategy removed
+    
+
+    async function toggleCobertura() {
+        try {
+            await fetch('/differs/control', {
+                method: 'POST', headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ action: 'TOGGLE_COBERTURA' })
+            });
+            await fetchStatus(true);
+        } catch (e) { console.error(e); }
+    }
+
+    async function toggleGhostMode() {
+        try {
+            await fetch('/differs/control', {
+                method: 'POST', headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ action: 'TOGGLE_GHOST_MODE' })
+            });
+            await fetchStatus(true);
+        } catch (e) { console.error(e); }
+    }
+
+    // Build frequency table
+    function buildFreqTable(digitHistory, barrier) {
+        const freq = {};
+        for (let d = 0; d <= 9; d++) freq[d] = 0;
+        const slice = digitHistory.slice(-20);
+        slice.forEach(d => freq[d]++);
+
+        const maxFreq = Math.max(...Object.values(freq));
+        let html = '';
+        for (let d = 0; d <= 9; d++) {
+            const isBarrier = String(d) === String(barrier);
+            const isHot = freq[d] === maxFreq && maxFreq > 0;
+            let cls = 'freq-cell';
+            if (isBarrier) cls += ' barrier-cell';
+            else if (isHot) cls += ' hot-cell';
+
+            const color = isBarrier ? '#fbbf24' : (isHot ? '#a78bfa' : '#555');
+            html += `<div class="${cls}">
+                <div class="freq-digit" style="color:${color}">${d}</div>
+                <div class="freq-count">${freq[d]}x</div>
+            </div>`;
+        }
+        document.getElementById('freqTable').innerHTML = html;
+    }
+
+    async function fetchStatus(forceSync = false) {
+        if (isFetching) return;
+        isFetching = true;
+        try {
+            const res = await fetch('/differs/status');
+            const { data } = await res.json();
+
+            isRunning = !!data.isRunning;
+
+            // URGENT SYNC: Botón de Control
+            const btn = document.getElementById('btnToggle');
+            if (btn) {
+                btn.innerText = isRunning ? '⏸️ Parar Motores' : '🛡️ Iniciar Motor Dual';
+                btn.className = `btn-main ${isRunning ? 'btn-stop' : 'btn-start'}`;
+            }
+            
+            document.getElementById('debugLog').innerText = `Status: ${isRunning ? 'RUNNING' : 'STOPPED'} | Acc: ${data.isRealAccount ? 'REAL' : 'DEMO'} | Trades: ${data.tradeHistory ? data.tradeHistory.length : 0}`;
+            
+            // 1. PRIORIDAD: RENDERIZAR HISTORIAL (Antes de que nada más pueda fallar)
+            const hist = data.tradeHistory || [];
+            const historyContainer = document.getElementById('history');
+            if (historyContainer) {
+                historyContainer.innerHTML = hist.slice(0, 30).map(t => {
+                    try {
+                        const isWin = Number(t.profit || 0) > 0;
+                        return `<div class="history-item">
+                            <div>
+                                <div style="font-weight:700; color: #ddd;">${t.type || 'TRADE'}</div>
+                                <div class="history-meta">${t.time || '--:--'}</div>
+                            </div>
+                            <div class="${isWin ? 'green' : 'red'}" style="font-weight:900;">
+                                ${isWin ? '+' : ''}$${Number(t.profit || 0).toFixed(2)}
+                            </div>
+                        </div>`;
+                    } catch (e) { return ''; }
+                }).join('') || '<div style="color:#444; text-align:center; padding:20px;">Sin trades aún...</div>';
+            }
+
+            // 2. RESTO DE LA INTERFAZ
+            document.getElementById('subTitle').innerText = `Last Digit Strategy · Deriv ${data.symbol}`;
+
+            // Actualización visual de precisión fija
+            document.getElementById('scanRangeVal').innerText = 100;
+
+            // Actualizar estilo botones mercado
+            ['R_10', 'R_25', 'R_50', 'R_100'].forEach(s => {
+                const btn = document.getElementById('btn' + s.replace('R_', 'V'));
+                if (btn) {
+                    if (data.symbol === s) {
+                        btn.style.background = '#7c3aed';
+                        btn.style.color = 'white';
+                    } else {
+                        btn.style.background = 'rgba(167,139,250,0.15)';
+                        btn.style.color = '#a78bfa';
+                    }
+                    btn.disabled = isRunning;
+                }
+            });
+
+            // Balance
+            document.getElementById('balanceDisplay').innerText = `SALDO: $${parseFloat(data.balance || 0).toFixed(2)}`;
+
+            // SINCRONIZAR INPUTS DE CONFIGURACIÓN DESDE EL SERVIDOR
+            const stakeInput = document.getElementById('stake');
+            const maxLossInput = document.getElementById('maxDailyLoss');
+            const tpInput = document.getElementById('takeProfit');
+
+            // Solo actualizar si el input NO está enfocado (el usuario no está escribiendo)
+            if (document.activeElement !== stakeInput && data.stake) {
+                stakeInput.value = parseFloat(data.stake).toFixed(2);
+            }
+            if (document.activeElement !== maxLossInput && data.maxDailyLoss) {
+                maxLossInput.value = parseFloat(data.maxDailyLoss);
+            }
+            if (document.activeElement !== tpInput && data.takeProfit) {
+                tpInput.value = parseFloat(data.takeProfit);
+            }
+
+            // Bloquear inputs cuando el bot está corriendo
+            stakeInput.disabled = isRunning;
+            maxLossInput.disabled = isRunning;
+            tpInput.disabled = isRunning;
+            stakeInput.style.opacity = isRunning ? '0.5' : '1';
+            maxLossInput.style.opacity = isRunning ? '0.5' : '1';
+            tpInput.style.opacity = isRunning ? '0.5' : '1';
+
+            // Price
+            const price = parseFloat(data.lastTickPrice || 0);
+            document.getElementById('priceDisplay').innerText = price > 0 ? price.toFixed(3) : '---';
+
+            // Streak Radar Update
+            const streak = parseInt(data.activeStreak || 0);
+            const streakPct = Math.min((streak / 4) * 100, 100);
+            document.getElementById('streakProgress').style.width = `${streakPct}%`;
+            document.getElementById('entropyDisplay').innerText = data.shannonEntropy || 'Cisne: 0/4';
+            
+            const sBadge = document.getElementById('streakBadge');
+            if (streak >= 3) { sBadge.style.borderColor = '#fbbf24'; sBadge.style.color = '#fbbf24'; sBadge.style.background = 'rgba(251,191,36,0.15)'; }
+            else if (streak >= 1) { sBadge.style.borderColor = '#34d399'; sBadge.style.color = '#34d399'; sBadge.style.background = 'rgba(52,211,153,0.1)'; }
+            else { sBadge.style.borderColor = '#7c3aed'; sBadge.style.color = '#a78bfa'; sBadge.style.background = 'rgba(124,58,237,0.15)'; }
+            
+            const pLabel = document.getElementById('streakProgressLabel');
+            if (streak === 0) pLabel.innerText = 'Esperando anomalía...';
+            else if (streak === 1) pLabel.innerText = '1 repetición detectada';
+            else if (streak === 2) pLabel.innerText = '⚠️ 2 repeticiones detectadas';
+            else pLabel.innerText = '🥷 SOMBRA ENCONTRADA — DISPARANDO!';
+
+            // Last digit
+            const ld = document.getElementById('lastDigitBadge');
+            if (data.lastDigit !== null && data.lastDigit !== undefined) {
+                ld.innerText = data.lastDigit;
+                ld.style.transform = 'scale(1.15)';
+                setTimeout(() => { ld.style.transform = 'scale(1)'; }, 150);
+            }
+
+            // Barrier Display
+            const cType = data.currentContractType || 'DIGITDIFF';
+            const displayBarrier = data.currentBarrier !== null && data.currentBarrier !== undefined && data.currentBarrier !== '-' ? data.currentBarrier : 'ESPERANDO';
+            
+            if (displayBarrier !== 'ESPERANDO') {
+                document.getElementById('barrierDisplay').innerText = `NO-${displayBarrier}`;
+                document.getElementById('barrierLabelSub').innerText = 'El próximo dígito NO será este';
+            } else {
+                document.getElementById('barrierDisplay').innerText = 'ESPERANDO';
+                document.getElementById('barrierLabelSub').innerText = 'Buscando Cisne Negro (4 repetidos)...';
+            }
+
+            // Markov Predictive Edge
+            const mEdge = data.markovEdge || '-';
+            document.getElementById('markovDisplay').innerText = mEdge;
+
+            // ── MOTOR B UI REMOVED ──
+
+            // Sync Ghost toggle
+            const gToggle = document.getElementById('ghostToggle');
+            if (gToggle && gToggle.checked !== data.ghostMode) {
+                gToggle.checked = !!data.ghostMode;
+            }
+            
+            // Sync Cobertura toggle
+            const cToggle = document.getElementById('coberturaToggle');
+            if (cToggle && cToggle.checked !== data.coberturaActiva) {
+                cToggle.checked = !!data.coberturaActiva;
+            }
+            const cStatus = document.getElementById('coberturaStatusText');
+            if (cStatus) {
+                if (data.needsRecovery) {
+                    cStatus.innerText = '🛡️ COBERTURA ARMADA: Siguiente tiro x2';
+                    cStatus.style.color = '#fbbf24';
+                } else {
+                    cStatus.innerText = data.coberturaActiva ? 'Cobertura Automática x2 (Activa)' : 'Cobertura Desactivada';
+                    cStatus.style.color = '#888';
+                }
+            }
+
+            // Chips
+            document.getElementById('chipStatus').innerText = data.isRunning ? '🟢 ACTIVO' : '⚫ OFFLINE';
+            document.getElementById('chipStatus').className = `chip ${data.isRunning ? 'chip-green' : 'chip-purple'}`;
+            document.getElementById('chipWinRate').innerText = `WIN ${data.winRate || '0.0'}%`;
+            document.getElementById('chipTrades').innerText = `${data.totalTradesSession || 0} TRADES`;
+            
+
+            // Stats
+            const pnl = parseFloat(data.pnlSession || 0);
+            const pnlEl = document.getElementById('pnlValue');
+            pnlEl.innerText = `${pnl >= 0 ? '+' : ''}$${pnl.toFixed(2)}`;
+            pnlEl.className = `stat-value ${pnl >= 0 ? 'green' : 'red'}`;
+
+            document.getElementById('winsValue').innerText = data.winsSession || 0;
+            document.getElementById('lossesValue').innerText = data.lossesSession || 0;
+
+            // Win rate bar
+            const wr = parseFloat(data.winRate || 0);
+            document.getElementById('winrateFill').style.width = `${wr}%`;
+            document.getElementById('winrateText').innerText = `${wr}%`;
+
+            // Daily
+            const dp = parseFloat(data.dailyProfit || 0);
+            const dl = parseFloat(data.dailyLoss || 0);
+            // Sincronizar Reloj
+            if (data.isRunning && data.startTime) {
+                sessionStartTime = data.startTime;
+                sessionFrozenTime = null; // Timer corriendo en vivo
+            } else if (!data.isRunning && data.sessionDuration) {
+                // Bot se detuvo: recuperar la duración exacta del servidor
+                sessionStartTime = null;
+                sessionFrozenTime = data.sessionDuration;
+            } else if (!data.startTime) {
+                // Reset total: sin startTime = limpiar todo
+                sessionStartTime = null;
+                sessionFrozenTime = null;
+            }
+
+            document.getElementById('dailyProfit').innerText = `+$${dp.toFixed(2)}`;
+            document.getElementById('dailyLoss').innerText = `-$${dl.toFixed(2)}`;
+            const net = dp - dl;
+            const netEl = document.getElementById('dailyNet');
+            netEl.innerText = `${net >= 0 ? '+' : ''}$${net.toFixed(2)}`;
+            netEl.className = net >= 0 ? 'green' : 'red';
+
+            // Account theme update
+            const mHeader = document.getElementById('mainHeader');
+            const balDisplay = document.getElementById('balanceDisplay');
+            const btnDemo = document.getElementById('btnAccDemo');
+            const btnReal = document.getElementById('btnAccReal');
+            
+            if (data.isRealAccount) {
+                mHeader.style.borderBottom = '1px solid rgba(251,191,36,0.3)';
+                balDisplay.style.color = '#fbbf24';
+                btnDemo.classList.remove('active');
+                btnReal.classList.add('active', 'real');
+            } else {
+                mHeader.style.borderBottom = '1px solid rgba(167,139,250,0.1)';
+                balDisplay.style.color = '#38bdf8';
+                btnDemo.classList.add('active', 'demo');
+                btnReal.classList.remove('active', 'real');
+            }
+
+            // Digit history freq table
+            const barrier = data.currentBarrier || '?';
+            if (data.digitHistory) {
+                buildFreqTable(data.digitHistory, barrier);
+            }
+
+            // Active trade card
+            const tradeCard = document.getElementById('tradeCard');
+            const scanningCard = document.getElementById('scanningCard');
+            if (data.activeContractId) {
+                tradeCard.style.display = 'block';
+                if (scanningCard) scanningCard.style.display = 'none';
+                const cType = data.currentContractType || 'DIGITDIFF';
+                if (cType === 'DIGITDIFF') {
+                    document.getElementById('activeBarrierLabel').innerText = `Diferir de: NO-${barrier}`;
+                }
+            } else {
+                tradeCard.style.display = 'none';
+                if (scanningCard) {
+                    scanningCard.style.display = data.isRunning ? 'block' : 'none';
+                    document.getElementById('scanningText').innerText = '🥷 Escaneando Cisne Negro (Racha de 4 repetidos)...';
+                }
+            }
+
+            // Active Straddle Shield card REMOVED
+            // Toggle button
+            // Chips Update
+            const chip = document.getElementById('chipStatus');
+            if (chip) {
+                chip.innerText = isRunning ? '🟢 ACTIVO' : '⚫ OFFLINE';
+                chip.className = `chip ${isRunning ? 'chip-green' : 'chip-purple'}`;
+            }
+
+            // History rendering removed from here (already done above)
+
+
+        } catch (e) {
+            console.warn('Error fetching status:', e.message);
+            const debug = document.getElementById('debugLog');
+            if (debug) debug.innerText = `UI Error: ${e.message}`;
+        } finally {
+            isFetching = false;
+        }
+    }
+
+    async function toggleBot() {
+        const action = isRunning ? 'STOP' : 'START';
+        console.log("Enviando comando:", action);
+        document.getElementById('btnToggle').innerText = '⌛ Procesando...';
+        
+        const body = { action };
+        if (action === 'START') {
+            body.stake = parseFloat(document.getElementById('stake').value);
+            body.maxDailyLoss = parseFloat(document.getElementById('maxDailyLoss').value);
+            body.takeProfit = parseFloat(document.getElementById('takeProfit').value);
+        }
+        try {
+            const res = await fetch('/differs/control', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(body)
+            });
+            const rData = await res.json();
+            console.log("Respuesta servidor:", rData);
+            document.getElementById('debugLog').innerText = `Cmd: ${action} -> ${rData.success ? 'OK' : 'FAIL'}`;
+            await fetchStatus(true);
+        } catch (e) { 
+            console.error(e); 
+            document.getElementById('debugLog').innerText = `Err: ${e.message}`;
+        }
+    }
+
+    async function resetDay() {
+        if (!confirm('¿Resetear las estadísticas del día?')) return;
+        await fetch('/differs/control', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'RESET_DAY' })
+        });
+        fetchStatus();
+    }
+
+    async function switchAccount(isReal) {
+        if (isRunning) {
+            alert("Detén el Sniper antes de cambiar la cuenta.");
+            return;
+        }
+        try {
+            console.log('🔄 Cambiando a modo:', isReal ? 'Real' : 'Demo');
+            await fetch('/differs/switch-account', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ isReal })
+            });
+            await fetchStatus();
+        } catch(e) { console.error('Error al cambiar cuenta:', e); }
+    }
+
+    async function switchMarket(symbol) {
+        if (isRunning) return;
+        try {
+            await fetch('/differs/control', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action: 'SYNC', symbol })
+            });
+            fetchStatus(true);
+        } catch (e) { console.error(e); }
+    }
+
+    window.lastScanRangeAdjust = 0;
+    
+    async function toggleRecovery(enabled) {
+        // Obsoleto
+    }
+
+    let scanRangeTimeout = null;
+
+    let sessionStartTime = null;
+    let sessionFrozenTime = null; // Tiempo congelado cuando el bot se detiene
+
+    function updateTimer() {
+        const timerEl = document.getElementById('sessionTimer');
+        
+        // Si hay un tiempo congelado, mostrar ese (bot detenido)
+        if (sessionFrozenTime !== null) {
+            const h = Math.floor(sessionFrozenTime / 3600).toString().padStart(2, '0');
+            const m = Math.floor((sessionFrozenTime % 3600) / 60).toString().padStart(2, '0');
+            const s = (sessionFrozenTime % 60).toString().padStart(2, '0');
+            timerEl.innerText = `⏱️ ${h}:${m}:${s}`;
+            timerEl.style.color = '#fbbf24'; // Dorado = congelado
+            return;
+        }
+        
+        // Sin sesión activa
+        if (!sessionStartTime) {
+            timerEl.innerText = "--:--:--";
+            timerEl.style.color = '#a78bfa';
+            return;
+        }
+        
+        // Timer corriendo en vivo
+        const now = Date.now();
+        const diff = Math.floor((now - sessionStartTime) / 1000);
+        const h = Math.floor(diff / 3600).toString().padStart(2, '0');
+        const m = Math.floor((diff % 3600) / 60).toString().padStart(2, '0');
+        const s = (diff % 60).toString().padStart(2, '0');
+        timerEl.innerText = `${h}:${m}:${s}`;
+        timerEl.style.color = '#34d399'; // Verde = corriendo
+    }
+
+    setInterval(updateTimer, 1000);
+
+    async function updateScanRange(val) {
+        window.lastScanRangeAdjust = Date.now();
+        document.getElementById('scanRangeVal').innerText = val;
+        
+        if (scanRangeTimeout) clearTimeout(scanRangeTimeout);
+        
+        scanRangeTimeout = setTimeout(async () => {
+            try {
+                await fetch('/differs/control', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ action: 'CONFIG', scanRange: parseInt(val) })
+                });
+            } catch (e) { 
+                console.error(e); 
+            }
+        }, 300);
+    }
+
+    // [FRANKLIN SYNC] Enviar cambios de config al instante
+    async function syncConfig() {
+        const stake = parseFloat(document.getElementById('stake').value);
+        const tp = parseFloat(document.getElementById('takeProfit').value);
+        const ml = parseFloat(document.getElementById('maxDailyLoss').value);
+        try {
+            await fetch('/differs/control', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action: 'SYNC', stake, takeProfit: tp, maxDailyLoss: ml })
+            });
+        } catch (e) { console.error('Error syncing config:', e); }
+    }
+
+    // Sincronización inicial Forzada
+    async function init() {
+        console.log("🚀 Iniciando Sincronización Base...");
+        await fetchStatus(true); // Pasar flag de forzar sync
+    }
+
+    // Poll status para actualizaciones fluidas
+    setInterval(() => fetchStatus(false), 1000);
+    init();
+    async function abortStraddle() {
+        if(!confirm('¿Estás seguro de ABORTAR el doble escudo Straddle inmediatamente? (Puede que haya pérdidas u oportunidades perdidas).')) return;
+        try {
+            const res = await fetch('/differs/abort-straddle', { method: 'POST' });
+            const data = await res.json();
+            if(data.success) {
+                console.log('Straddle abort execution triggered');
+            }
+        } catch (e) {
+            console.error(e);
+        }
+    }
+</script>
+</body>
+</html>
