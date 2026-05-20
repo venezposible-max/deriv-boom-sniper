@@ -346,6 +346,21 @@ function saveState() {
 // ════════════════════════════════════════════════════════════════
 function tryFireTrade() {
     if (!botState.isRunning) return;
+
+    const now = Date.now();
+
+    // ─── Failsafe: Liberar contrato colgado ───
+    // Si hay un contrato marcado como activo pero han pasado más de 15 segundos desde el último disparo,
+    // es 100% seguro que el contrato ya se cerró en Deriv (los contratos de 1 tick duran ~2s).
+    // Esto previene que el bot se quede "congelado" indefinidamente ante un parpadeo del WebSocket de Deriv.
+    if (botState.activeContractId && (now - botState.lastTradeTime) > 15000) {
+        console.log(`⚠️ FAILSAFE: El contrato ${botState.activeContractId} excedió el tiempo límite (15s). Liberando el bot...`);
+        botState.activeContractId = null;
+        botState.currentContractId = null;
+        botState.isBuying = false;
+        saveState();
+    }
+
     if (botState.isBuying || botState.activeContractId) return;
 
     // ─── Protección: Límite de pérdida diaria ───
