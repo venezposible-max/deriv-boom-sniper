@@ -1,0 +1,1969 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>HYDRA ENGINE — Bot de Trading Inteligente</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🐍</text></svg>">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+/* ═══════════════════════════════════════════════════════════
+   CSS CUSTOM PROPERTIES
+   ═══════════════════════════════════════════════════════════ */
+:root {
+  --bg-primary: #0a0a0f;
+  --bg-secondary: #0e0e15;
+  --bg-card: rgba(255,255,255,0.03);
+  --bg-card-hover: rgba(255,255,255,0.05);
+  --border-card: rgba(255,255,255,0.06);
+  --border-card-hover: rgba(255,255,255,0.12);
+  --text-primary: #f0f0f5;
+  --text-secondary: #8a8a9a;
+  --text-muted: #55556a;
+  --accent-green: #10b981;
+  --accent-green-dim: rgba(16,185,129,0.15);
+  --accent-green-glow: rgba(16,185,129,0.4);
+  --accent-blue: #3b82f6;
+  --accent-blue-dim: rgba(59,130,246,0.15);
+  --accent-blue-glow: rgba(59,130,246,0.4);
+  --accent-purple: #a855f7;
+  --accent-purple-dim: rgba(168,85,247,0.15);
+  --accent-purple-glow: rgba(168,85,247,0.4);
+  --accent-red: #ef4444;
+  --accent-red-dim: rgba(239,68,68,0.15);
+  --accent-yellow: #f59e0b;
+  --radius-card: 16px;
+  --radius-btn: 12px;
+  --radius-input: 8px;
+  --transition: 0.3s ease;
+  --blur: blur(20px);
+  --font: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+}
+
+/* ═══════════════════════════════════════════════════════════
+   RESET & BASE
+   ═══════════════════════════════════════════════════════════ */
+*, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+html {
+  scroll-behavior: smooth;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+body {
+  font-family: var(--font);
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  min-height: 100vh;
+  overflow-x: hidden;
+  line-height: 1.5;
+}
+
+/* Background grain/noise texture */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background: radial-gradient(ellipse at 20% 0%, rgba(16,185,129,0.04) 0%, transparent 60%),
+              radial-gradient(ellipse at 80% 0%, rgba(59,130,246,0.04) 0%, transparent 60%),
+              radial-gradient(ellipse at 50% 100%, rgba(168,85,247,0.03) 0%, transparent 60%);
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* ═══════════════════════════════════════════════════════════
+   SCROLLBAR
+   ═══════════════════════════════════════════════════════════ */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.2); }
+
+/* ═══════════════════════════════════════════════════════════
+   LAYOUT CONTAINER
+   ═══════════════════════════════════════════════════════════ */
+.app {
+  position: relative;
+  z-index: 1;
+  max-width: 1440px;
+  margin: 0 auto;
+  padding: 0 24px 60px;
+}
+
+/* ═══════════════════════════════════════════════════════════
+   GLASS CARD MIXIN
+   ═══════════════════════════════════════════════════════════ */
+.glass {
+  background: var(--bg-card);
+  backdrop-filter: var(--blur);
+  -webkit-backdrop-filter: var(--blur);
+  border: 1px solid var(--border-card);
+  border-radius: var(--radius-card);
+  transition: all var(--transition);
+}
+
+.glass:hover {
+  background: var(--bg-card-hover);
+  border-color: var(--border-card-hover);
+  transform: translateY(-2px);
+  box-shadow: 0 8px 32px rgba(0,0,0,0.3);
+}
+
+/* ═══════════════════════════════════════════════════════════
+   TOP BAR
+   ═══════════════════════════════════════════════════════════ */
+.topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 24px;
+  margin-bottom: 24px;
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  background: rgba(10,10,15,0.85);
+  backdrop-filter: var(--blur);
+  -webkit-backdrop-filter: var(--blur);
+  border-bottom: 1px solid var(--border-card);
+}
+
+.topbar-logo {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.topbar-logo h1 {
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: -0.3px;
+  background: linear-gradient(135deg, var(--accent-green), var(--accent-blue));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.topbar-logo .version {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-muted);
+  padding: 2px 8px;
+  border: 1px solid var(--border-card);
+  border-radius: 20px;
+}
+
+.topbar-center {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.conn-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--accent-red);
+  transition: background var(--transition);
+  box-shadow: 0 0 8px var(--accent-red);
+}
+
+.conn-dot.connected {
+  background: var(--accent-green);
+  box-shadow: 0 0 8px var(--accent-green-glow);
+  animation: pulse-dot 2s ease-in-out infinite;
+}
+
+@keyframes pulse-dot {
+  0%, 100% { box-shadow: 0 0 8px var(--accent-green-glow); }
+  50% { box-shadow: 0 0 16px var(--accent-green-glow), 0 0 24px rgba(16,185,129,0.2); }
+}
+
+.conn-label {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-secondary);
+}
+
+.topbar-balance {
+  text-align: right;
+}
+
+.topbar-balance .label {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+.topbar-balance .value {
+  font-size: 26px;
+  font-weight: 700;
+  letter-spacing: -0.5px;
+  color: var(--text-primary);
+  transition: color var(--transition);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ═══════════════════════════════════════════════════════════
+   STATS OVERVIEW ROW
+   ═══════════════════════════════════════════════════════════ */
+.stats-row {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 16px;
+  margin-bottom: 24px;
+}
+
+.stat-card {
+  padding: 20px 24px;
+}
+
+.stat-card .stat-label {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+  margin-bottom: 8px;
+}
+
+.stat-card .stat-value {
+  font-size: 28px;
+  font-weight: 700;
+  letter-spacing: -0.5px;
+  transition: color var(--transition);
+  font-variant-numeric: tabular-nums;
+}
+
+.stat-card .stat-sub {
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--text-secondary);
+  margin-top: 4px;
+}
+
+.positive { color: var(--accent-green) !important; }
+.negative { color: var(--accent-red) !important; }
+.neutral  { color: var(--text-primary) !important; }
+
+/* ═══════════════════════════════════════════════════════════
+   ENGINE CARDS
+   ═══════════════════════════════════════════════════════════ */
+.engines-row {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
+  margin-bottom: 24px;
+}
+
+.engine-card {
+  padding: 0;
+  overflow: hidden;
+  position: relative;
+  transition: all var(--transition);
+}
+
+.engine-card::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: var(--radius-card);
+  opacity: 0;
+  transition: opacity 0.6s ease;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.engine-card.active::before { opacity: 1; }
+
+.engine-card.engine-evenodd::before {
+  box-shadow: inset 0 0 40px rgba(16,185,129,0.06), 0 0 30px rgba(16,185,129,0.08);
+}
+.engine-card.engine-overunder::before {
+  box-shadow: inset 0 0 40px rgba(59,130,246,0.06), 0 0 30px rgba(59,130,246,0.08);
+}
+.engine-card.engine-match::before {
+  box-shadow: inset 0 0 40px rgba(168,85,247,0.06), 0 0 30px rgba(168,85,247,0.08);
+}
+
+.engine-card.pulse-trade {
+  animation: engine-pulse 0.8s ease;
+}
+
+@keyframes engine-pulse {
+  0% { transform: scale(1); }
+  30% { transform: scale(1.015); }
+  100% { transform: scale(1); }
+}
+
+.engine-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 20px 24px 16px;
+  position: relative;
+  z-index: 1;
+}
+
+.engine-info {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.engine-icon {
+  font-size: 22px;
+  width: 44px;
+  height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 12px;
+}
+
+.engine-evenodd .engine-icon { background: var(--accent-green-dim); }
+.engine-overunder .engine-icon { background: var(--accent-blue-dim); }
+.engine-match .engine-icon { background: var(--accent-purple-dim); }
+
+.engine-name {
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: -0.2px;
+}
+
+.engine-subtitle {
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--text-muted);
+  margin-top: 2px;
+}
+
+/* Toggle Switch */
+.toggle {
+  position: relative;
+  width: 44px;
+  height: 24px;
+  cursor: pointer;
+}
+
+.toggle input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+  position: absolute;
+}
+
+.toggle-track {
+  position: absolute;
+  inset: 0;
+  background: rgba(255,255,255,0.08);
+  border-radius: 12px;
+  transition: background var(--transition);
+}
+
+.toggle input:checked + .toggle-track {
+  background: var(--accent-green);
+}
+
+.toggle-thumb {
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 18px;
+  height: 18px;
+  background: #fff;
+  border-radius: 50%;
+  transition: transform var(--transition);
+  box-shadow: 0 2px 4px rgba(0,0,0,0.3);
+}
+
+.toggle input:checked ~ .toggle-thumb {
+  transform: translateX(20px);
+}
+
+/* Engine Status */
+.engine-status {
+  padding: 0 24px;
+  position: relative;
+  z-index: 1;
+}
+
+.engine-status-text {
+  font-size: 12px;
+  font-weight: 500;
+  padding: 6px 12px;
+  border-radius: 20px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  transition: all var(--transition);
+}
+
+.engine-status-text.searching {
+  background: rgba(245,158,11,0.1);
+  color: var(--accent-yellow);
+}
+
+.engine-status-text.signal {
+  background: rgba(16,185,129,0.1);
+  color: var(--accent-green);
+  animation: signal-glow 1s ease-in-out infinite;
+}
+
+@keyframes signal-glow {
+  0%, 100% { box-shadow: none; }
+  50% { box-shadow: 0 0 12px rgba(16,185,129,0.3); }
+}
+
+.engine-status-text.disabled {
+  background: rgba(255,255,255,0.04);
+  color: var(--text-muted);
+}
+
+/* Engine Stats */
+.engine-stats {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px;
+  padding: 16px 24px 24px;
+  position: relative;
+  z-index: 1;
+}
+
+.engine-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.engine-stat .es-label {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.engine-stat .es-value {
+  font-size: 18px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  transition: color var(--transition);
+}
+
+/* ═══════════════════════════════════════════════════════════
+   DIGIT DISPLAY
+   ═══════════════════════════════════════════════════════════ */
+.digit-section {
+  margin-bottom: 24px;
+}
+
+.section-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  margin-bottom: 16px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.section-title::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: linear-gradient(to right, var(--border-card), transparent);
+}
+
+.digit-card {
+  padding: 24px;
+}
+
+.digit-circles-wrapper {
+  overflow: hidden;
+  margin-bottom: 24px;
+}
+
+.digit-circles {
+  display: flex;
+  gap: 8px;
+  justify-content: center;
+  flex-wrap: nowrap;
+  transition: all 0.5s ease;
+}
+
+.digit-circle {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  font-weight: 700;
+  flex-shrink: 0;
+  transition: all 0.4s ease;
+  opacity: 0;
+  transform: translateX(20px);
+  animation: digit-slide-in 0.4s ease forwards;
+  font-variant-numeric: tabular-nums;
+}
+
+@keyframes digit-slide-in {
+  to { opacity: 1; transform: translateX(0); }
+}
+
+.digit-circle.even {
+  background: var(--accent-green-dim);
+  color: var(--accent-green);
+  border: 1px solid rgba(16,185,129,0.2);
+}
+
+.digit-circle.odd {
+  background: var(--accent-red-dim);
+  color: var(--accent-red);
+  border: 1px solid rgba(239,68,68,0.2);
+}
+
+.digit-circle.current {
+  width: 52px;
+  height: 52px;
+  font-size: 20px;
+  box-shadow: 0 0 20px rgba(255,255,255,0.1);
+  margin: -6px 0;
+}
+
+.digit-circle.even.current {
+  box-shadow: 0 0 20px var(--accent-green-glow);
+}
+
+.digit-circle.odd.current {
+  box-shadow: 0 0 20px rgba(239,68,68,0.3);
+}
+
+/* Digit Frequency Chart */
+.digit-freq-container {
+  display: flex;
+  gap: 16px;
+  align-items: flex-end;
+}
+
+.digit-chart {
+  flex: 1;
+}
+
+.digit-bars {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  height: 100px;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+.digit-bar-col {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  height: 100%;
+  justify-content: flex-end;
+}
+
+.digit-bar {
+  width: 100%;
+  min-height: 4px;
+  border-radius: 4px 4px 2px 2px;
+  transition: height 0.6s ease, background 0.3s ease;
+  position: relative;
+}
+
+.digit-bar-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.digit-bar-count {
+  font-size: 10px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  position: absolute;
+  top: -16px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-variant-numeric: tabular-nums;
+}
+
+.digit-metrics {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 180px;
+}
+
+.digit-metric {
+  padding: 12px 16px;
+  background: rgba(255,255,255,0.03);
+  border-radius: 12px;
+  border: 1px solid var(--border-card);
+}
+
+.digit-metric .dm-label {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.digit-metric .dm-value {
+  font-size: 20px;
+  font-weight: 700;
+  margin-top: 4px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ═══════════════════════════════════════════════════════════
+   CONTROL PANEL
+   ═══════════════════════════════════════════════════════════ */
+.control-card {
+  padding: 24px;
+  margin-bottom: 24px;
+}
+
+.controls-layout {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.btn {
+  padding: 12px 32px;
+  font-family: var(--font);
+  font-size: 14px;
+  font-weight: 600;
+  border: none;
+  border-radius: var(--radius-btn);
+  cursor: pointer;
+  transition: all var(--transition);
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  letter-spacing: 0.3px;
+  position: relative;
+  overflow: hidden;
+}
+
+.btn::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: rgba(255,255,255,0);
+  transition: background var(--transition);
+}
+
+.btn:hover::after {
+  background: rgba(255,255,255,0.05);
+}
+
+.btn:active {
+  transform: scale(0.97);
+}
+
+.btn-start {
+  background: var(--accent-green);
+  color: #fff;
+  box-shadow: 0 4px 16px rgba(16,185,129,0.3);
+  min-width: 140px;
+  justify-content: center;
+}
+
+.btn-start:hover {
+  box-shadow: 0 6px 24px rgba(16,185,129,0.4);
+  transform: translateY(-1px);
+}
+
+.btn-start.running {
+  animation: btn-breathe 2s ease-in-out infinite;
+}
+
+@keyframes btn-breathe {
+  0%, 100% { box-shadow: 0 4px 16px rgba(16,185,129,0.3); }
+  50% { box-shadow: 0 4px 32px rgba(16,185,129,0.6), 0 0 48px rgba(16,185,129,0.2); }
+}
+
+.btn-stop {
+  background: var(--accent-red);
+  color: #fff;
+  box-shadow: 0 4px 16px rgba(239,68,68,0.2);
+  min-width: 120px;
+  justify-content: center;
+}
+
+.btn-stop:hover {
+  box-shadow: 0 6px 24px rgba(239,68,68,0.35);
+  transform: translateY(-1px);
+}
+
+.btn-reset {
+  background: rgba(255,255,255,0.06);
+  color: var(--text-secondary);
+  font-size: 12px;
+  padding: 10px 20px;
+  border: 1px solid var(--border-card);
+}
+
+.btn-reset:hover {
+  background: rgba(255,255,255,0.1);
+  color: var(--text-primary);
+}
+
+.control-separator {
+  width: 1px;
+  height: 40px;
+  background: var(--border-card);
+  flex-shrink: 0;
+}
+
+.control-group {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.control-group label {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.control-group select,
+.control-group input[type="number"] {
+  background: rgba(255,255,255,0.05);
+  border: 1px solid var(--border-card);
+  border-radius: var(--radius-input);
+  color: var(--text-primary);
+  font-family: var(--font);
+  font-size: 14px;
+  font-weight: 500;
+  padding: 8px 12px;
+  outline: none;
+  transition: all var(--transition);
+  min-width: 100px;
+  font-variant-numeric: tabular-nums;
+}
+
+.control-group select:focus,
+.control-group input[type="number"]:focus {
+  border-color: var(--accent-blue);
+  box-shadow: 0 0 0 3px rgba(59,130,246,0.15);
+}
+
+.control-group select option {
+  background: var(--bg-primary);
+  color: var(--text-primary);
+}
+
+/* ═══════════════════════════════════════════════════════════
+   TRADE HISTORY TABLE
+   ═══════════════════════════════════════════════════════════ */
+.history-card {
+  padding: 0;
+  margin-bottom: 24px;
+  overflow: hidden;
+}
+
+.history-header {
+  padding: 20px 24px;
+  border-bottom: 1px solid var(--border-card);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.history-header h3 {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+.history-count {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-muted);
+  padding: 4px 10px;
+  background: rgba(255,255,255,0.04);
+  border-radius: 20px;
+}
+
+.history-table-wrap {
+  overflow-x: auto;
+  max-height: 500px;
+  overflow-y: auto;
+}
+
+.history-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.history-table thead {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+}
+
+.history-table th {
+  background: rgba(255,255,255,0.04);
+  backdrop-filter: var(--blur);
+  padding: 12px 16px;
+  text-align: left;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  white-space: nowrap;
+  border-bottom: 1px solid var(--border-card);
+}
+
+.history-table td {
+  padding: 10px 16px;
+  white-space: nowrap;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  border-bottom: 1px solid rgba(255,255,255,0.02);
+  transition: background var(--transition);
+}
+
+.history-table tr.win td {
+  background: rgba(16,185,129,0.03);
+}
+
+.history-table tr.loss td {
+  background: rgba(239,68,68,0.03);
+}
+
+.history-table tr {
+  animation: row-slide-in 0.35s ease;
+}
+
+@keyframes row-slide-in {
+  from { opacity: 0; transform: translateY(-8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.history-table .result-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 10px;
+  border-radius: 20px;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.result-badge.win {
+  background: var(--accent-green-dim);
+  color: var(--accent-green);
+}
+
+.result-badge.loss {
+  background: var(--accent-red-dim);
+  color: var(--accent-red);
+}
+
+.empty-history {
+  padding: 48px 24px;
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 14px;
+}
+
+.empty-history span {
+  font-size: 32px;
+  display: block;
+  margin-bottom: 12px;
+}
+
+/* ═══════════════════════════════════════════════════════════
+   RISK METRICS BAR
+   ═══════════════════════════════════════════════════════════ */
+.risk-bar {
+  padding: 20px 24px;
+  margin-bottom: 24px;
+}
+
+.risk-grid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 20px;
+  align-items: start;
+}
+
+.risk-item {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.risk-item .ri-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.risk-item .ri-label {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.risk-item .ri-value {
+  font-size: 14px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.progress-track {
+  height: 6px;
+  background: rgba(255,255,255,0.06);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.progress-fill {
+  height: 100%;
+  border-radius: 3px;
+  transition: width 0.6s ease;
+  min-width: 2px;
+}
+
+.progress-fill.red { background: linear-gradient(90deg, var(--accent-red), #ff6b6b); }
+.progress-fill.green { background: linear-gradient(90deg, var(--accent-green), #34d399); }
+
+.risk-item .ri-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.ri-badge.ok {
+  background: var(--accent-green-dim);
+  color: var(--accent-green);
+}
+
+.ri-badge.warning {
+  background: rgba(245,158,11,0.15);
+  color: var(--accent-yellow);
+}
+
+.ri-badge.danger {
+  background: var(--accent-red-dim);
+  color: var(--accent-red);
+}
+
+/* ═══════════════════════════════════════════════════════════
+   TOAST NOTIFICATIONS
+   ═══════════════════════════════════════════════════════════ */
+.toast-container {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  z-index: 9999;
+  display: flex;
+  flex-direction: column-reverse;
+  gap: 10px;
+}
+
+.toast {
+  padding: 14px 20px;
+  background: rgba(20,20,30,0.95);
+  backdrop-filter: var(--blur);
+  -webkit-backdrop-filter: var(--blur);
+  border: 1px solid var(--border-card);
+  border-radius: 12px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-primary);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+  animation: toast-in 0.35s ease;
+  min-width: 280px;
+  max-width: 400px;
+}
+
+.toast.removing {
+  animation: toast-out 0.3s ease forwards;
+}
+
+.toast.success { border-left: 3px solid var(--accent-green); }
+.toast.error   { border-left: 3px solid var(--accent-red); }
+.toast.info    { border-left: 3px solid var(--accent-blue); }
+
+@keyframes toast-in {
+  from { opacity: 0; transform: translateX(40px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
+@keyframes toast-out {
+  from { opacity: 1; transform: translateX(0); }
+  to { opacity: 0; transform: translateX(40px); }
+}
+
+/* ═══════════════════════════════════════════════════════════
+   RESPONSIVE
+   ═══════════════════════════════════════════════════════════ */
+@media (max-width: 1100px) {
+  .engines-row { grid-template-columns: repeat(2, 1fr); }
+  .risk-grid { grid-template-columns: repeat(3, 1fr); }
+  .stats-row { grid-template-columns: repeat(2, 1fr); }
+}
+
+@media (max-width: 768px) {
+  .app { padding: 0 12px 40px; }
+  .topbar { padding: 12px 16px; flex-wrap: wrap; gap: 12px; }
+  .topbar-center { order: 3; width: 100%; justify-content: center; }
+  .topbar-balance .value { font-size: 20px; }
+  .engines-row { grid-template-columns: 1fr; }
+  .stats-row { grid-template-columns: repeat(2, 1fr); }
+  .risk-grid { grid-template-columns: 1fr 1fr; }
+  .controls-layout { flex-direction: column; align-items: stretch; }
+  .control-separator { width: 100%; height: 1px; }
+  .controls-layout .btn { width: 100%; justify-content: center; }
+  .digit-freq-container { flex-direction: column; }
+  .digit-metrics { flex-direction: row; min-width: auto; }
+  .digit-metric { flex: 1; }
+  .digit-circles { flex-wrap: wrap; }
+  .stat-card .stat-value { font-size: 22px; }
+}
+
+@media (max-width: 480px) {
+  .stats-row { grid-template-columns: 1fr; }
+  .risk-grid { grid-template-columns: 1fr; }
+  .digit-metrics { flex-direction: column; }
+  .topbar-logo h1 { font-size: 15px; }
+}
+</style>
+</head>
+<body>
+
+<div class="app">
+  <!-- ═══════════════════════════ TOP BAR ═══════════════════════════ -->
+  <header class="topbar">
+    <div class="topbar-logo">
+      <h1>🐍 HYDRA ENGINE</h1>
+      <span class="version">v1.0</span>
+    </div>
+    <div class="topbar-center">
+      <div class="conn-dot" id="connDot"></div>
+      <span class="conn-label" id="connLabel">Desconectado</span>
+    </div>
+    <div class="topbar-balance">
+      <div class="label">Balance</div>
+      <div class="value" id="balanceDisplay">$0.00</div>
+    </div>
+  </header>
+
+  <!-- ═══════════════════════════ STATS ROW ═══════════════════════════ -->
+  <div class="stats-row">
+    <div class="stat-card glass">
+      <div class="stat-label">PnL Sesión</div>
+      <div class="stat-value neutral" id="statPnl">$0.00</div>
+      <div class="stat-sub">Ganancia / Pérdida del día</div>
+    </div>
+    <div class="stat-card glass">
+      <div class="stat-label">Tasa de Acierto</div>
+      <div class="stat-value neutral" id="statWinRate">0.0%</div>
+      <div class="stat-sub">Porcentaje de operaciones ganadoras</div>
+    </div>
+    <div class="stat-card glass">
+      <div class="stat-label">Total Operaciones</div>
+      <div class="stat-value neutral" id="statTotalTrades">0</div>
+      <div class="stat-sub">Operaciones ejecutadas hoy</div>
+    </div>
+    <div class="stat-card glass">
+      <div class="stat-label">Ganadas / Perdidas</div>
+      <div class="stat-value neutral" id="statWinLoss">0 / 0</div>
+      <div class="stat-sub">Registro de resultados</div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════ ENGINE CARDS ═══════════════════════════ -->
+  <div class="engines-row">
+    <!-- EVEN/ODD -->
+    <div class="engine-card glass engine-evenodd" id="engineCardEvenOdd">
+      <div class="engine-header">
+        <div class="engine-info">
+          <div class="engine-icon">🍞</div>
+          <div>
+            <div class="engine-name">EVEN/ODD</div>
+            <div class="engine-subtitle">Pan de Cada Día</div>
+          </div>
+        </div>
+        <label class="toggle">
+          <input type="checkbox" id="toggleEvenOdd" checked>
+          <div class="toggle-track"></div>
+          <div class="toggle-thumb"></div>
+        </label>
+      </div>
+      <div class="engine-status">
+        <span class="engine-status-text disabled" id="statusEvenOdd">
+          <span>●</span> Desactivado
+        </span>
+      </div>
+      <div class="engine-stats">
+        <div class="engine-stat">
+          <span class="es-label">Ganadas</span>
+          <span class="es-value positive" id="eoWins">0</span>
+        </div>
+        <div class="engine-stat">
+          <span class="es-label">Perdidas</span>
+          <span class="es-value negative" id="eoLosses">0</span>
+        </div>
+        <div class="engine-stat">
+          <span class="es-label">PnL</span>
+          <span class="es-value neutral" id="eoPnl">$0.00</span>
+        </div>
+        <div class="engine-stat">
+          <span class="es-label">Win Rate</span>
+          <span class="es-value neutral" id="eoWinRate">0.0%</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- OVER/UNDER -->
+    <div class="engine-card glass engine-overunder" id="engineCardOverUnder">
+      <div class="engine-header">
+        <div class="engine-info">
+          <div class="engine-icon">⚡</div>
+          <div>
+            <div class="engine-name">OVER/UNDER</div>
+            <div class="engine-subtitle">Potenciador</div>
+          </div>
+        </div>
+        <label class="toggle">
+          <input type="checkbox" id="toggleOverUnder" checked>
+          <div class="toggle-track"></div>
+          <div class="toggle-thumb"></div>
+        </label>
+      </div>
+      <div class="engine-status">
+        <span class="engine-status-text disabled" id="statusOverUnder">
+          <span>●</span> Desactivado
+        </span>
+      </div>
+      <div class="engine-stats">
+        <div class="engine-stat">
+          <span class="es-label">Ganadas</span>
+          <span class="es-value positive" id="ouWins">0</span>
+        </div>
+        <div class="engine-stat">
+          <span class="es-label">Perdidas</span>
+          <span class="es-value negative" id="ouLosses">0</span>
+        </div>
+        <div class="engine-stat">
+          <span class="es-label">PnL</span>
+          <span class="es-value neutral" id="ouPnl">$0.00</span>
+        </div>
+        <div class="engine-stat">
+          <span class="es-label">Win Rate</span>
+          <span class="es-value neutral" id="ouWinRate">0.0%</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- MATCH -->
+    <div class="engine-card glass engine-match" id="engineCardMatch">
+      <div class="engine-header">
+        <div class="engine-info">
+          <div class="engine-icon">💎</div>
+          <div>
+            <div class="engine-name">MATCH</div>
+            <div class="engine-subtitle">Multiplicador</div>
+          </div>
+        </div>
+        <label class="toggle">
+          <input type="checkbox" id="toggleMatch" checked>
+          <div class="toggle-track"></div>
+          <div class="toggle-thumb"></div>
+        </label>
+      </div>
+      <div class="engine-status">
+        <span class="engine-status-text disabled" id="statusMatch">
+          <span>●</span> Desactivado
+        </span>
+      </div>
+      <div class="engine-stats">
+        <div class="engine-stat">
+          <span class="es-label">Ganadas</span>
+          <span class="es-value positive" id="maWins">0</span>
+        </div>
+        <div class="engine-stat">
+          <span class="es-label">Perdidas</span>
+          <span class="es-value negative" id="maLosses">0</span>
+        </div>
+        <div class="engine-stat">
+          <span class="es-label">PnL</span>
+          <span class="es-value neutral" id="maPnl">$0.00</span>
+        </div>
+        <div class="engine-stat">
+          <span class="es-label">Win Rate</span>
+          <span class="es-value neutral" id="maWinRate">0.0%</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════ DIGIT DISPLAY ═══════════════════════════ -->
+  <div class="digit-section">
+    <div class="section-title">📊 Visualización de Dígitos en Tiempo Real</div>
+    <div class="digit-card glass">
+      <div class="digit-circles-wrapper">
+        <div class="digit-circles" id="digitCircles">
+          <div style="color:var(--text-muted);font-size:13px;padding:20px 0;">Esperando datos de dígitos...</div>
+        </div>
+      </div>
+      <div class="digit-freq-container">
+        <div class="digit-chart">
+          <div class="digit-bars" id="digitBars">
+            <!-- 10 bars generated by JS -->
+          </div>
+          <div style="display:flex;justify-content:space-between;" id="digitLabels"></div>
+        </div>
+        <div class="digit-metrics">
+          <div class="digit-metric">
+            <div class="dm-label">Entropía Shannon</div>
+            <div class="dm-value" id="shannonValue">0.000</div>
+          </div>
+          <div class="digit-metric">
+            <div class="dm-label">Markov Edge</div>
+            <div class="dm-value" id="markovValue">0.0%</div>
+          </div>
+          <div class="digit-metric">
+            <div class="dm-label">Dígito Caliente</div>
+            <div class="dm-value" id="hotDigitValue">—</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════ CONTROL PANEL ═══════════════════════════ -->
+  <div class="section-title">🎮 Panel de Control</div>
+  <div class="control-card glass">
+    <div class="controls-layout">
+      <button class="btn btn-start" id="btnStart" onclick="handleStart()">
+        ▶ INICIAR
+      </button>
+      <button class="btn btn-stop" id="btnStop" onclick="handleStop()">
+        ⏹ DETENER
+      </button>
+
+      <div class="control-separator"></div>
+
+      <div class="control-group">
+        <label>Mercado</label>
+        <select id="selectMarket" onchange="handleMarketChange()">
+          <option value="R_10">Volatility 10</option>
+          <option value="R_25" selected>Volatility 25</option>
+          <option value="R_50">Volatility 50</option>
+          <option value="R_100">Volatility 100</option>
+        </select>
+      </div>
+
+      <div class="control-group">
+        <label>Stake ($)</label>
+        <input type="number" id="inputStake" value="1" min="0.35" max="100" step="0.25" onchange="handleConfigChange()" onblur="handleConfigChange()">
+      </div>
+
+      <div class="control-group">
+        <label>Pérdida Máx ($)</label>
+        <input type="number" id="inputMaxLoss" value="20" min="1" max="1000" step="1" onchange="handleConfigChange()" onblur="handleConfigChange()">
+      </div>
+
+      <div class="control-group">
+        <label>Take Profit ($)</label>
+        <input type="number" id="inputTakeProfit" value="15" min="1" max="1000" step="1" onchange="handleConfigChange()" onblur="handleConfigChange()">
+      </div>
+
+      <div class="control-separator"></div>
+
+      <button class="btn btn-reset" onclick="handleResetDay()">
+        🔄 Reset Día
+      </button>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════ TRADE HISTORY ═══════════════════════════ -->
+  <div class="history-card glass">
+    <div class="history-header">
+      <h3>📜 Historial de Operaciones</h3>
+      <span class="history-count" id="historyCount">0 operaciones</span>
+    </div>
+    <div class="history-table-wrap">
+      <table class="history-table">
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>Hora</th>
+            <th>Motor</th>
+            <th>Tipo</th>
+            <th>Barrera</th>
+            <th>Dígito</th>
+            <th>Resultado</th>
+            <th>Profit</th>
+            <th>Balance</th>
+          </tr>
+        </thead>
+        <tbody id="historyBody">
+          <tr>
+            <td colspan="9" class="empty-history">
+              <span>📭</span>
+              No hay operaciones registradas aún
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════ RISK METRICS ═══════════════════════════ -->
+  <div class="section-title">🛡️ Métricas de Riesgo</div>
+  <div class="risk-bar glass">
+    <div class="risk-grid">
+      <div class="risk-item">
+        <div class="ri-header">
+          <span class="ri-label">Pérdida Diaria</span>
+          <span class="ri-value negative" id="riskDailyLoss">$0.00 / $20</span>
+        </div>
+        <div class="progress-track">
+          <div class="progress-fill red" id="progressLoss" style="width:0%"></div>
+        </div>
+      </div>
+      <div class="risk-item">
+        <div class="ri-header">
+          <span class="ri-label">Ganancia Diaria</span>
+          <span class="ri-value positive" id="riskDailyProfit">$0.00 / $15</span>
+        </div>
+        <div class="progress-track">
+          <div class="progress-fill green" id="progressProfit" style="width:0%"></div>
+        </div>
+      </div>
+      <div class="risk-item">
+        <div class="ri-label">Operaciones Restantes</div>
+        <div class="ri-value" id="riskTradesRemaining" style="font-size:20px;margin-top:4px;">50 / 50</div>
+      </div>
+      <div class="risk-item">
+        <div class="ri-label">Pérdidas Consecutivas</div>
+        <div class="ri-value" id="riskConsecLosses" style="font-size:20px;margin-top:4px;">0</div>
+      </div>
+      <div class="risk-item">
+        <div class="ri-label">Circuit Breaker</div>
+        <div class="ri-badge ok" id="riskCircuitBreaker" style="margin-top:4px;">✓ Inactivo</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Toast Container -->
+<div class="toast-container" id="toastContainer"></div>
+
+<script>
+/* ═══════════════════════════════════════════════════════════════════════════
+   HYDRA ENGINE — Frontend Controller
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+// ── State ──────────────────────────────────────────────────────────────────
+let state = {
+  isRunning: false,
+  isConnectedToDeriv: false,
+  balance: 0,
+  prevBalance: 0,
+  pnlSession: 0,
+  winsSession: 0,
+  lossesSession: 0,
+  totalTradesSession: 0,
+  stake: 1,
+  maxDailyLoss: 20,
+  takeProfit: 15,
+  dailyLoss: 0,
+  dailyProfit: 0,
+  consecutiveLosses: 0,
+  maxTradesPerDay: 50,
+  circuitBreakerUntil: 0,
+  engineEvenOdd: true,
+  engineOverUnder: true,
+  engineMatch: true,
+  engineStats: {
+    EVEN_ODD: { wins: 0, losses: 0, pnl: 0 },
+    OVER_UNDER: { wins: 0, losses: 0, pnl: 0 },
+    MATCH: { wins: 0, losses: 0, pnl: 0 }
+  },
+  shannonEntropy: 0,
+  markovEdge: 0,
+  hotDigit: null,
+  hotDigitFreq: 0,
+  lastDigit: null,
+  digitHistory: [],
+  digitFrequency: {},
+  symbol: 'R_25',
+  winRate: '0.0',
+  currentEngine: null,
+  currentContractType: null,
+  currentBarrier: null
+};
+
+let prevDigitHistoryLength = 0;
+let prevTotalTrades = 0;
+let historyData = [];
+let animatingBalance = false;
+let displayedBalance = 0;
+let configDebounce = null;
+
+// ── DOM Refs ───────────────────────────────────────────────────────────────
+const $ = (id) => document.getElementById(id);
+
+// ── Init digit bars ────────────────────────────────────────────────────────
+function initDigitBars() {
+  const barsContainer = $('digitBars');
+  const labelsContainer = $('digitLabels');
+  barsContainer.innerHTML = '';
+  labelsContainer.innerHTML = '';
+  for (let i = 0; i <= 9; i++) {
+    const col = document.createElement('div');
+    col.className = 'digit-bar-col';
+    const bar = document.createElement('div');
+    bar.className = 'digit-bar';
+    bar.id = `bar-${i}`;
+    bar.style.height = '4px';
+    bar.style.background = i % 2 === 0
+      ? 'var(--accent-green)'
+      : 'var(--accent-red)';
+    const count = document.createElement('span');
+    count.className = 'digit-bar-count';
+    count.id = `barCount-${i}`;
+    count.textContent = '0';
+    bar.appendChild(count);
+    col.appendChild(bar);
+    barsContainer.appendChild(col);
+
+    const label = document.createElement('span');
+    label.className = 'digit-bar-label';
+    label.textContent = i;
+    labelsContainer.appendChild(label);
+  }
+}
+
+// ── Balance Animation ──────────────────────────────────────────────────────
+function animateBalance(target) {
+  if (displayedBalance === target) return;
+  const start = displayedBalance;
+  const diff = target - start;
+  const duration = 600;
+  const startTime = performance.now();
+
+  function tick(now) {
+    const elapsed = now - startTime;
+    const progress = Math.min(elapsed / duration, 1);
+    // Ease out cubic
+    const ease = 1 - Math.pow(1 - progress, 3);
+    displayedBalance = start + diff * ease;
+    $('balanceDisplay').textContent = '$' + displayedBalance.toLocaleString('en-US', {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2
+    });
+    if (progress < 1) {
+      requestAnimationFrame(tick);
+    } else {
+      displayedBalance = target;
+      $('balanceDisplay').textContent = '$' + target.toLocaleString('en-US', {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2
+      });
+    }
+  }
+  requestAnimationFrame(tick);
+}
+
+// ── Format helpers ─────────────────────────────────────────────────────────
+function formatMoney(val) {
+  const sign = val >= 0 ? '+' : '';
+  return sign + '$' + Math.abs(val).toFixed(2);
+}
+
+function pnlClass(val) {
+  return val > 0 ? 'positive' : val < 0 ? 'negative' : 'neutral';
+}
+
+function calcWinRate(w, l) {
+  const total = w + l;
+  return total === 0 ? '0.0' : ((w / total) * 100).toFixed(1);
+}
+
+// ── Update UI ──────────────────────────────────────────────────────────────
+function updateUI(data) {
+  // Connection
+  const dot = $('connDot');
+  const label = $('connLabel');
+  if (data.isConnectedToDeriv) {
+    dot.classList.add('connected');
+    label.textContent = 'Conectado a Deriv';
+  } else {
+    dot.classList.remove('connected');
+    label.textContent = 'Desconectado';
+  }
+
+  // Balance
+  if (data.balance !== state.balance) {
+    animateBalance(data.balance);
+  }
+
+  // Stats row
+  const pnlEl = $('statPnl');
+  pnlEl.textContent = formatMoney(data.pnlSession);
+  pnlEl.className = 'stat-value ' + pnlClass(data.pnlSession);
+
+  const wrEl = $('statWinRate');
+  wrEl.textContent = parseFloat(data.winRate).toFixed(1) + '%';
+
+  $('statTotalTrades').textContent = data.totalTradesSession;
+  $('statWinLoss').textContent = data.winsSession + ' / ' + data.lossesSession;
+
+  // Engine toggles sync
+  $('toggleEvenOdd').checked = data.engineEvenOdd;
+  $('toggleOverUnder').checked = data.engineOverUnder;
+  $('toggleMatch').checked = data.engineMatch;
+
+  // Engine cards active state
+  updateEngineCard('engineCardEvenOdd', 'statusEvenOdd', data.engineEvenOdd, data.isRunning, data.currentEngine === 'EVEN_ODD');
+  updateEngineCard('engineCardOverUnder', 'statusOverUnder', data.engineOverUnder, data.isRunning, data.currentEngine === 'OVER_UNDER');
+  updateEngineCard('engineCardMatch', 'statusMatch', data.engineMatch, data.isRunning, data.currentEngine === 'MATCH');
+
+  // Engine stats
+  updateEngineStats('eo', data.engineStats.EVEN_ODD);
+  updateEngineStats('ou', data.engineStats.OVER_UNDER);
+  updateEngineStats('ma', data.engineStats.MATCH);
+
+  // Detect trade fired for pulse
+  if (data.totalTradesSession > prevTotalTrades && data.currentEngine) {
+    pulseEngine(data.currentEngine);
+  }
+  prevTotalTrades = data.totalTradesSession;
+
+  // Digit display
+  if (data.digitHistory && data.digitHistory.length !== prevDigitHistoryLength) {
+    renderDigitCircles(data.digitHistory, data.lastDigit);
+    prevDigitHistoryLength = data.digitHistory.length;
+  }
+
+  // Digit frequency
+  renderDigitFrequency(data.digitFrequency || {});
+
+  // Digit metrics
+  $('shannonValue').textContent = (data.shannonEntropy || 0).toFixed(3);
+  $('markovValue').textContent = (data.markovEdge || 0).toFixed(1) + '%';
+  $('hotDigitValue').textContent = data.hotDigit !== null ? data.hotDigit + ' (' + (data.hotDigitFreq || 0) + ')' : '—';
+
+  // Buttons state
+  const btnStart = $('btnStart');
+  if (data.isRunning) {
+    btnStart.classList.add('running');
+    btnStart.innerHTML = '⏸ EN EJECUCIÓN';
+  } else {
+    btnStart.classList.remove('running');
+    btnStart.innerHTML = '▶ INICIAR';
+  }
+
+  // Market select
+  $('selectMarket').value = data.symbol || 'R_25';
+
+  // Config inputs (only update if not focused)
+  if (document.activeElement !== $('inputStake')) $('inputStake').value = data.stake;
+  if (document.activeElement !== $('inputMaxLoss')) $('inputMaxLoss').value = data.maxDailyLoss;
+  if (document.activeElement !== $('inputTakeProfit')) $('inputTakeProfit').value = data.takeProfit;
+
+  // Risk metrics
+  const maxLoss = data.maxDailyLoss || 20;
+  const tp = data.takeProfit || 15;
+  $('riskDailyLoss').textContent = '$' + Math.abs(data.dailyLoss || 0).toFixed(2) + ' / $' + maxLoss;
+  $('riskDailyProfit').textContent = '$' + (data.dailyProfit || 0).toFixed(2) + ' / $' + tp;
+
+  const lossPct = Math.min((Math.abs(data.dailyLoss || 0) / maxLoss) * 100, 100);
+  const profitPct = Math.min(((data.dailyProfit || 0) / tp) * 100, 100);
+  $('progressLoss').style.width = lossPct + '%';
+  $('progressProfit').style.width = profitPct + '%';
+
+  const remaining = (data.maxTradesPerDay || 50) - (data.totalTradesSession || 0);
+  $('riskTradesRemaining').textContent = remaining + ' / ' + (data.maxTradesPerDay || 50);
+
+  const consec = data.consecutiveLosses || 0;
+  const consecEl = $('riskConsecLosses');
+  consecEl.textContent = consec;
+  consecEl.style.color = consec >= 3 ? 'var(--accent-red)' : 'var(--text-primary)';
+
+  const cbEl = $('riskCircuitBreaker');
+  if (data.circuitBreakerUntil && data.circuitBreakerUntil > Date.now()) {
+    const secsLeft = Math.ceil((data.circuitBreakerUntil - Date.now()) / 1000);
+    cbEl.className = 'ri-badge danger';
+    cbEl.textContent = '⚠ Activo — ' + secsLeft + 's';
+  } else {
+    cbEl.className = 'ri-badge ok';
+    cbEl.textContent = '✓ Inactivo';
+  }
+
+  // Store previous state
+  Object.assign(state, data);
+}
+
+function updateEngineCard(cardId, statusId, enabled, running, isCurrent) {
+  const card = $(cardId);
+  const statusEl = $(statusId);
+
+  if (!enabled) {
+    card.classList.remove('active');
+    statusEl.className = 'engine-status-text disabled';
+    statusEl.innerHTML = '<span>●</span> Desactivado';
+  } else if (!running) {
+    card.classList.remove('active');
+    statusEl.className = 'engine-status-text disabled';
+    statusEl.innerHTML = '<span>●</span> En espera';
+  } else if (isCurrent) {
+    card.classList.add('active');
+    statusEl.className = 'engine-status-text signal';
+    statusEl.innerHTML = '<span>●</span> Señal detectada!';
+  } else {
+    card.classList.add('active');
+    statusEl.className = 'engine-status-text searching';
+    statusEl.innerHTML = '<span>●</span> Buscando señal...';
+  }
+}
+
+function updateEngineStats(prefix, stats) {
+  const w = stats.wins || 0;
+  const l = stats.losses || 0;
+  const pnl = stats.pnl || 0;
+  const wr = calcWinRate(w, l);
+
+  $(prefix + 'Wins').textContent = w;
+  $(prefix + 'Losses').textContent = l;
+
+  const pnlEl = $(prefix + 'Pnl');
+  pnlEl.textContent = formatMoney(pnl);
+  pnlEl.className = 'es-value ' + pnlClass(pnl);
+
+  $(prefix + 'WinRate').textContent = wr + '%';
+}
+
+function pulseEngine(engineKey) {
+  const map = {
+    'EVEN_ODD': 'engineCardEvenOdd',
+    'OVER_UNDER': 'engineCardOverUnder',
+    'MATCH': 'engineCardMatch'
+  };
+  const card = $(map[engineKey]);
+  if (!card) return;
+  card.classList.remove('pulse-trade');
+  void card.offsetWidth; // force reflow
+  card.classList.add('pulse-trade');
+  setTimeout(() => card.classList.remove('pulse-trade'), 900);
+}
+
+// ── Digit Circles ──────────────────────────────────────────────────────────
+function renderDigitCircles(history, lastDigit) {
+  const container = $('digitCircles');
+  const last20 = history.slice(-20);
+  container.innerHTML = '';
+
+  last20.forEach((d, i) => {
+    const el = document.createElement('div');
+    const isEven = d % 2 === 0;
+    const isLast = i === last20.length - 1;
+    el.className = 'digit-circle ' + (isEven ? 'even' : 'odd') + (isLast ? ' current' : '');
+    el.textContent = d;
+    el.style.animationDelay = (i * 0.03) + 's';
+    container.appendChild(el);
+  });
+
+  if (last20.length === 0) {
+    container.innerHTML = '<div style="color:var(--text-muted);font-size:13px;padding:20px 0;">Esperando datos de dígitos...</div>';
+  }
+}
+
+// ── Digit Frequency Bars ───────────────────────────────────────────────────
+function renderDigitFrequency(freq) {
+  let maxCount = 1;
+  for (let i = 0; i <= 9; i++) {
+    const c = freq[i] || freq[String(i)] || 0;
+    if (c > maxCount) maxCount = c;
+  }
+
+  for (let i = 0; i <= 9; i++) {
+    const count = freq[i] || freq[String(i)] || 0;
+    const bar = $('bar-' + i);
+    const countEl = $('barCount-' + i);
+    if (!bar) continue;
+    const pct = (count / maxCount) * 100;
+    bar.style.height = Math.max(4, pct) + '%';
+    if (countEl) countEl.textContent = count;
+  }
+}
+
+// ── History Table ──────────────────────────────────────────────────────────
+function renderHistory(history) {
+  const tbody = $('historyBody');
+  const countEl = $('historyCount');
+
+  if (!history || history.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="9" class="empty-history"><span>📭</span>No hay operaciones registradas aún</td></tr>`;
+    countEl.textContent = '0 operaciones';
+    return;
+  }
+
+  countEl.textContent = history.length + ' operaciones';
+
+  const last30 = history.slice(-30).reverse();
+  const newHTML = last30.map((t, idx) => {
+    const isWin = t.result === 'WIN' || t.profit > 0;
+    const rowClass = isWin ? 'win' : 'loss';
+    const resultBadge = isWin
+      ? '<span class="result-badge win">✓ Ganada</span>'
+      : '<span class="result-badge loss">✗ Perdida</span>';
+    const profitStr = (t.profit >= 0 ? '+' : '') + '$' + Math.abs(t.profit || 0).toFixed(2);
+    const profitClass = t.profit >= 0 ? 'positive' : 'negative';
+    const balStr = '$' + (t.balanceAfter || 0).toFixed(2);
+    const time = t.time ? new Date(t.time).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit', second: '2-digit' }) : '—';
+    const num = history.length - idx;
+
+    const engineLabel = {
+      'EVEN_ODD': 'Even/Odd',
+      'OVER_UNDER': 'Over/Under',
+      'MATCH': 'Match'
+    }[t.engine] || t.engine || '—';
+
+    return `<tr class="${rowClass}">
+      <td>${num}</td>
+      <td>${time}</td>
+      <td>${engineLabel}</td>
+      <td>${t.contractType || t.type || '—'}</td>
+      <td>${t.barrier !== undefined && t.barrier !== null ? t.barrier : '—'}</td>
+      <td>${t.digit !== undefined && t.digit !== null ? t.digit : '—'}</td>
+      <td>${resultBadge}</td>
+      <td class="${profitClass}">${profitStr}</td>
+      <td>${balStr}</td>
+    </tr>`;
+  }).join('');
+
+  tbody.innerHTML = newHTML;
+}
+
+// ── API Calls ──────────────────────────────────────────────────────────────
+async function fetchStatus() {
+  try {
+    const res = await fetch('/api/status');
+    const json = await res.json();
+    if (json.success && json.data) {
+      updateUI(json.data);
+    }
+  } catch (e) {
+    // silent — just means server unreachable
+    $('connDot').classList.remove('connected');
+    $('connLabel').textContent = 'Sin conexión al servidor';
+  }
+}
+
+async function fetchHistory() {
+  try {
+    const res = await fetch('/api/history');
+    const json = await res.json();
+    if (json.success && json.history) {
+      if (JSON.stringify(json.history) !== JSON.stringify(historyData)) {
+        historyData = json.history;
+        renderHistory(historyData);
+      }
+    }
+  } catch (e) { /* silent */ }
+}
+
+async function handleStart() {
+  const stake = parseFloat($('inputStake').value) || 1;
+  const maxDailyLoss = parseFloat($('inputMaxLoss').value) || 20;
+  const takeProfit = parseFloat($('inputTakeProfit').value) || 15;
+
+  try {
+    const res = await fetch('/api/control', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'START', stake, maxDailyLoss, takeProfit })
+    });
+    const json = await res.json();
+    if (json.success) {
+      showToast('Bot iniciado correctamente', 'success');
+    } else {
+      showToast('Error: ' + (json.error || 'No se pudo iniciar'), 'error');
+    }
+  } catch (e) {
+    showToast('Error de conexión al servidor', 'error');
+  }
+  fetchStatus();
+}
+
+async function handleStop() {
+  try {
+    const res = await fetch('/api/control', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'STOP' })
+    });
+    const json = await res.json();
+    if (json.success) {
+      showToast('Bot detenido', 'info');
+    } else {
+      showToast('Error al detener el bot', 'error');
+    }
+  } catch (e) {
+    showToast('Error de conexión al servidor', 'error');
+  }
+  fetchStatus();
+}
+
+async function handleResetDay() {
+  try {
+    const res = await fetch('/api/control', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'RESET_DAY' })
+    });
+    const json = await res.json();
+    if (json.success) {
+      showToast('Estadísticas del día reseteadas', 'success');
+    } else {
+      showToast('Error al resetear', 'error');
+    }
+  } catch (e) {
+    showToast('Error de conexión al servidor', 'error');
+  }
+  fetchStatus();
+  fetchHistory();
+}
+
+async function handleEngineToggle(engine, enabled) {
+  try {
+    await fetch('/api/engine-toggle', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ engine, enabled })
+    });
+    const engineNames = {
+      'EVEN_ODD': 'Even/Odd',
+      'OVER_UNDER': 'Over/Under',
+      'MATCH': 'Match'
+    };
+    showToast(`Motor ${engineNames[engine]} ${enabled ? 'activado' : 'desactivado'}`, 'info');
+  } catch (e) {
+    showToast('Error de conexión', 'error');
+  }
+  fetchStatus();
+}
+
+async function handleMarketChange() {
+  const symbol = $('selectMarket').value;
+  try {
+    await fetch('/api/switch-market', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ symbol })
+    });
+    showToast('Mercado cambiado a ' + symbol, 'info');
+  } catch (e) {
+    showToast('Error al cambiar mercado', 'error');
+  }
+  fetchStatus();
+}
+
+function handleConfigChange() {
+  clearTimeout(configDebounce);
+  configDebounce = setTimeout(async () => {
+    const stake = parseFloat($('inputStake').value) || 1;
+    const maxDailyLoss = parseFloat($('inputMaxLoss').value) || 20;
+    const takeProfit = parseFloat($('inputTakeProfit').value) || 15;
+    try {
+      await fetch('/api/config', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ stake, maxDailyLoss, takeProfit })
+      });
+      showToast('Configuración actualizada', 'success');
+    } catch (e) {
+      showToast('Error al actualizar configuración', 'error');
+    }
+    fetchStatus();
+  }, 400);
+}
+
+// ── Engine Toggle Listeners ────────────────────────────────────────────────
+$('toggleEvenOdd').addEventListener('change', function() {
+  handleEngineToggle('EVEN_ODD', this.checked);
+});
+$('toggleOverUnder').addEventListener('change', function() {
+  handleEngineToggle('OVER_UNDER', this.checked);
+});
+$('toggleMatch').addEventListener('change', function() {
+  handleEngineToggle('MATCH', this.checked);
+});
+
+// ── Toast System ───────────────────────────────────────────────────────────
+function showToast(message, type = 'info') {
+  const container = $('toastContainer');
+  const toast = document.createElement('div');
+  toast.className = 'toast ' + type;
+
+  const icons = { success: '✓', error: '✗', info: 'ℹ' };
+  toast.innerHTML = `<span style="font-size:16px;">${icons[type] || 'ℹ'}</span> ${message}`;
+
+  container.appendChild(toast);
+
+  setTimeout(() => {
+    toast.classList.add('removing');
+    setTimeout(() => toast.remove(), 300);
+  }, 3000);
+}
+
+// ── Polling ────────────────────────────────────────────────────────────────
+initDigitBars();
+fetchStatus();
+fetchHistory();
+
+setInterval(fetchStatus, 1500);
+setInterval(fetchHistory, 5000);
+
+// ── Keyboard shortcut ──────────────────────────────────────────────────────
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') handleStop();
+});
+</script>
+</body>
+</html>
