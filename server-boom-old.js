@@ -1,0 +1,508 @@
+/**
+ * ============================================================
+ *  PROYECTO ANTIGRAVEDAD v14.0 - EL EFECTO SOMBRA
+ *  Estrategia: Motor Sombra (Evasión de Radar)
+ *  Contrato: DIGITDIFF
+ *  Lógica: Usa las rachas de 2 como distracción para apostar
+ *  contra el dígito más 'invisible' de la mesa.
+ * ============================================================
+ */
+
+import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
+import express from 'express';
+import cors from 'cors';
+import WebSocket from 'ws';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+const APP_ID = process.env.DERIV_APP_ID || '36544';
+const DERIV_TOKEN_DEMO = process.env.DERIV_TOKEN || 'PMIt2RhEjEDbcLD';
+const DERIV_TOKEN_REAL = process.env.DERIV_TOKEN_REAL || '';
+let currentDerivToken = DERIV_TOKEN_DEMO;
+const SYMBOLS = ['R_10', 'R_25', 'R_50', 'R_100'];
+const MOTOR_A_SYMBOLS = ['R_10', 'R_25', 'R_100']; // DIGITDIFF (aleatorios)
+const MOTOR_B_SYMBOL = 'R_50';                     // DIGITMATCH (autocorrelado)
+
+let botState = {
+    isRunning: false,
+    isConnectedToDeriv: false,
+    isRealAccount: false,
+    coberturaActiva: true,
+    balance: 0,
+    currency: 'USD',
+    dailyProfit: 0,
+    dailyLoss: 0,
+    totalTradesSession: 0,
+    winsSession: 0,
+    lossesSession: 0,
+    tradeHistory: [],
+    stake: 5,
+    takeProfit: 10,
+    maxDailyLoss: 50,
+    activeSymbol: null,
+    activeContractId: null,
+    activeMotor: null,       // 'A' o 'B'
+    lastTradeTime: 0,
+    lastTradeTimeB: 0,
+    cooldownMs: 5000,
+    isBuying: false,
+    viewedSymbol: 'R_100',
+    markets: {},
+    coberturaActiva: false,
+    isRecovering: false,
+    needsRecovery: false,
+    // ─── MOTOR B REMOVED ───
+    motorBEnabled: false,
+    motorBStake: 1,          // $1 fijo
+    motorBWins: 0,
+    motorBLosses: 0,
+    startTime: null,
+    sessionDuration: 0,
+    motorBTrades: 0,
+    motorBMaxTrades: 5,      // Máx 5 disparos por sesión
+    motorBConsecutiveLosses: 0,
+    motorBMaxConsecutiveLosses: 3, // Freno: 3 pérdidas seguidas = pausa
+    motorBProfit: 0,
+    motorBPaused: false,
+    // ─── MODO FANTASMA (TRADES GHOST) ───
+    ghostMode: false,
+    waitingForRealShot: false,
+    ghostTarget: null, // { symbol, digit }
+    // ─── MATRIZ DE TRANSICIÓN (MARKOV) ───
+    transitionMatrices: {} // { symbol: { digitA: { digitB: count } } }
+};
+
+SYMBOLS.forEach(s => {
+    botState.markets[s] = { digitHistory: [], lastDigit: null };
+    botState.transitionMatrices[s] = {};
+    for (let i = 0; i <= 9; i++) {
+        botState.transitionMatrices[s][i] = {};
+        for (let j = 0; j <= 9; j++) {
+            botState.transitionMatrices[s][i][j] = 0;
+        }
+    }
+});
+
+const STATE_FILE = path.join('/tmp', 'persistent-state-institutional.json');
+
+// Cargar estado inicial
+if (fs.existsSync(STATE_FILE)) {
+    try {
+        const saved = JSON.parse(fs.readFileSync(STATE_FILE));
+        if (saved.botState) {
+            botState = { ...botState, ...saved.botState };
+            botState.isRunning = false;
+            botState.isBuying = false;
+            console.log("📥 Estado persistente cargado desde /tmp");
+        }
+    } catch (e) {
+        console.error("⚠️ Error cargando estado:", e.message);
+    }
+}
+
+const saveState = () => { 
+    try { 
+        const stateToSave = {
+            stake: botState.stake,
+            takeProfit: botState.takeProfit,
+            maxDailyLoss: botState.maxDailyLoss,
+            dailyProfit: botState.dailyProfit,
+            dailyLoss: botState.dailyLoss,
+            winsSession: botState.winsSession,
+            lossesSession: botState.lossesSession,
+            totalTradesSession: botState.totalTradesSession,
+            coberturaActiva: botState.coberturaActiva,
+            ghostMode: botState.ghostMode,
+            tradeHistory: (botState.tradeHistory || []).slice(0, 20)
+        };
+        fs.writeFileSync(STATE_FILE, JSON.stringify({ botState: stateToSave })); 
+    } catch (e) {
+        console.error("⚠️ Error guardando estado:", e.message);
+    } 
+};
+
+// ─── CONEXIÓN A DERIV ─────────────────────────────────────────
+let ws = null;
+function connectDeriv() {
+    if (ws && ws.readyState === WebSocket.OPEN) return;
+    ws = new WebSocket(`wss://ws.derivws.com/websockets/v3?app_id=${APP_ID}`);
+    ws.on('open', () => { 
+        console.log("🔌 Conectado al servidor de Deriv. Enviando autorización...");
+        setTimeout(() => ws.send(JSON.stringify({ authorize: currentDerivToken })), 1000); 
+    });
+    ws.on('message', (raw) => {
+        const msg = JSON.parse(raw);
+        if (msg.msg_type === 'authorize') {
+            if (msg.error) {
+                console.error("❌ ERROR DE AUTORIZACIÓN:", msg.error.message);
+                return;
+            }
+            botState.isConnectedToDeriv = true;
+            if (msg.authorize && msg.authorize.currency) {
+                botState.currency = msg.authorize.currency;
+            }
+            console.log(`🥷 ANTIGRAVEDAD v14.0 | A: CISNE NEGRO (R_10/25/100) | B: MATCH (R_50) | Divisa: ${botState.currency}`);
+            SYMBOLS.forEach(s => {
+                console.log(`📡 Suscribiendo a ${s}...`);
+                ws.send(JSON.stringify({ subscribe: 1, ticks: s }));
+            });
+            ws.send(JSON.stringify({ balance: 1, subscribe: 1 }));
+        }
+
+        if (msg.msg_type === 'tick' && msg.tick) {
+            console.log(`📈 Tick: ${msg.tick.symbol} = ${msg.tick.quote}`);
+            const s = msg.tick.symbol;
+            const digit = parseInt(String(msg.tick.quote.toFixed(2)).slice(-1));
+            
+            const m = botState.markets[s];
+            const prevDigit = m.lastDigit;
+            
+            // Actualizar Matriz de Transición (Markov)
+            if (prevDigit !== null && prevDigit !== undefined) {
+                botState.transitionMatrices[s][prevDigit][digit]++;
+            }
+
+            m.digitHistory.push(digit);
+            m.lastDigit = digit;
+            m.lastTickPrice = msg.tick.quote;
+            if (m.digitHistory.length > 1000) {
+                // Opcional: Podríamos "olvidar" datos viejos para adaptarnos a cambios en el PRNG
+                // Pero por ahora acumulamos para máxima precisión estadística
+                m.digitHistory.shift(); 
+            }
+
+            if (botState.isRunning && !botState.activeContractId && !botState.isBuying) {
+                // Lógica de validación Ghost (si hay un target pendiente)
+                if (botState.ghostMode && botState.ghostTarget && botState.ghostTarget.symbol === s) {
+                    if (digit === botState.ghostTarget.digit) {
+                        botState.waitingForRealShot = true;
+                        console.log(`🎯 [GHOST LOSS DETECTED] Sombra ${digit} golpeada virtualmente. ¡ARMANDO DISPARO REAL!`);
+                    } else {
+                        // console.log(`👻 [GHOST WIN] Sombra segura. Seguimos acechando...`);
+                    }
+                    botState.ghostTarget = null; // Limpiar después de 1 tick de validación
+                }
+
+                evaluateMotorA();
+            }
+        }
+
+        if (msg.msg_type === 'buy') {
+            if (msg.buy) {
+                botState.activeContractId = msg.buy.contract_id;
+                botState.isBuying = false;
+                ws.send(JSON.stringify({ proposal_open_contract: 1, contract_id: msg.buy.contract_id, subscribe: 1 }));
+            } else {
+                console.error("❌ ERROR AL COMPRAR:", msg.error?.message || "Desconocido");
+                botState.isBuying = false;
+                botState.activeContractId = null;
+            }
+        }
+
+        if (msg.msg_type === 'proposal_open_contract' && msg.proposal_open_contract?.is_sold) {
+            finalizeTrade(msg.proposal_open_contract);
+        }
+        if (msg.msg_type === 'balance') botState.balance = msg.balance.balance;
+    });
+    ws.on('close', () => { 
+        botState.isConnectedToDeriv = false; 
+        console.log("⚠️ Conexión WebSocket cerrada. Reconectando en 2s...");
+        setTimeout(connectDeriv, 2000); 
+    });
+    ws.on('error', (err) => {
+        console.error("❌ ERROR WEBSOCKET:", err.message || err);
+    });
+}
+
+// ─── MOTOR A: ESTRATEGIA REAL (Cisne Negro x4) ────────────────
+function evaluateMotorA() {
+    const now = Date.now();
+    if (now - botState.lastTradeTime < botState.cooldownMs) return;
+
+    let targetSymbol = null;
+    let barrierDigit = null;
+
+    // Escanear mercados limpios
+    for (const s of MOTOR_A_SYMBOLS) {
+        const history = botState.markets[s].digitHistory;
+        if (history.length < 5) continue; 
+        
+        // 1. EL GATILLO: Una racha de 4 repeticiones (Cisne Negro)
+        const last4 = history.slice(-4);
+        if (last4.length < 4 || last4[0] !== last4[1] || last4[1] !== last4[2] || last4[2] !== last4[3]) continue; 
+
+        const barrier = last4[0];
+
+        // 2. EL FILTRO MARKOV: ¿Es probable que el número se repita una 5ª vez?
+        // Analizamos cuántas veces el 'barrier' ha seguido al 'barrier' en este mercado
+        const transitions = botState.transitionMatrices[s][barrier];
+        let totalTransitionsFromBarrier = 0;
+        for (let d = 0; d <= 9; d++) totalTransitionsFromBarrier += transitions[d];
+
+        if (totalTransitionsFromBarrier > 50) { // Necesitamos una muestra mínima
+            const repeatCount = transitions[barrier];
+            const repeatProb = (repeatCount / totalTransitionsFromBarrier) * 100;
+            
+            // Si la probabilidad de repetición es > 12% (lo normal es 10%), el mercado está "caliente". ABORTAR.
+            if (repeatProb > 12) {
+                console.log(`⚠️ [MARKOV ABORT] ${s} | El dígito ${barrier} tiene tendencia a repetir (${repeatProb.toFixed(1)}%). Evitando riesgo.`);
+                continue;
+            }
+        }
+
+        targetSymbol = s;
+        barrierDigit = barrier;
+        botState.lastTriggerDigit = barrierDigit;
+        break;
+    }
+
+    if (!targetSymbol || barrierDigit === null) return;
+
+    botState.activeSymbol = targetSymbol;
+    botState.activeMotor = 'A';
+    // DISPARO REAL CON COBERTURA SI ES NECESARIO
+    let currentStake = botState.stake;
+    if (botState.needsRecovery) {
+        currentStake = botState.stake * 10; // Recuperación agresiva x10 para cubrir pérdida de Differs
+    }
+
+    // FILTRO MODO FANTASMA
+    if (botState.ghostMode && !botState.waitingForRealShot) {
+        botState.ghostTarget = { symbol: targetSymbol, digit: barrierDigit };
+        console.log(`👻 [GHOST] ${targetSymbol} | Acechando repetición del ${barrierDigit} | Esperando fallo virtual...`);
+        return; 
+    }
+
+    // Si llegamos aquí es un DISPARO REAL
+    botState.isBuying = true;
+    botState.lastTradeTime = Date.now();
+    botState.waitingForRealShot = false; 
+    console.log(`🚀 [DISPARO REAL] ${targetSymbol} | Detectada racha x4 del dígito ${barrierDigit} | ${botState.needsRecovery ? '🛡️ COBERTURA x2' : ''} | Stake $${currentStake}`);
+
+    ws.send(JSON.stringify({
+        buy: 1, price: currentStake,
+        parameters: {
+            amount: currentStake, basis: 'stake', contract_type: 'DIGITDIFF',
+            currency: botState.currency, symbol: targetSymbol, duration: 1, duration_unit: 't',
+            barrier: String(barrierDigit)
+        }
+    }));
+}
+
+function finalizeTrade(c) {
+    const profit = parseFloat(c.profit);
+    const isWin = profit > 0;
+    const motor = botState.activeMotor || 'A';
+    
+    botState.dailyProfit += isWin ? profit : 0;
+    botState.dailyLoss += isWin ? 0 : Math.abs(profit);
+    botState.totalTradesSession++;
+
+    const barrierMatch = c.shortcode.match(/_(\d)_/);
+    const barrierDigit = barrierMatch ? barrierMatch[1] : '?';
+    
+    // ── RESULTADO ÚNICO MOTOR A ──
+    if (isWin) {
+        console.log(`🥷 [WIN] +$${profit.toFixed(2)} | Balance: $${botState.balance}`);
+        botState.winsSession++;
+        botState.needsRecovery = false; // Resetear cobertura
+    } else {
+        console.log(`🥷 [LOSS] -$${Math.abs(profit).toFixed(2)}`);
+        botState.lossesSession++;
+        // Solo activar cobertura si el usuario lo tiene habilitado
+        if (botState.coberturaActiva) {
+            console.log(`🛡️ Activando Cobertura x2 para el próximo tiro.`);
+            botState.needsRecovery = true; 
+        }
+    }
+
+    const timeVE = new Date().toLocaleString('es-VE', { timeZone: 'America/Caracas', hour12: true });
+    botState.tradeHistory.unshift({
+        symbol: botState.activeSymbol || c.display_symbol,
+        type: `🥷 DIFF(≠${barrierDigit})${botState.needsRecovery ? ' [REC]' : ''}`, profit,
+        result: isWin ? 'WIN ✅' : 'LOSS ❌', time: timeVE
+    });
+    
+    if (botState.tradeHistory.length > 50) botState.tradeHistory.pop();
+    botState.activeContractId = null;
+    botState.activeMotor = null;
+
+    const net = Number(botState.dailyProfit) - Number(botState.dailyLoss);
+    const maxLoss = Number(botState.maxDailyLoss);
+    const takeProfit = Number(botState.takeProfit);
+
+    if (net >= takeProfit || Number(botState.dailyLoss) >= maxLoss) {
+        botState.isRunning = false;
+        console.log(`🏁 META/LÍMITE ALCANZADO: Net: ${net.toFixed(2)}, MaxLoss: ${maxLoss}, TP: ${takeProfit}. Bot detenido.`);
+    }
+    saveState();
+}
+
+// ─── API DASHBOARD ────────────────────────────────────────────
+const app = express();
+app.use(cors()); app.use(express.json()); app.use(express.static(path.join(__dirname, 'public')));
+
+app.get('/differs/status', (req, res) => {
+    // Para el dashboard visual, mostramos si hay alguna racha formándose
+    let activeStreak = 0;
+    let streakDigit = '-';
+    let streakSymbol = '-';
+
+    SYMBOLS.forEach(s => {
+        const h = botState.markets[s].digitHistory;
+        if (h.length >= 4) {
+            const last4 = h.slice(-4);
+            if (last4[0] === last4[1] && last4[1] === last4[2] && last4[2] === last4[3]) {
+                activeStreak = 4;
+                streakDigit = last4[0];
+                streakSymbol = s;
+            } else if (last4[1] === last4[2] && last4[2] === last4[3]) {
+                if (activeStreak < 3) {
+                    activeStreak = 3;
+                    streakDigit = last4[1];
+                    streakSymbol = s;
+                }
+            } else if (last4[2] === last4[3]) {
+                if (activeStreak < 2) {
+                    activeStreak = 2;
+                    streakDigit = last4[2];
+                    streakSymbol = s;
+                }
+            }
+        }
+    });
+
+    // Cálculo de Confianza Markov para el símbolo visualizado
+    const viewed = botState.viewedSymbol || 'R_100';
+    const market = botState.markets[viewed] || { digitHistory: [] };
+    const lastD = market.lastDigit;
+    let markovEdge = '-';
+    let markovProb = 0;
+
+    if (lastD !== null && lastD !== undefined) {
+        const trans = botState.transitionMatrices[viewed][lastD];
+        let total = 0;
+        for (let i = 0; i <= 9; i++) total += trans[i];
+        
+        if (total > 20) {
+            // Buscamos el dígito MENOS probable para el siguiente tick (nuestra ventaja)
+            let minProb = 100;
+            let bestDigit = '-';
+            for (let i = 0; i <= 9; i++) {
+                const p = (trans[i] / total) * 100;
+                if (p < minProb) {
+                    minProb = p;
+                    bestDigit = i;
+                }
+            }
+            markovEdge = `NO-${bestDigit} (${(100 - minProb).toFixed(1)}%)`;
+            markovProb = 100 - minProb;
+        }
+    }
+
+    const pnlSession = botState.dailyProfit - botState.dailyLoss;
+    const winRate = botState.totalTradesSession > 0 
+        ? ((botState.winsSession / botState.totalTradesSession) * 100).toFixed(1)
+        : '0.0';
+
+    res.json({ 
+        success: true, 
+        data: { 
+            ...botState, 
+            symbol: viewed,
+            lastDigit: market.lastDigit,
+            lastTickPrice: market.lastTickPrice,
+            digitHistory: market.digitHistory.slice(-20),
+            shannonEntropy: `Cisne: ${activeStreak}/4`,
+            markovEdge: markovEdge,
+            markovProb: markovProb,
+            streakSymbol: streakSymbol,
+            currentBarrier: streakDigit,
+            activeStreak: activeStreak,
+            isRunning: botState.isRunning,
+            isFetching: botState.isBuying,
+            activeContractId: botState.activeContractId,
+            coberturaActiva: botState.coberturaActiva,
+            pnlSession: pnlSession,
+            winRate: winRate,
+            startTime: botState.startTime,
+            sessionDuration: botState.sessionDuration || 0,
+            ghostMode: botState.ghostMode,
+            waitingForRealShot: botState.waitingForRealShot
+        } 
+    });
+});
+
+app.post('/differs/control', (req, res) => {
+    const { action, stake, takeProfit, maxDailyLoss, symbol } = req.body;
+    if (action === 'TOGGLE_COBERTURA') {
+        botState.coberturaActiva = !botState.coberturaActiva;
+        if (!botState.coberturaActiva) botState.needsRecovery = false;
+        console.log(`🛡️ COBERTURA: ${botState.coberturaActiva ? 'ACTIVADA' : 'DESACTIVADA'}`);
+        return res.json({ success: true, coberturaActiva: botState.coberturaActiva });
+    }
+    if (action === 'TOGGLE_GHOST_MODE') {
+        botState.ghostMode = !botState.ghostMode;
+        if (!botState.ghostMode) {
+            botState.waitingForRealShot = false;
+            botState.ghostTarget = null;
+        }
+        console.log(`👻 MODO FANTASMA: ${botState.ghostMode ? 'ACTIVADO' : 'DESACTIVADO'}`);
+        return res.json({ success: true, ghostMode: botState.ghostMode });
+    }
+    if (action === 'START' || action === 'SYNC') {
+        if (stake) botState.stake = parseFloat(stake);
+        if (takeProfit) botState.takeProfit = parseFloat(takeProfit);
+        if (maxDailyLoss) botState.maxDailyLoss = parseFloat(maxDailyLoss);
+        if (symbol) botState.viewedSymbol = symbol;
+        
+        if (action === 'START') {
+            botState.isRunning = true;
+            botState.startTime = Date.now();
+            botState.needsRecovery = false; // Resetear cualquier cobertura pendiente al arrancar manual
+            botState.isBuying = false;
+            botState.activeContractId = null;
+            
+            console.log(`🚀 [INICIO MANUAL] Bot encendido por el usuario. Stake: $${botState.stake}, Meta: $${botState.takeProfit}, MaxLoss: $${botState.maxDailyLoss}`);
+        }
+    } else if (action === 'STOP') {
+        botState.isRunning = false;
+        if (botState.startTime) {
+            botState.sessionDuration = (botState.sessionDuration || 0) + (Date.now() - botState.startTime);
+            botState.startTime = null;
+        }
+        console.log(`⏸️ BOT PAUSADO.`);
+    } else if (action === 'RESET_DAY') { 
+        botState.dailyProfit = 0; botState.dailyLoss = 0;
+        botState.totalTradesSession = 0; botState.winsSession = 0; botState.lossesSession = 0;
+        botState.tradeHistory = [];
+        console.log(`🔄 Historial limpiado.`);
+    }
+    saveState(); res.json({ success: true });
+});
+
+app.post('/differs/switch-account', (req, res) => {
+    const { isReal } = req.body;
+    if (botState.isRunning) {
+        return res.status(400).json({ error: "Detén el bot primero" });
+    }
+    
+    botState.isRealAccount = isReal;
+    if (isReal && DERIV_TOKEN_REAL) {
+        currentDerivToken = DERIV_TOKEN_REAL;
+        console.log("🔄 Cambiando a cuenta REAL USD");
+    } else {
+        currentDerivToken = DERIV_TOKEN_DEMO;
+        console.log("🔄 Cambiando a cuenta DEMO VIRTUAL");
+    }
+    
+    // Forzar reconexión para usar el nuevo token
+    if (ws) ws.close();
+    
+    res.json({ success: true, isReal: botState.isRealAccount });
+});
+
+app.listen(process.env.PORT || 8080, '0.0.0.0', () => connectDeriv());
