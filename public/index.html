@@ -1732,6 +1732,36 @@ function renderDigitFrequency(freq) {
   }
 }
 
+// Helper robusto para formatear la hora en zona horaria de Venezuela (America/Caracas)
+// Evita fallos de "Invalid Date" tanto para cadenas del backend formateadas previamente como para nuevas cadenas ISO.
+function formatTimeVE(timeVal) {
+  if (!timeVal) return '—';
+  
+  // Intentar parsear como objeto Date (funciona para cadenas ISO estándar)
+  let d = new Date(timeVal);
+  if (!isNaN(d.getTime())) {
+    return d.toLocaleTimeString('es-VE', { 
+      timeZone: 'America/Caracas', 
+      hour: '2-digit', 
+      minute: '2-digit', 
+      second: '2-digit' 
+    });
+  }
+  
+  // Failsafe: Si es la cadena previa formateada con coma como "20/5/2026, 6:43:50 p. m.", extraemos la hora directamente
+  if (typeof timeVal === 'string') {
+    if (timeVal.includes(',')) {
+      const parts = timeVal.split(',');
+      if (parts[1]) {
+        return parts[1].trim();
+      }
+    }
+    return timeVal;
+  }
+  
+  return '—';
+}
+
 // ── History Table ──────────────────────────────────────────────────────────
 function renderHistory(history) {
   const tbody = $('historyBody');
@@ -1755,7 +1785,7 @@ function renderHistory(history) {
     const profitStr = (t.profit >= 0 ? '+' : '') + '$' + Math.abs(t.profit || 0).toFixed(2);
     const profitClass = t.profit >= 0 ? 'positive' : 'negative';
     const balStr = '$' + (t.balanceAfter || 0).toFixed(2);
-    const time = t.time ? new Date(t.time).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit', second: '2-digit' }) : '—';
+    const time = formatTimeVE(t.time);
     const num = history.length - idx;
 
     const engineLabel = {

@@ -507,7 +507,6 @@ function finalizeTrade(c) {
     }
 
     // ─── Guardar en historial ───
-    const timeVE = new Date().toLocaleString('es-VE', { timeZone: 'America/Caracas' });
     botState.tradeHistory.unshift({
         engine: name,
         engineKey: engine,
@@ -515,7 +514,7 @@ function finalizeTrade(c) {
         barrier: barrier,
         profit: profit,
         result: isWin ? 'WIN ✅' : 'LOSS ❌',
-        time: timeVE,
+        time: new Date().toISOString(),
         lastDigit: botState.lastDigit,
         stake: botState.currentStake,
         entropy: botState.shannonEntropy,
