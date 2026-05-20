@@ -388,7 +388,6 @@ function tryFireTrade() {
     }
 
     // ─── Protección: Circuit Breaker (5+ pérdidas consecutivas) ───
-    const now = Date.now();
     if (botState.circuitBreakerUntil > now) {
         const remainMs = botState.circuitBreakerUntil - now;
         const remainMin = (remainMs / 60000).toFixed(1);
