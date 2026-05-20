@@ -1588,8 +1588,8 @@ function updateUI(data) {
   renderDigitFrequency(data.digitFrequency || {});
 
   // Digit metrics
-  $('shannonValue').textContent = (data.shannonEntropy || 0).toFixed(3);
-  $('markovValue').textContent = (data.markovEdge || 0).toFixed(1) + '%';
+  $('shannonValue').textContent = parseFloat(data.shannonEntropy || 0).toFixed(3);
+  $('markovValue').textContent = parseFloat(data.markovEdge || 0).toFixed(1) + '%';
   $('hotDigitValue').textContent = data.hotDigit !== null ? data.hotDigit + ' (' + (data.hotDigitFreq || 0) + ')' : '—';
 
   // Buttons state
