@@ -1438,6 +1438,7 @@ let state = {
 };
 
 let prevDigitHistoryLength = 0;
+let prevLastDigit = null;
 let prevTotalTrades = 0;
 let historyData = [];
 let animatingBalance = false;
@@ -1574,10 +1575,13 @@ function updateUI(data) {
   }
   prevTotalTrades = data.totalTradesSession;
 
-  // Digit display
-  if (data.digitHistory && data.digitHistory.length !== prevDigitHistoryLength) {
-    renderDigitCircles(data.digitHistory, data.lastDigit);
-    prevDigitHistoryLength = data.digitHistory.length;
+  // Digit display — update whenever there's a new digit (not just when array length changes)
+  if (data.digitHistory && data.digitHistory.length > 0) {
+    if (data.digitHistory.length !== prevDigitHistoryLength || data.lastDigit !== prevLastDigit) {
+      renderDigitCircles(data.digitHistory, data.lastDigit);
+      prevDigitHistoryLength = data.digitHistory.length;
+      prevLastDigit = data.lastDigit;
+    }
   }
 
   // Digit frequency
