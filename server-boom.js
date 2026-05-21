@@ -893,6 +893,7 @@ function finalizeTrade(c) {
     botState.activeContractId = null;
     botState.currentContractId = null;
     botState.isBuying = false;
+    botState.currentEngine = null;
     
     saveState();
 }
