@@ -588,26 +588,53 @@ function evaluateDiffer() {
     
     // Para Capa 0 (Normal) y Capa 2 (D'Alembert), calculamos la Matriz de Markov de 2do Orden
     const markovHist = hist.slice(-200);
-    const matrix = build2ndOrderMarkovMatrix(markovHist);
+    const matrix2 = build2ndOrderMarkovMatrix(markovHist);
     const prevDigit = hist[hist.length - 2];
     const currentState = (prevDigit * 10) + lastDigit;
-    const transitions = matrix[currentState];
+    const transitions2 = matrix2[currentState];
     
-    let bestBarrier = null;
+    // TAMBIÉN calculamos Markov de 1er Orden para cross-validación
+    const matrix1 = buildMarkovMatrix(markovHist);
+    const transitions1 = matrix1[lastDigit];
+    
+    // Paso 1: Encontrar la probabilidad mínima en 2do Orden
     let minProb = 1.0;
-    
-    // Buscamos el dígito con la menor probabilidad de transición
     for (let d = 0; d <= 9; d++) {
-        const prob = transitions[d];
-        if (prob < minProb) {
-            minProb = prob;
-            bestBarrier = d;
+        if (transitions2[d] < minProb) minProb = transitions2[d];
+    }
+    
+    // Paso 2: Recopilar TODOS los dígitos que comparten esa probabilidad mínima
+    const candidates = [];
+    for (let d = 0; d <= 9; d++) {
+        if (transitions2[d] === minProb) candidates.push(d);
+    }
+    
+    // Paso 3: Si hay múltiples candidatos, usar Markov 1er Orden para desempatar
+    let bestBarrier = null;
+    if (candidates.length === 1) {
+        bestBarrier = candidates[0];
+    } else if (candidates.length > 1) {
+        // Elegir el candidato que TAMBIÉN tiene la menor probabilidad en Markov 1er Orden
+        let bestCandidateProb = 1.0;
+        const tiedCandidates = [];
+        for (const c of candidates) {
+            if (transitions1[c] < bestCandidateProb) {
+                bestCandidateProb = transitions1[c];
+                tiedCandidates.length = 0;
+                tiedCandidates.push(c);
+            } else if (transitions1[c] === bestCandidateProb) {
+                tiedCandidates.push(c);
+            }
         }
+        // Si aún hay empate, elegir aleatoriamente entre los finalistas
+        bestBarrier = tiedCandidates[Math.floor(Math.random() * tiedCandidates.length)];
     }
     
     // Filtro de seguridad: probabilidad de transición inferior o igual al 5% (95%+ de tasa de acierto estimada)
     const maxTransitionProbAllowed = 0.05; 
     if (bestBarrier === null || minProb > maxTransitionProbAllowed) return null;
+    
+    console.log(`🧪 QUANTUM: Estado=${currentState} | Candidatos=[${candidates.join(',')}] | Elegido=${bestBarrier} | Prob=${(minProb*100).toFixed(1)}%`);
     
     const estimatedWinRate = (1 - minProb);
     const PROFIT_RATE = 0.09; // 9% para DIGITDIFF
