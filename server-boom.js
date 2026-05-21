@@ -871,7 +871,7 @@ function finalizeTrade(c) {
         else botState.engineStats[engine].losses++;
         botState.engineStats[engine].pnl += profit;
         
-        // DARWIN MODE: Auto-desactivar motores inviables estadísticamente
+        // DARWIN MODE: Auto-desactivar motores inviables estadísticamente (APAGADO A PETICIÓN DEL USUARIO)
         const stats = botState.engineStats[engine];
         const totalTrades = stats.wins + stats.losses;
         if (totalTrades >= 10 && !stats.autoDisabled) {
@@ -880,10 +880,12 @@ function finalizeTrade(c) {
             if (engine === 'MATCH') breakEven = 14.0;
             else if (engine === 'DIFFER') breakEven = 91.3;
             
+            /* 
             if (wr < breakEven) {
                 stats.autoDisabled = true;
                 console.log(`🦎 DARWIN: Motor ${name} auto-desactivado (WR: ${wr.toFixed(1)}% < Breakeven: ${breakEven}%)`);
             }
+            */
         }
     }
     
