@@ -243,6 +243,48 @@ function buildMarkovMatrix(hist) {
 }
 
 /**
+ * Matriz de Markov 2do Orden (Motor Cuántico)
+ */
+function build2ndOrderMarkovMatrix(hist) {
+    const matrix = {};
+    for (let i = 0; i <= 99; i++) {
+        matrix[i] = {};
+        for (let j = 0; j <= 9; j++) matrix[i][j] = 0;
+    }
+    for (let k = 2; k < hist.length; k++) {
+        const state = (hist[k - 2] * 10) + hist[k - 1];
+        const nextDigit = hist[k];
+        matrix[state][nextDigit]++;
+    }
+    for (let i = 0; i <= 99; i++) {
+        const total = Object.values(matrix[i]).reduce((a, b) => a + b, 0);
+        if (total > 0) {
+            for (let j = 0; j <= 9; j++) matrix[i][j] = matrix[i][j] / total;
+        } else {
+            for (let j = 0; j <= 9; j++) matrix[i][j] = 0.1;
+        }
+    }
+    return matrix;
+}
+
+/**
+ * Criterio de Kelly
+ */
+function calculateKellyStake(bankroll, winProb, winProfitMultiplier) {
+    const b = winProfitMultiplier; 
+    const p = winProb;
+    let f = (p * (b + 1) - 1) / b;
+    if (f <= 0) return 0;
+    const fractionalKelly = f * 0.25; 
+    const maxRisk = 0.05;
+    const finalFraction = Math.min(fractionalKelly, maxRisk);
+    let stake = bankroll * finalFraction;
+    if (stake < 0.35) stake = 0.35; 
+    if (stake > 10.0) stake = 10.0; 
+    return parseFloat(stake.toFixed(2));
+}
+
+/**
  * Cooldown Dinámico Basado en Caos (Entropía) y Momentum de Rachas
  */
 function getDynamicCooldown() {
@@ -318,6 +360,7 @@ function getAdjustedStake(baseStake, stakeMultiplier) {
  * Consenso multi-ventana (10, 20, 40 ticks) y Chi-Cuadrado
  */
 function evaluateEvenOdd() {
+    return null; // MOTOR APAGADO TEMPORALMENTE
     const hist = botState.digitHistory;
     if (hist.length < 50) return null;
     
@@ -383,6 +426,7 @@ function evaluateEvenOdd() {
  * Markov de corto alcance (100 ticks), Chi-Cuadrado estricto y Validación Cruzada
  */
 function evaluateOverUnder() {
+    return null; // MOTOR APAGADO TEMPORALMENTE
     const hist = botState.digitHistory;
     if (hist.length < 100) return null;
     
@@ -445,6 +489,7 @@ function evaluateOverUnder() {
  * Dígito caliente, momentum severo en 5 ticks y EWM Confirmation
  */
 function evaluateMatch() {
+    return null; // MOTOR APAGADO TEMPORALMENTE
     const hist = botState.digitHistory;
     if (hist.length < 50) return null;
     
@@ -541,13 +586,12 @@ function evaluateDiffer() {
         };
     }
     
-    // Para Capa 0 (Normal) y Capa 2 (D'Alembert), calculamos la Matriz de Markov
-    const chiTest = calcChiSquared(hist, 100);
-    if (!chiTest.significant) return null; // Filtro de patrones estadísticas significativos
-    
-    const markovHist = hist.slice(-100);
-    const matrix = buildMarkovMatrix(markovHist);
-    const transitions = matrix[lastDigit];
+    // Para Capa 0 (Normal) y Capa 2 (D'Alembert), calculamos la Matriz de Markov de 2do Orden
+    const markovHist = hist.slice(-200);
+    const matrix = build2ndOrderMarkovMatrix(markovHist);
+    const prevDigit = hist[hist.length - 2];
+    const currentState = (prevDigit * 10) + lastDigit;
+    const transitions = matrix[currentState];
     
     let bestBarrier = null;
     let minProb = 1.0;
@@ -561,21 +605,27 @@ function evaluateDiffer() {
         }
     }
     
-    // Filtro de seguridad: probabilidad de transición inferior o igual al 8% (92%+ de tasa de acierto estimada)
-    const maxTransitionProbAllowed = 0.08; 
+    // Filtro de seguridad: probabilidad de transición inferior o igual al 5% (95%+ de tasa de acierto estimada)
+    const maxTransitionProbAllowed = 0.05; 
     if (bestBarrier === null || minProb > maxTransitionProbAllowed) return null;
     
-    const estimatedWinRate = (1 - minProb) * 100;
-    const edge = (1 - minProb) - 0.90;
+    const estimatedWinRate = (1 - minProb);
+    const PROFIT_RATE = 0.09; // 9% para DIGITDIFF
+    
+    // Si no hay saldo registrado, usamos un bankroll simulado de 100 para Kelly
+    const activeBankroll = botState.balance > 0 ? botState.balance : 100;
     
     if (botState.hidraLayer === 0) {
-        // CAPA 0: NORMAL
+        // CAPA 0: NORMAL - Usamos Kelly
+        const kellyStake = calculateKellyStake(activeBankroll, estimatedWinRate, PROFIT_RATE);
+        const stakeMult = kellyStake / 1.0; // Normalizado al baseStake
+        
         return {
             engine: 'DIFFER',
             contractType: 'DIGITDIFF',
             barrier: String(bestBarrier),
-            stakeMultiplier: 0.8, // Stake base controlado
-            reason: `Hidra Normal DIGITDIFF evitar=${bestBarrier} (Acierto Est.: ${estimatedWinRate.toFixed(1)}% | Markov: ${(minProb*100).toFixed(1)}%)`,
+            stakeMultiplier: stakeMult,
+            reason: `Quantum DIGITDIFF evitar=${bestBarrier} (Acierto Est.: ${(estimatedWinRate*100).toFixed(1)}% | Kelly Stake: $${kellyStake.toFixed(2)})`,
             entropy: parseFloat(botState.shannonEntropy)
         };
     }
@@ -583,7 +633,9 @@ function evaluateDiffer() {
     if (botState.hidraLayer === 2) {
         // CAPA 2: D'ALEMBERT (Recuperación Lineal)
         const dStep = botState.hidraDalembertStep || 1;
-        const stakeMult = 0.8 + (dStep * 0.35); // Aumento lineal seguro
+        const kellyStake = calculateKellyStake(activeBankroll, estimatedWinRate, PROFIT_RATE);
+        const baseStakeMult = kellyStake / 1.0;
+        const stakeMult = baseStakeMult * (1 + (dStep * 0.35)); // Aumento lineal sobre Kelly
         
         console.log(`🐍 LA HIDRA [CAPA 2 - D'ALEMBERT Step ${dStep}]: Disparando recuperación lineal con Stake Mult ${stakeMult.toFixed(2)}`);
         
@@ -592,7 +644,7 @@ function evaluateDiffer() {
             contractType: 'DIGITDIFF',
             barrier: String(bestBarrier),
             stakeMultiplier: stakeMult,
-            reason: `Hidra D'Alembert Step ${dStep} evitar=${bestBarrier} (Acierto Est.: ${estimatedWinRate.toFixed(1)}% | StakeMult: ${stakeMult.toFixed(2)})`,
+            reason: `Quantum D'Alembert Step ${dStep} evitar=${bestBarrier} (Acierto Est.: ${(estimatedWinRate*100).toFixed(1)}% | StakeMult: ${stakeMult.toFixed(2)})`,
             entropy: parseFloat(botState.shannonEntropy)
         };
     }
@@ -648,6 +700,12 @@ function tryFireTrade() {
     // Control de Cooldown Dinámico
     const currentCooldown = botState.cooldownMode === 'auto' ? getDynamicCooldown() : botState.cooldownMs;
     if ((now - botState.lastTradeTime) < currentCooldown) return;
+    
+    // FILTRO DE ENTROPÍA ESTRICTO (Motor Cuántico)
+    if (parseFloat(botState.shannonEntropy) > 3.0) {
+        // Si el mercado es demasiado caótico, abortamos cualquier intento de trade
+        return;
+    }
     
     let signal = null;
     
