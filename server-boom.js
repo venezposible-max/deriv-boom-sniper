@@ -616,16 +616,15 @@ function evaluateDiffer() {
     const activeBankroll = botState.balance > 0 ? botState.balance : 100;
     
     if (botState.hidraLayer === 0) {
-        // CAPA 0: NORMAL - Usamos Kelly
-        const kellyStake = calculateKellyStake(activeBankroll, estimatedWinRate, PROFIT_RATE);
-        const stakeMult = kellyStake / 1.0; // Normalizado al baseStake
+        // CAPA 0: NORMAL - Usamos Stake Fijo Configurado por el Usuario
+        const stakeMult = 1.0; // Usa el 100% del stake configurado en la UI
         
         return {
             engine: 'DIFFER',
             contractType: 'DIGITDIFF',
             barrier: String(bestBarrier),
             stakeMultiplier: stakeMult,
-            reason: `Quantum DIGITDIFF evitar=${bestBarrier} (Acierto Est.: ${(estimatedWinRate*100).toFixed(1)}% | Kelly Stake: $${kellyStake.toFixed(2)})`,
+            reason: `Quantum DIGITDIFF evitar=${bestBarrier} (Acierto Est.: ${(estimatedWinRate*100).toFixed(1)}%)`,
             entropy: parseFloat(botState.shannonEntropy)
         };
     }
@@ -633,9 +632,7 @@ function evaluateDiffer() {
     if (botState.hidraLayer === 2) {
         // CAPA 2: D'ALEMBERT (Recuperación Lineal)
         const dStep = botState.hidraDalembertStep || 1;
-        const kellyStake = calculateKellyStake(activeBankroll, estimatedWinRate, PROFIT_RATE);
-        const baseStakeMult = kellyStake / 1.0;
-        const stakeMult = baseStakeMult * (1 + (dStep * 0.35)); // Aumento lineal sobre Kelly
+        const stakeMult = 1.0 + (dStep * 0.35); // Aumento lineal fijo basado en el stake del usuario
         
         console.log(`🐍 LA HIDRA [CAPA 2 - D'ALEMBERT Step ${dStep}]: Disparando recuperación lineal con Stake Mult ${stakeMult.toFixed(2)}`);
         
@@ -701,9 +698,9 @@ function tryFireTrade() {
     const currentCooldown = botState.cooldownMode === 'auto' ? getDynamicCooldown() : botState.cooldownMs;
     if ((now - botState.lastTradeTime) < currentCooldown) return;
     
-    // FILTRO DE ENTROPÍA ESTRICTO (Motor Cuántico)
-    if (parseFloat(botState.shannonEntropy) > 3.0) {
-        // Si el mercado es demasiado caótico, abortamos cualquier intento de trade
+    // FILTRO DE ENTROPÍA (Motor Cuántico - Flexibilizado)
+    if (parseFloat(botState.shannonEntropy) > 3.2) {
+        // Si el mercado es demasiado caótico (cerca de 3.32), abortamos cualquier intento de trade
         return;
     }
     
