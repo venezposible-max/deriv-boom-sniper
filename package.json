@@ -5,9 +5,9 @@
     "type": "module",
     "main": "server-differs.js",
     "scripts": {
-        "start": "node server-hybrid.js",
+        "start": "node server-boom.js",
         "start-boom": "node server-boom.js",
-        "start-hybrid": "node server-hybrid.js"
+        "start-hybrid": "node server-boom.js"
     },
     "dependencies": {
         "cors": "^2.8.6",

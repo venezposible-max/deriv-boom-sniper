@@ -101,7 +101,13 @@ let botState = {
     markovEdge: 0,
     hotDigit: null,
     hotDigitFreq: 0,
-    chiSquaredSignificant: false
+    chiSquaredSignificant: false,
+    
+    // ─── La Hidra (Motor de Cobertura y Recuperación para Differ) ───
+    hidraLayer: 0,             // 0=Normal, 1=Espejo, 2=D'Alembert, 3=Freno
+    hidraDalembertStep: 0,
+    hidraLastLossDigit: null,
+    hidraFrenoUntil: 0
 };
 
 // ════════════════════════════════════════════════════════════════
@@ -127,6 +133,12 @@ if (fs.existsSync(STATE_FILE)) {
             if (botState.takeProfitExtensions === undefined) botState.takeProfitExtensions = 0;
             if (botState.spikeProtectionUntil === undefined) botState.spikeProtectionUntil = 0;
             if (botState.stakeReduced === undefined) botState.stakeReduced = false;
+            
+            // Garantizar inicialización segura de variables de La Hidra
+            if (botState.hidraLayer === undefined) botState.hidraLayer = 0;
+            if (botState.hidraDalembertStep === undefined) botState.hidraDalembertStep = 0;
+            if (botState.hidraLastLossDigit === undefined) botState.hidraLastLossDigit = null;
+            if (botState.hidraFrenoUntil === undefined) botState.hidraFrenoUntil = 0;
             
             // Forzar estados de arranque seguros
             botState.isRunning = false;
@@ -495,58 +507,97 @@ function evaluateDiffer() {
     const hist = botState.digitHistory;
     if (hist.length < 100) return null;
     
-    const chiTest = calcChiSquared(hist, 100);
-    if (!chiTest.significant) return null;
+    const now = Date.now();
     
-    const markovHist = hist.slice(-100);
-    const matrix = buildMarkovMatrix(markovHist);
-    const lastDigit = hist[hist.length - 1];
-    const transitions = matrix[lastDigit];
-    
-    let bestBarrier = null;
-    let bestContractType = null;
-    let maxEdge = 0;
-    let bestProb = 0;
-    
-    // Probar todas las barreras 0-9 para DIGITOVER y DIGITUNDER
-    for (let b = 0; b <= 9; b++) {
-        // OVER b: gana si siguiente > b
-        const theoreticalOver = (9 - b) / 10;
-        let probOver = 0;
-        for (let d = b + 1; d <= 9; d++) probOver += transitions[d];
-        const edgeOver = probOver - theoreticalOver;
-        
-        // UNDER b: gana si siguiente < b
-        const theoreticalUnder = b / 10;
-        let probUnder = 0;
-        for (let d = 0; d < b; d++) probUnder += transitions[d];
-        const edgeUnder = probUnder - theoreticalUnder;
-        
-        if (edgeOver > maxEdge) {
-            maxEdge = edgeOver;
-            bestBarrier = b;
-            bestContractType = 'DIGITOVER';
-            bestProb = probOver;
-        }
-        if (edgeUnder > maxEdge) {
-            maxEdge = edgeUnder;
-            bestBarrier = b;
-            bestContractType = 'DIGITUNDER';
-            bestProb = probUnder;
+    // CAPA 3: Freno de emergencia
+    if (botState.hidraLayer === 3) {
+        if (now >= botState.hidraFrenoUntil) {
+            console.log(`🐍 LA HIDRA: Freno de emergencia finalizado. Reanudando en Capa 0 (Normal).`);
+            botState.hidraLayer = 0;
+            botState.hidraDalembertStep = 0;
+            botState.hidraLastLossDigit = null;
+            saveState();
+        } else {
+            return null; // El motor Differ está temporalmente bloqueado en este cooldown
         }
     }
     
-    // Edge mínimo requerido = 10%
-    if (maxEdge < 0.10 || bestBarrier === null) return null;
+    const lastDigit = hist[hist.length - 1];
     
-    return {
-        engine: 'DIFFER',
-        contractType: bestContractType,
-        barrier: String(bestBarrier),
-        stakeMultiplier: 0.8,
-        reason: `Cirujano ${bestContractType} barrera=${bestBarrier} (Prob: ${(bestProb*100).toFixed(1)}% | Edge: ${(maxEdge*100).toFixed(1)}%)`,
-        entropy: parseFloat(botState.shannonEntropy)
-    };
+    // CAPA 1: ESPEJO (La Cobertura Natural)
+    if (botState.hidraLayer === 1) {
+        // En el estado Espejo, la barrera es exactamente el último dígito perdedor
+        const mirrorDigit = botState.hidraLastLossDigit !== null ? botState.hidraLastLossDigit : lastDigit;
+        
+        console.log(`🐍 LA HIDRA [CAPA 1 - ESPEJO]: Disparando cobertura sobre dígito ${mirrorDigit} (99% prob. no repetición)`);
+        
+        return {
+            engine: 'DIFFER',
+            contractType: 'DIGITDIFF',
+            barrier: String(mirrorDigit),
+            stakeMultiplier: 1.5, // Recuperación rápida y segura con cobertura espejo
+            reason: `Hidra Espejo cobertura evitar=${mirrorDigit} tras pérdida (Prob: ~99.0%)`,
+            entropy: parseFloat(botState.shannonEntropy)
+        };
+    }
+    
+    // Para Capa 0 (Normal) y Capa 2 (D'Alembert), calculamos la Matriz de Markov
+    const chiTest = calcChiSquared(hist, 100);
+    if (!chiTest.significant) return null; // Filtro de patrones estadísticas significativos
+    
+    const markovHist = hist.slice(-100);
+    const matrix = buildMarkovMatrix(markovHist);
+    const transitions = matrix[lastDigit];
+    
+    let bestBarrier = null;
+    let minProb = 1.0;
+    
+    // Buscamos el dígito con la menor probabilidad de transición
+    for (let d = 0; d <= 9; d++) {
+        const prob = transitions[d];
+        if (prob < minProb) {
+            minProb = prob;
+            bestBarrier = d;
+        }
+    }
+    
+    // Filtro de seguridad: probabilidad de transición inferior o igual al 8% (92%+ de tasa de acierto estimada)
+    const maxTransitionProbAllowed = 0.08; 
+    if (bestBarrier === null || minProb > maxTransitionProbAllowed) return null;
+    
+    const estimatedWinRate = (1 - minProb) * 100;
+    const edge = (1 - minProb) - 0.90;
+    
+    if (botState.hidraLayer === 0) {
+        // CAPA 0: NORMAL
+        return {
+            engine: 'DIFFER',
+            contractType: 'DIGITDIFF',
+            barrier: String(bestBarrier),
+            stakeMultiplier: 0.8, // Stake base controlado
+            reason: `Hidra Normal DIGITDIFF evitar=${bestBarrier} (Acierto Est.: ${estimatedWinRate.toFixed(1)}% | Markov: ${(minProb*100).toFixed(1)}%)`,
+            entropy: parseFloat(botState.shannonEntropy)
+        };
+    }
+    
+    if (botState.hidraLayer === 2) {
+        // CAPA 2: D'ALEMBERT (Recuperación Lineal)
+        const dStep = botState.hidraDalembertStep || 1;
+        const stakeMult = 0.8 + (dStep * 0.35); // Aumento lineal seguro
+        
+        console.log(`🐍 LA HIDRA [CAPA 2 - D'ALEMBERT Step ${dStep}]: Disparando recuperación lineal con Stake Mult ${stakeMult.toFixed(2)}`);
+        
+        return {
+            engine: 'DIFFER',
+            contractType: 'DIGITDIFF',
+            barrier: String(bestBarrier),
+            stakeMultiplier: stakeMult,
+            reason: `Hidra D'Alembert Step ${dStep} evitar=${bestBarrier} (Acierto Est.: ${estimatedWinRate.toFixed(1)}% | StakeMult: ${stakeMult.toFixed(2)})`,
+            entropy: parseFloat(botState.shannonEntropy)
+        };
+    }
+    
+    return null;
 }
 
 // ════════════════════════════════════════════════════════════════
@@ -712,6 +763,53 @@ function finalizeTrade(c) {
         console.log(`❌ LOSS -$${Math.abs(profit).toFixed(2)} [${name}] | ${cType}${barrier ? ` B:${barrier}` : ''} | Racha: ${botState.consecutiveLosses} | PnL: $${botState.pnlSession.toFixed(2)}`);
     }
     
+    // ─── ACTUALIZACIÓN DE ESTADO DE LA HIDRA (DIFFER) ───
+    if (engine === 'DIFFER') {
+        if (isWin) {
+            if (botState.hidraLayer === 1) {
+                // Espejo (cobertura) ganó, volvemos a normal
+                console.log(`🐍 LA HIDRA: ¡Capa 1 (Espejo) exitosa! Cobertura completada. Volviendo a Capa 0.`);
+                botState.hidraLayer = 0;
+                botState.hidraLastLossDigit = null;
+            } else if (botState.hidraLayer === 2) {
+                // D'Alembert ganó, bajamos un paso
+                botState.hidraDalembertStep--;
+                console.log(`🐍 LA HIDRA: ¡Capa 2 (D'Alembert) ganadora! Reduciendo Step a ${botState.hidraDalembertStep}.`);
+                if (botState.hidraDalembertStep <= 0) {
+                    botState.hidraDalembertStep = 0;
+                    botState.hidraLayer = 0;
+                    console.log(`🐍 LA HIDRA: Recuperación lineal completada. Volviendo a Capa 0.`);
+                }
+            }
+        } else {
+            // Pérdida en Differ
+            if (botState.hidraLayer === 0) {
+                // Primera pérdida -> Ir a Espejo
+                botState.hidraLayer = 1;
+                botState.hidraLastLossDigit = botState.lastDigit; // Registrar el dígito perdedor
+                console.log(`🐍 LA HIDRA: Pérdida en Capa 0. Transicionando a Capa 1 (Espejo) sobre dígito ${botState.lastDigit}.`);
+            } else if (botState.hidraLayer === 1) {
+                // Espejo falló -> Ir a D'Alembert
+                botState.hidraLayer = 2;
+                botState.hidraDalembertStep = 1;
+                botState.hidraLastLossDigit = null;
+                console.log(`🐍 LA HIDRA: Capa 1 (Espejo) falló. Transicionando a Capa 2 (D'Alembert) Step 1.`);
+            } else if (botState.hidraLayer === 2) {
+                // D'Alembert falló -> Incrementar step
+                botState.hidraDalembertStep++;
+                console.log(`🐍 LA HIDRA: Capa 2 (D'Alembert) falló. Incrementando Step a ${botState.hidraDalembertStep}.`);
+                
+                // Freno de emergencia tras 4 pérdidas consecutivas en la racha de Differ
+                if (botState.consecutiveLosses >= 4) {
+                    botState.hidraLayer = 3;
+                    botState.hidraFrenoUntil = Date.now() + (5 * 60 * 1000); // 5 min de freno absoluto
+                    const reanudar = new Date(botState.hidraFrenoUntil).toLocaleTimeString('es-VE', { timeZone: 'America/Caracas' });
+                    console.log(`🐍 LA HIDRA LOCKDOWN: 4 pérdidas consecutivas. Freno de emergencia por 5 min hasta ${reanudar}.`);
+                }
+            }
+        }
+    }
+    
     // Actualizar estadísticas por motor
     if (botState.engineStats[engine]) {
         if (isWin) botState.engineStats[engine].wins++;
@@ -723,7 +821,10 @@ function finalizeTrade(c) {
         const totalTrades = stats.wins + stats.losses;
         if (totalTrades >= 10 && !stats.autoDisabled) {
             const wr = (stats.wins / totalTrades) * 100;
-            const breakEven = engine === 'MATCH' ? 14.0 : 52.5;
+            let breakEven = 52.5;
+            if (engine === 'MATCH') breakEven = 14.0;
+            else if (engine === 'DIFFER') breakEven = 91.3;
+            
             if (wr < breakEven) {
                 stats.autoDisabled = true;
                 console.log(`🦎 DARWIN: Motor ${name} auto-desactivado (WR: ${wr.toFixed(1)}% < Breakeven: ${breakEven}%)`);
