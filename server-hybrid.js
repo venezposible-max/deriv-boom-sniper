@@ -115,7 +115,11 @@ let botState = {
     hidraLayer: 0,             // 0=Normal, 1=Espejo, 2=D'Alembert, 3=Freno
     hidraDalembertStep: 0,
     hidraLastLossDigit: null,
-    hidraFrenoUntil: 0
+    hidraFrenoUntil: 0,
+    
+    // ─── Enfriamiento inteligente y re-evaluación post-pérdida ───
+    lossPauseUntil: null,
+    lossPauseTicksProcessed: 0
 };
 
 // ════════════════════════════════════════════════════════════════
@@ -152,6 +156,10 @@ if (fs.existsSync(STATE_FILE)) {
             if (botState.ghostNextTradeReal === undefined) botState.ghostNextTradeReal = false;
             if (botState.ghostPendingBarrier === undefined) botState.ghostPendingBarrier = null;
             if (botState.ghostActive === undefined) botState.ghostActive = false;
+            
+            // Garantizar variables de enfriamiento
+            if (botState.lossPauseUntil === undefined) botState.lossPauseUntil = null;
+            if (botState.lossPauseTicksProcessed === undefined) botState.lossPauseTicksProcessed = 0;
             
             // Forzar solo DIFFER activo para asegurar la premisa del usuario
             botState.engineEvenOdd = false;
@@ -686,6 +694,31 @@ function tryFireTrade() {
     
     const now = Date.now();
     
+    // Si estamos en pausa por pérdida (enfriamiento de 1 minuto)
+    if (botState.lossPauseUntil) {
+        if (now < botState.lossPauseUntil) {
+            const secondsLeft = Math.ceil((botState.lossPauseUntil - now) / 1000);
+            if (now % 10000 < 1000) { // Loguear cada 10s
+                console.log(`⏳ PAUSA POR PÉRDIDA: Esperando ${secondsLeft}s para enfriamiento de la red.`);
+            }
+            return;
+        } else {
+            // El tiempo pasó, ahora exigimos la captura de ticks frescos
+            const ticksProcessed = botState.lossPauseTicksProcessed || 0;
+            if (ticksProcessed < 20) {
+                if (now % 10000 < 1000) {
+                    console.log(`⏳ RE-EVALUACIÓN POST-PÉRDIDA: Esperando ticks frescos (${ticksProcessed}/20) para actualizar matriz de Markov...`);
+                }
+                return;
+            }
+            // Superadas ambas condiciones, limpiamos la pausa de seguridad
+            console.log(`🛡️ RE-EVALUACIÓN COMPLETADA: Matriz de Markov actualizada con ${ticksProcessed} ticks frescos. Reanudando operaciones.`);
+            botState.lossPauseUntil = null;
+            botState.lossPauseTicksProcessed = 0;
+            saveState();
+        }
+    }
+    
     // Failsafe de contrato colgado (15 segundos)
     if (botState.activeContractId && (now - botState.lastTradeTime) > 15000) {
         console.log(`⚠️ FAILSAFE: Contrato ${botState.activeContractId} colgado. Liberando bot.`);
@@ -792,6 +825,12 @@ function finalizeTrade(c) {
         
         botState.consecutiveWins = 0;
         botState.consecutiveLosses++;
+        
+        // Registrar pausa de seguridad de 1 minuto y resetear ticks de re-evaluación
+        botState.lossPauseUntil = Date.now() + 60000;
+        botState.lossPauseTicksProcessed = 0;
+        console.log(`🚨 PÉRDIDA DETECTADA: Iniciando pausa de enfriamiento de 60 segundos y captura de 20 ticks para re-evaluación.`);
+        saveState();
         
         // Momentum Shield y Pausas (Desactivados por premisa de operación continua e ininterrumpida)
         if (botState.consecutiveLosses >= 2) {
@@ -1196,6 +1235,11 @@ function connectDeriv() {
             
             if (botState.digitHistory.length >= 50) {
                 botState.shannonEntropy = calcEntropy(botState.digitHistory, 100).toFixed(3);
+            }
+            
+            // Incrementar conteo de ticks capturados en la pausa
+            if (botState.lossPauseUntil && Date.now() < botState.lossPauseUntil) {
+                botState.lossPauseTicksProcessed = (botState.lossPauseTicksProcessed || 0) + 1;
             }
             
             tryFireTrade();
