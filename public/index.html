@@ -1386,14 +1386,25 @@ body::before {
         <span class="engine-status-text disabled" id="statusDiffer">
           <span>●</span> Desactivado
         </span>
-        <!-- Cobertura Toggle -->
-        <div style="display: flex; align-items: center; gap: 8px;">
-          <span style="font-size: 11px; font-weight: 700; color: var(--text-muted); letter-spacing: 0.5px; text-transform: uppercase;">Cobertura</span>
-          <label class="toggle" style="width: 38px; height: 20px;">
-            <input type="checkbox" id="toggleCobertura" onchange="handleCoberturaToggle(this.checked)">
-            <div class="toggle-track" style="border-radius: 10px;"></div>
-            <div class="toggle-thumb" style="width: 14px; height: 14px; top: 3px; left: 3px;"></div>
-          </label>
+        <div style="display: flex; align-items: center; gap: 12px;">
+          <!-- Cobertura Toggle -->
+          <div style="display: flex; align-items: center; gap: 6px;">
+            <span style="font-size: 11px; font-weight: 700; color: var(--text-muted); letter-spacing: 0.5px; text-transform: uppercase;">Cobertura</span>
+            <label class="toggle" style="width: 38px; height: 20px;">
+              <input type="checkbox" id="toggleCobertura" onchange="handleCoberturaToggle(this.checked)">
+              <div class="toggle-track" style="border-radius: 10px;"></div>
+              <div class="toggle-thumb" style="width: 14px; height: 14px; top: 3px; left: 3px;"></div>
+            </label>
+          </div>
+          <!-- 98% Probabilidad Toggle -->
+          <div style="display: flex; align-items: center; gap: 6px;">
+            <span style="font-size: 11px; font-weight: 700; color: var(--accent-green); letter-spacing: 0.5px; text-transform: uppercase;">98% Prob</span>
+            <label class="toggle" style="width: 38px; height: 20px;">
+              <input type="checkbox" id="toggleDiffer98" onchange="handleDiffer98Toggle(this.checked)">
+              <div class="toggle-track" style="border-radius: 10px; background: rgba(16, 185, 129, 0.15);"></div>
+              <div class="toggle-thumb" style="width: 14px; height: 14px; top: 3px; left: 3px;"></div>
+            </label>
+          </div>
         </div>
       </div>
       <div class="darwin-badge" id="darwinBadgeDiffer">
@@ -1778,6 +1789,11 @@ function updateUI(data) {
   const toggleCob = $('toggleCobertura');
   if (toggleCob) {
     toggleCob.checked = !!data.coberturaEnabled;
+  }
+  
+  const toggleD98 = $('toggleDiffer98');
+  if (toggleD98) {
+    toggleD98.checked = !!data.differPrecision98;
   }
 
   // Engine cards active state
@@ -2340,6 +2356,20 @@ async function handleCoberturaToggle(checked) {
     showToast(`Cobertura ${checked ? 'activada' : 'desactivada'}`, 'success');
   } catch (e) {
     showToast('Error al actualizar cobertura', 'error');
+  }
+  fetchStatus();
+}
+
+async function handleDiffer98Toggle(checked) {
+  try {
+    await fetch('/api/config', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ differPrecision98: checked })
+    });
+    showToast(`Modo 98% Probabilidad ${checked ? 'activado' : 'desactivado'}`, 'success');
+  } catch (e) {
+    showToast('Error al actualizar precisión', 'error');
   }
   fetchStatus();
 }

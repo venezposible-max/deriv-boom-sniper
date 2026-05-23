@@ -62,6 +62,7 @@ let botState = {
     isBuying: false,
     maxTradesPerDay: 50,
     coberturaEnabled: true,
+    differPrecision98: false,
     
     // ─── Momentum Shield ───
     consecutiveLosses: 0,
@@ -140,6 +141,7 @@ if (fs.existsSync(STATE_FILE)) {
             if (botState.spikeProtectionUntil === undefined) botState.spikeProtectionUntil = 0;
             if (botState.stakeReduced === undefined) botState.stakeReduced = false;
             if (botState.coberturaEnabled === undefined) botState.coberturaEnabled = true;
+            if (botState.differPrecision98 === undefined) botState.differPrecision98 = false;
             
             // Garantizar inicialización segura de variables de La Hidra
             if (botState.hidraLayer === undefined) botState.hidraLayer = 0;
@@ -601,8 +603,16 @@ function evaluateDiffer() {
     
     // CAPA 0: NORMAL (Usando Markov de 2do Orden para máxima precisión)
     const state = (prevDigit * 10) + lastDigit;
-    const matrix2 = build2ndOrderMarkovMatrix(hist.slice(-200));
+    const markovHist = hist.slice(-200);
+    const matrix2 = build2ndOrderMarkovMatrix(markovHist);
     const transitions2 = matrix2[state];
+    
+    // Contar ocurrencias del estado actual para el filtro de tamaño de muestra
+    let stateOccurrences = 0;
+    for (let k = 2; k < markovHist.length; k++) {
+        const s = (markovHist[k - 2] * 10) + markovHist[k - 1];
+        if (s === state) stateOccurrences++;
+    }
     
     let bestBarrier = null;
     let minProb = 1.0;
@@ -622,9 +632,14 @@ function evaluateDiffer() {
         }
     }
     
-    // Filtro de seguridad: probabilidad de transición inferior o igual al 8% (92%+ de tasa de acierto estimada)
-    const maxTransitionProbAllowed = 0.08; 
-    if (bestBarrier === null || minProb > maxTransitionProbAllowed) return null;
+    // Si el modo 98% está activo, exigimos un umbral estricto del 2% y una muestra mínima de 8 ocurrencias.
+    // De lo contrario, se usa el modo estándar del 8% sin muestra mínima.
+    const maxTransitionProbAllowed = botState.differPrecision98 ? 0.02 : 0.08; 
+    const minOccurrencesRequired = botState.differPrecision98 ? 8 : 1;
+    
+    if (bestBarrier === null || minProb > maxTransitionProbAllowed || stateOccurrences < minOccurrencesRequired) {
+        return null;
+    }
     
     const estimatedWinRate = (1 - minProb) * 100;
     const edge = (1 - minProb) - 0.90;
@@ -1034,7 +1049,7 @@ app.post('/api/engine-toggle', (req, res) => {
 });
 
 app.post('/api/config', (req, res) => {
-    const { stake, maxDailyLoss, takeProfit, cooldownMs, maxTradesPerDay, cooldownMode, coberturaEnabled } = req.body;
+    const { stake, maxDailyLoss, takeProfit, cooldownMs, maxTradesPerDay, cooldownMode, coberturaEnabled, differPrecision98 } = req.body;
     
     if (stake !== undefined) botState.stake = Math.max(0.35, parseFloat(stake));
     if (maxDailyLoss !== undefined) botState.maxDailyLoss = parseFloat(maxDailyLoss);
@@ -1046,6 +1061,7 @@ app.post('/api/config', (req, res) => {
     if (maxTradesPerDay !== undefined) botState.maxTradesPerDay = Math.max(1, parseInt(maxTradesPerDay));
     if (cooldownMode !== undefined) botState.cooldownMode = cooldownMode;
     if (coberturaEnabled !== undefined) botState.coberturaEnabled = !!coberturaEnabled;
+    if (differPrecision98 !== undefined) botState.differPrecision98 = !!differPrecision98;
     
     saveState();
     console.log(`⚙️ CONFIGURACIÓN KRAKEN MODIFICADA.`);
