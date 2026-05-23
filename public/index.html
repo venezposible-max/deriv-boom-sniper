@@ -255,9 +255,10 @@ body::before {
    ═══════════════════════════════════════════════════════════ */
 .engines-row {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: 1fr;
+  max-width: 600px;
+  margin: 0 auto 24px auto;
   gap: 16px;
-  margin-bottom: 24px;
 }
 
 .engine-card {
@@ -1234,7 +1235,7 @@ body::before {
   <!-- ═══════════════════════════ ENGINE CARDS ═══════════════════════════ -->
   <div class="engines-row">
     <!-- EVEN/ODD -->
-    <div class="engine-card glass engine-evenodd" id="engineCardEvenOdd">
+    <div class="engine-card glass engine-evenodd" id="engineCardEvenOdd" style="display: none !important;">
       <div class="engine-header">
         <div class="engine-info">
           <div class="engine-icon">🍞</div>
@@ -1278,7 +1279,7 @@ body::before {
     </div>
 
     <!-- OVER/UNDER -->
-    <div class="engine-card glass engine-overunder" id="engineCardOverUnder">
+    <div class="engine-card glass engine-overunder" id="engineCardOverUnder" style="display: none !important;">
       <div class="engine-header">
         <div class="engine-info">
           <div class="engine-icon">⚡</div>
@@ -1322,7 +1323,7 @@ body::before {
     </div>
 
     <!-- MATCH -->
-    <div class="engine-card glass engine-match" id="engineCardMatch">
+    <div class="engine-card glass engine-match" id="engineCardMatch" style="display: none !important;">
       <div class="engine-header">
         <div class="engine-info">
           <div class="engine-icon">💎</div>
@@ -1381,10 +1382,19 @@ body::before {
           <div class="toggle-thumb"></div>
         </label>
       </div>
-      <div class="engine-status">
+      <div class="engine-status" style="display: flex; justify-content: space-between; align-items: center; padding: 0 24px; margin-bottom: 12px;">
         <span class="engine-status-text disabled" id="statusDiffer">
           <span>●</span> Desactivado
         </span>
+        <!-- Cobertura Toggle -->
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <span style="font-size: 11px; font-weight: 700; color: var(--text-muted); letter-spacing: 0.5px; text-transform: uppercase;">Cobertura</span>
+          <label class="toggle" style="width: 38px; height: 20px;">
+            <input type="checkbox" id="toggleCobertura" onchange="handleCoberturaToggle(this.checked)">
+            <div class="toggle-track" style="border-radius: 10px;"></div>
+            <div class="toggle-thumb" style="width: 14px; height: 14px; top: 3px; left: 3px;"></div>
+          </label>
+        </div>
       </div>
       <div class="darwin-badge" id="darwinBadgeDiffer">
         🦎 Auto-desactivado por Darwin
@@ -1764,6 +1774,11 @@ function updateUI(data) {
   $('toggleOverUnder').checked = data.engineOverUnder;
   $('toggleMatch').checked = data.engineMatch;
   $('toggleDiffer').checked = data.engineDiffer;
+  
+  const toggleCob = $('toggleCobertura');
+  if (toggleCob) {
+    toggleCob.checked = !!data.coberturaEnabled;
+  }
 
   // Engine cards active state
   updateEngineCard('engineCardEvenOdd', 'statusEvenOdd', data.engineEvenOdd, data.isRunning, data.currentEngine === 'EVEN_ODD');
@@ -2314,6 +2329,20 @@ $('toggleMatch').addEventListener('change', function() {
 $('toggleDiffer').addEventListener('change', function() {
   handleEngineToggle('DIFFER', this.checked);
 });
+
+async function handleCoberturaToggle(checked) {
+  try {
+    await fetch('/api/config', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ coberturaEnabled: checked })
+    });
+    showToast(`Cobertura ${checked ? 'activada' : 'desactivada'}`, 'success');
+  } catch (e) {
+    showToast('Error al actualizar cobertura', 'error');
+  }
+  fetchStatus();
+}
 
 // ── Toast System ───────────────────────────────────────────────────────────
 function showToast(message, type = 'info') {

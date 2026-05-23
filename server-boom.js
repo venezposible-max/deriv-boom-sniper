@@ -57,10 +57,14 @@ let botState = {
     dailyProfit: 0,
     takeProfit: 15,
     lastTradeTime: 0,
-    cooldownMs: 6000,
+    cooldownMs: 1000,
     cooldownMode: 'auto',      // 'auto' | 'fixed'
     isBuying: false,
-    maxTradesPerDay: 50,
+    maxTradesPerDay: 500,
+    
+    // ─── Cobertura Personalizada ───
+    coberturaEnabled: false,
+    coberturaActive: false,
     
     // ─── Momentum Shield ───
     consecutiveLosses: 0,
@@ -77,9 +81,9 @@ let botState = {
     spikeProtectionUntil: 0,   // trade session index until which stake is halved
     
     // ─── Interruptores de motores ───
-    engineEvenOdd: true,
-    engineOverUnder: true,
-    engineMatch: true,
+    engineEvenOdd: false,
+    engineOverUnder: false,
+    engineMatch: false,
     engineDiffer: true,
     
     // ─── Información del trade activo ───
@@ -134,17 +138,25 @@ if (fs.existsSync(STATE_FILE)) {
             if (botState.spikeProtectionUntil === undefined) botState.spikeProtectionUntil = 0;
             if (botState.stakeReduced === undefined) botState.stakeReduced = false;
             
+            // Cobertura Personalizada
+            if (botState.coberturaEnabled === undefined) botState.coberturaEnabled = false;
+            if (botState.coberturaActive === undefined) botState.coberturaActive = false;
+            
             // Garantizar inicialización segura de variables de La Hidra
             if (botState.hidraLayer === undefined) botState.hidraLayer = 0;
             if (botState.hidraDalembertStep === undefined) botState.hidraDalembertStep = 0;
             if (botState.hidraLastLossDigit === undefined) botState.hidraLastLossDigit = null;
             if (botState.hidraFrenoUntil === undefined) botState.hidraFrenoUntil = 0;
             
-            // Forzar estados de arranque seguros
+            // Forzar estados de arranque seguros y enfocar exclusivamente en Differ
             botState.isRunning = false;
             botState.isBuying = false;
             botState.activeContractId = null;
             botState.currentContractId = null;
+            botState.engineEvenOdd = false;
+            botState.engineOverUnder = false;
+            botState.engineMatch = false;
+            botState.engineDiffer = true;
         }
         console.log(`📂 Estado KRAKEN cargado correctamente. Historial: ${botState.tradeHistory.length} trades.`);
     } catch (e) {
@@ -550,130 +562,50 @@ function evaluateMatch() {
  */
 function evaluateDiffer() {
     const hist = botState.digitHistory;
-    if (hist.length < 100) return null;
-    
-    const now = Date.now();
-    
-    // CAPA 3: Freno de emergencia
-    if (botState.hidraLayer === 3) {
-        if (now >= botState.hidraFrenoUntil) {
-            console.log(`🐍 LA HIDRA: Freno de emergencia finalizado. Reanudando en Capa 0 (Normal).`);
-            botState.hidraLayer = 0;
-            botState.hidraDalembertStep = 0;
-            botState.hidraLastLossDigit = null;
-            saveState();
-        } else {
-            return null; // El motor Differ está temporalmente bloqueado en este cooldown
-        }
-    }
+    if (hist.length < 50) return null;
     
     const lastDigit = hist[hist.length - 1];
     
-    // CAPA 1: ESPEJO (La Cobertura Natural)
-    if (botState.hidraLayer === 1) {
-        // En el estado Espejo, la barrera es exactamente el último dígito perdedor
-        const mirrorDigit = botState.hidraLastLossDigit !== null ? botState.hidraLastLossDigit : lastDigit;
-        
-        console.log(`🐍 LA HIDRA [CAPA 1 - ESPEJO]: Disparando cobertura sobre dígito ${mirrorDigit} (99% prob. no repetición)`);
-        
-        return {
-            engine: 'DIFFER',
-            contractType: 'DIGITDIFF',
-            barrier: String(mirrorDigit),
-            stakeMultiplier: 1.5, // Recuperación rápida y segura con cobertura espejo
-            reason: `Hidra Espejo cobertura evitar=${mirrorDigit} tras pérdida (Prob: ~99.0%)`,
-            entropy: parseFloat(botState.shannonEntropy)
-        };
-    }
-    
-    // Para Capa 0 (Normal) y Capa 2 (D'Alembert), calculamos la Matriz de Markov de 2do Orden
-    const markovHist = hist.slice(-200);
-    const matrix2 = build2ndOrderMarkovMatrix(markovHist);
-    const prevDigit = hist[hist.length - 2];
-    const currentState = (prevDigit * 10) + lastDigit;
-    const transitions2 = matrix2[currentState];
-    
-    // TAMBIÉN calculamos Markov de 1er Orden para cross-validación
+    // 1. Construir matriz de Markov de 1er Orden
+    const markovHist = hist.slice(-100);
     const matrix1 = buildMarkovMatrix(markovHist);
     const transitions1 = matrix1[lastDigit];
     
-    // Paso 1: Encontrar la probabilidad mínima en 2do Orden
-    let minProb = 1.0;
-    for (let d = 0; d <= 9; d++) {
-        if (transitions2[d] < minProb) minProb = transitions2[d];
-    }
+    // 2. Calcular frecuencia en ventana ultra-corta (últimos 20 ticks) para reaccionar rápido
+    const last20 = hist.slice(-20);
+    const freq20 = new Array(10).fill(0);
+    last20.forEach(d => freq20[d]++);
     
-    // Paso 2: Recopilar TODOS los dígitos que comparten esa probabilidad mínima
-    const candidates = [];
-    for (let d = 0; d <= 9; d++) {
-        if (transitions2[d] === minProb) candidates.push(d);
-    }
-    
-    // Paso 3: Si hay múltiples candidatos, usar Markov 1er Orden para desempatar
+    // 3. Evaluar cada dígito y calcular su puntuación de "Frialdad" (Coldness Score)
     let bestBarrier = null;
-    if (candidates.length === 1) {
-        bestBarrier = candidates[0];
-    } else if (candidates.length > 1) {
-        // Elegir el candidato que TAMBIÉN tiene la menor probabilidad en Markov 1er Orden
-        let bestCandidateProb = 1.0;
-        const tiedCandidates = [];
-        for (const c of candidates) {
-            if (transitions1[c] < bestCandidateProb) {
-                bestCandidateProb = transitions1[c];
-                tiedCandidates.length = 0;
-                tiedCandidates.push(c);
-            } else if (transitions1[c] === bestCandidateProb) {
-                tiedCandidates.push(c);
-            }
+    let minScore = Infinity;
+    
+    for (let d = 0; d <= 9; d++) {
+        // Evitamos predecir el mismo dígito que el último para evitar repeticiones directas
+        if (d === lastDigit) continue;
+        
+        // Puntuación: Markov (peso 70%) + Frecuencia corta (peso 30%)
+        // Queremos el menor valor posible (la probabilidad más baja y menos apariciones recientes)
+        const score = (transitions1[d] * 0.7) + ((freq20[d] / 20) * 0.3);
+        
+        if (score < minScore) {
+            minScore = score;
+            bestBarrier = d;
         }
-        // Si aún hay empate, elegir aleatoriamente entre los finalistas
-        bestBarrier = tiedCandidates[Math.floor(Math.random() * tiedCandidates.length)];
     }
     
-    // Filtro de seguridad: probabilidad de transición inferior o igual al 5% (95%+ de tasa de acierto estimada)
-    const maxTransitionProbAllowed = 0.05; 
-    if (bestBarrier === null || minProb > maxTransitionProbAllowed) return null;
+    if (bestBarrier === null) return null;
     
-    console.log(`🧪 QUANTUM: Estado=${currentState} | Candidatos=[${candidates.join(',')}] | Elegido=${bestBarrier} | Prob=${(minProb*100).toFixed(1)}%`);
+    const estimatedWinRate = (1 - transitions1[bestBarrier]);
     
-    const estimatedWinRate = (1 - minProb);
-    const PROFIT_RATE = 0.09; // 9% para DIGITDIFF
-    
-    // Si no hay saldo registrado, usamos un bankroll simulado de 100 para Kelly
-    const activeBankroll = botState.balance > 0 ? botState.balance : 100;
-    
-    if (botState.hidraLayer === 0) {
-        // CAPA 0: NORMAL - Usamos Stake Fijo Configurado por el Usuario
-        const stakeMult = 1.0; // Usa el 100% del stake configurado en la UI
-        
-        return {
-            engine: 'DIFFER',
-            contractType: 'DIGITDIFF',
-            barrier: String(bestBarrier),
-            stakeMultiplier: stakeMult,
-            reason: `Quantum DIGITDIFF evitar=${bestBarrier} (Acierto Est.: ${(estimatedWinRate*100).toFixed(1)}%)`,
-            entropy: parseFloat(botState.shannonEntropy)
-        };
-    }
-    
-    if (botState.hidraLayer === 2) {
-        // CAPA 2: D'ALEMBERT (Recuperación Lineal)
-        const dStep = botState.hidraDalembertStep || 1;
-        const stakeMult = 1.0 + (dStep * 0.35); // Aumento lineal fijo basado en el stake del usuario
-        
-        console.log(`🐍 LA HIDRA [CAPA 2 - D'ALEMBERT Step ${dStep}]: Disparando recuperación lineal con Stake Mult ${stakeMult.toFixed(2)}`);
-        
-        return {
-            engine: 'DIFFER',
-            contractType: 'DIGITDIFF',
-            barrier: String(bestBarrier),
-            stakeMultiplier: stakeMult,
-            reason: `Quantum D'Alembert Step ${dStep} evitar=${bestBarrier} (Acierto Est.: ${(estimatedWinRate*100).toFixed(1)}% | StakeMult: ${stakeMult.toFixed(2)})`,
-            entropy: parseFloat(botState.shannonEntropy)
-        };
-    }
-    
-    return null;
+    return {
+        engine: 'DIFFER',
+        contractType: 'DIGITDIFF',
+        barrier: String(bestBarrier),
+        stakeMultiplier: 1.0,
+        reason: `Quantum-Coldness evitar=${bestBarrier} (Acierto Est.: ${(estimatedWinRate*100).toFixed(1)}% | Markov: ${(transitions1[bestBarrier]*100).toFixed(1)}% | Freq20: ${freq20[bestBarrier]}/20)`,
+        entropy: parseFloat(botState.shannonEntropy)
+    };
 }
 
 // ════════════════════════════════════════════════════════════════
@@ -697,8 +629,8 @@ function tryFireTrade() {
     if (botState.isBuying || botState.activeContractId) return;
     
     // Control de límite de pérdidas diarias
-    if (botState.dailyLoss >= botState.maxDailyLoss) {
-        console.log(`🚫 LÍMITE DE PÉRDIDA DIARIA ALCANZADO ($${botState.dailyLoss.toFixed(2)}). Bot detenido.`);
+    if (botState.pnlSession <= -botState.maxDailyLoss || botState.dailyLoss >= botState.maxDailyLoss) {
+        console.log(`🚫 LÍMITE DE PÉRDIDA MÁXIMA ALCANZADO ($${botState.pnlSession.toFixed(2)}). Bot detenido.`);
         botState.isRunning = false;
         saveState();
         return;
@@ -712,49 +644,26 @@ function tryFireTrade() {
         return;
     }
     
-    // Pausa por Circuit Breaker (Nivel de escudo 4)
-    if (botState.circuitBreakerUntil > now) {
-        const remain = ((botState.circuitBreakerUntil - now) / 60000).toFixed(1);
-        if (now % 30000 < 1500) {
-            console.log(`⚡ KRAKEN EN MODO LOCKDOWN. Reanuda en ${remain} minutos.`);
-        }
-        return;
-    }
-    
-    // Control de Cooldown Dinámico
-    const currentCooldown = botState.cooldownMode === 'auto' ? getDynamicCooldown() : botState.cooldownMs;
+    // Control de Cooldown Fijo y Rápido (1000ms) para trading continuo
+    const currentCooldown = 1000;
     if ((now - botState.lastTradeTime) < currentCooldown) return;
-    
-    // FILTRO DE ENTROPÍA (Motor Cuántico - Flexibilizado)
-    if (parseFloat(botState.shannonEntropy) > 3.2) {
-        // Si el mercado es demasiado caótico (cerca de 3.32), abortamos cualquier intento de trade
-        return;
-    }
     
     let signal = null;
     
-    // Orquestación secuencial en base a Edge y Escudo de Momentum
-    // Prioridad 1: MATCH
-    if (!signal && botState.engineMatch && !botState.engineStats.MATCH.autoDisabled && botState.momentumShieldLevel < 2) {
-        signal = evaluateMatch();
-    }
-    // Prioridad 2: DIFFER ("El Cirujano")
-    if (!signal && botState.engineDiffer && !botState.engineStats.DIFFER.autoDisabled && botState.momentumShieldLevel < 3) {
+    // Evaluación exclusiva de DIFFER ("El Cirujano")
+    if (botState.engineDiffer) {
         signal = evaluateDiffer();
-    }
-    // Prioridad 3: OVER/UNDER
-    if (!signal && botState.engineOverUnder && !botState.engineStats.OVER_UNDER.autoDisabled && botState.momentumShieldLevel < 3) {
-        signal = evaluateOverUnder();
-    }
-    // Prioridad 4: EVEN/ODD
-    if (!signal && botState.engineEvenOdd && !botState.engineStats.EVEN_ODD.autoDisabled && botState.momentumShieldLevel < 4) {
-        signal = evaluateEvenOdd();
     }
     
     if (!signal) return;
     
-    const finalStake = getAdjustedStake(botState.stake, signal.stakeMultiplier);
-    if (finalStake <= 0) return; // Escudo bloqueando stake
+    // Stake ininterrumpido: Duplica en cobertura si corresponde, sin reducciones de escudo o spike
+    let finalStake = botState.stake;
+    if (botState.coberturaEnabled && botState.coberturaActive) {
+        finalStake = botState.stake * 2;
+    }
+    
+    if (finalStake <= 0) return;
     
     botState.currentEngine = signal.engine;
     botState.currentContractType = signal.contractType;
@@ -782,8 +691,8 @@ function tryFireTrade() {
     botState.isBuying = true;
     botState.lastTradeTime = now;
     
-    const emojis = { EVEN_ODD: '🎰', OVER_UNDER: '📊', MATCH: '💎', DIFFER: '🔪' };
-    const names = { EVEN_ODD: 'PAR/IMPAR', OVER_UNDER: 'OVER/UNDER', MATCH: 'MATCH', DIFFER: 'DIFFER (Cirujano)' };
+    const emojis = { DIFFER: '🔪' };
+    const names = { DIFFER: 'DIFFER (Cirujano)' };
     
     console.log(`${emojis[signal.engine] || '🎲'} DISPARO [${names[signal.engine]}] | ${signal.contractType} B:${signal.barrier || 'N/A'} | Stake: $${finalStake.toFixed(2)} | ${signal.reason}`);
     
@@ -845,48 +754,57 @@ function finalizeTrade(c) {
         console.log(`❌ LOSS -$${Math.abs(profit).toFixed(2)} [${name}] | ${cType}${barrier ? ` B:${barrier}` : ''} | Racha: ${botState.consecutiveLosses} | PnL: $${botState.pnlSession.toFixed(2)}`);
     }
     
-    // ─── ACTUALIZACIÓN DE ESTADO DE LA HIDRA (DIFFER) ───
+    // ─── ACTUALIZACIÓN DE ESTADO DE LA HIDRA / COBERTURA (DIFFER) ───
     if (engine === 'DIFFER') {
-        if (isWin) {
-            if (botState.hidraLayer === 1) {
-                // Espejo (cobertura) ganó, volvemos a normal
-                console.log(`🐍 LA HIDRA: ¡Capa 1 (Espejo) exitosa! Cobertura completada. Volviendo a Capa 0.`);
-                botState.hidraLayer = 0;
-                botState.hidraLastLossDigit = null;
-            } else if (botState.hidraLayer === 2) {
-                // D'Alembert ganó, bajamos un paso
-                botState.hidraDalembertStep--;
-                console.log(`🐍 LA HIDRA: ¡Capa 2 (D'Alembert) ganadora! Reduciendo Step a ${botState.hidraDalembertStep}.`);
-                if (botState.hidraDalembertStep <= 0) {
-                    botState.hidraDalembertStep = 0;
-                    botState.hidraLayer = 0;
-                    console.log(`🐍 LA HIDRA: Recuperación lineal completada. Volviendo a Capa 0.`);
+        if (botState.coberturaEnabled) {
+            // LÓGICA DE COBERTURA PERSONALIZADA
+            if (isWin) {
+                console.log(`🐍 KRAKEN COBERTURA: ¡Ganada! Volviendo a stake inicial.`);
+                botState.coberturaActive = false;
+            } else {
+                if (botState.coberturaActive) {
+                    console.log(`🐍 KRAKEN COBERTURA: Pérdida consecutiva duplicada fallida. Volviendo a stake inicial.`);
+                    botState.coberturaActive = false;
+                } else {
+                    console.log(`🐍 KRAKEN COBERTURA: Primera pérdida. Duplicando stake en la siguiente operación.`);
+                    botState.coberturaActive = true;
                 }
             }
         } else {
-            // Pérdida en Differ
-            if (botState.hidraLayer === 0) {
-                // Primera pérdida -> Ir a Espejo
-                botState.hidraLayer = 1;
-                botState.hidraLastLossDigit = botState.lastDigit; // Registrar el dígito perdedor
-                console.log(`🐍 LA HIDRA: Pérdida en Capa 0. Transicionando a Capa 1 (Espejo) sobre dígito ${botState.lastDigit}.`);
-            } else if (botState.hidraLayer === 1) {
-                // Espejo falló -> Ir a D'Alembert
-                botState.hidraLayer = 2;
-                botState.hidraDalembertStep = 1;
-                botState.hidraLastLossDigit = null;
-                console.log(`🐍 LA HIDRA: Capa 1 (Espejo) falló. Transicionando a Capa 2 (D'Alembert) Step 1.`);
-            } else if (botState.hidraLayer === 2) {
-                // D'Alembert falló -> Incrementar step
-                botState.hidraDalembertStep++;
-                console.log(`🐍 LA HIDRA: Capa 2 (D'Alembert) falló. Incrementando Step a ${botState.hidraDalembertStep}.`);
-                
-                // Freno de emergencia tras 4 pérdidas consecutivas en la racha de Differ
-                if (botState.consecutiveLosses >= 4) {
-                    botState.hidraLayer = 3;
-                    botState.hidraFrenoUntil = Date.now() + (5 * 60 * 1000); // 5 min de freno absoluto
-                    const reanudar = new Date(botState.hidraFrenoUntil).toLocaleTimeString('es-VE', { timeZone: 'America/Caracas' });
-                    console.log(`🐍 LA HIDRA LOCKDOWN: 4 pérdidas consecutivas. Freno de emergencia por 5 min hasta ${reanudar}.`);
+            // Fallback a Hidra original
+            if (isWin) {
+                if (botState.hidraLayer === 1) {
+                    console.log(`🐍 LA HIDRA: ¡Capa 1 (Espejo) exitosa! Cobertura completada. Volviendo a Capa 0.`);
+                    botState.hidraLayer = 0;
+                    botState.hidraLastLossDigit = null;
+                } else if (botState.hidraLayer === 2) {
+                    botState.hidraDalembertStep--;
+                    console.log(`🐍 LA HIDRA: ¡Capa 2 (D'Alembert) ganadora! Reduciendo Step a ${botState.hidraDalembertStep}.`);
+                    if (botState.hidraDalembertStep <= 0) {
+                        botState.hidraDalembertStep = 0;
+                        botState.hidraLayer = 0;
+                        console.log(`🐍 LA HIDRA: Recuperación lineal completada. Volviendo a Capa 0.`);
+                    }
+                }
+            } else {
+                if (botState.hidraLayer === 0) {
+                    botState.hidraLayer = 1;
+                    botState.hidraLastLossDigit = botState.lastDigit;
+                    console.log(`🐍 LA HIDRA: Pérdida en Capa 0. Transicionando a Capa 1 (Espejo) sobre dígito ${botState.lastDigit}.`);
+                } else if (botState.hidraLayer === 1) {
+                    botState.hidraLayer = 2;
+                    botState.hidraDalembertStep = 1;
+                    botState.hidraLastLossDigit = null;
+                    console.log(`🐍 LA HIDRA: Capa 1 (Espejo) falló. Transicionando a Capa 2 (D'Alembert) Step 1.`);
+                } else if (botState.hidraLayer === 2) {
+                    botState.hidraDalembertStep++;
+                    console.log(`🐍 LA HIDRA: Capa 2 (D'Alembert) falló. Incrementando Step a ${botState.hidraDalembertStep}.`);
+                    if (botState.consecutiveLosses >= 4) {
+                        botState.hidraLayer = 3;
+                        botState.hidraFrenoUntil = Date.now() + (5 * 60 * 1000);
+                        const reanudar = new Date(botState.hidraFrenoUntil).toLocaleTimeString('es-VE', { timeZone: 'America/Caracas' });
+                        console.log(`🐍 LA HIDRA LOCKDOWN: 4 pérdidas consecutivas. Freno de emergencia por 5 min hasta ${reanudar}.`);
+                    }
                 }
             }
         }
@@ -897,23 +815,6 @@ function finalizeTrade(c) {
         if (isWin) botState.engineStats[engine].wins++;
         else botState.engineStats[engine].losses++;
         botState.engineStats[engine].pnl += profit;
-        
-        // DARWIN MODE: Auto-desactivar motores inviables estadísticamente (APAGADO A PETICIÓN DEL USUARIO)
-        const stats = botState.engineStats[engine];
-        const totalTrades = stats.wins + stats.losses;
-        if (totalTrades >= 10 && !stats.autoDisabled) {
-            const wr = (stats.wins / totalTrades) * 100;
-            let breakEven = 52.5;
-            if (engine === 'MATCH') breakEven = 14.0;
-            else if (engine === 'DIFFER') breakEven = 91.3;
-            
-            /* 
-            if (wr < breakEven) {
-                stats.autoDisabled = true;
-                console.log(`🦎 DARWIN: Motor ${name} auto-desactivado (WR: ${wr.toFixed(1)}% < Breakeven: ${breakEven}%)`);
-            }
-            */
-        }
     }
     
     // Guardar en Historial de Trades
@@ -931,47 +832,19 @@ function finalizeTrade(c) {
     });
     if (botState.tradeHistory.length > 100) botState.tradeHistory.pop();
     
-    // Spike Protection: Si los últimos 5 trades suman < -$3.00, se mitiga riesgo
-    if (botState.tradeHistory.length >= 5) {
-        const last5 = botState.tradeHistory.slice(0, 5);
-        const sumProfit = last5.reduce((acc, t) => acc + t.profit, 0);
-        if (sumProfit < -3.00 && botState.totalTradesSession >= botState.spikeProtectionUntil) {
-            botState.spikeProtectionUntil = botState.totalTradesSession + 5;
-            console.log(`📉 SPIKE PROTECTION ACTIVO: Pérdidas acumuladas en 5 trades de $${sumProfit.toFixed(2)}. Stake reducido 50% por 5 trades.`);
-        }
-    }
-    
-    // Trailing Take-Profit & Profit Lock
-    if (botState.pnlSession > botState.profitPeak) {
-        botState.profitPeak = botState.pnlSession;
-        if (botState.pnlSession > 5.0) {
-            botState.profitFloor = botState.profitPeak * 0.60;
-        }
-    }
-    
-    // Control Profit Floor
-    if (botState.pnlSession > 5.0 && botState.pnlSession <= botState.profitFloor) {
-        console.log(`🔒 PROFIT LOCK: El PnL retrocedió al piso de seguridad ($${botState.profitFloor.toFixed(2)}). Ganancias bloqueadas. Deteniendo bot.`);
+    // Control de Objetivo (Take Profit / Meta) y Pérdida Máxima Diaria (Drawdown)
+    if (botState.pnlSession >= botState.takeProfit) {
+        console.log(`🏆 META / OBJETIVO DE SESIÓN ALCANZADO ($${botState.pnlSession.toFixed(2)}). Deteniendo bot.`);
         botState.isRunning = false;
         saveState();
         return;
     }
     
-    // Control Take Profit Extensions (House Money Mode)
-    if (botState.pnlSession >= botState.takeProfit) {
-        if (botState.takeProfitExtensions < 3) {
-            botState.takeProfitExtensions++;
-            botState.takeProfit += 5.0;
-            botState.stake = parseFloat((botState.stake * 0.5).toFixed(2));
-            if (botState.stake < 0.35) botState.stake = 0.35;
-            botState.stakeReduced = true;
-            console.log(`🚀 META ALCANZADA! Extendiendo Meta TP a $${botState.takeProfit.toFixed(2)} con Stake Reducido al 50% (Dinero de la Casa). [Ext ${botState.takeProfitExtensions}/3]`);
-        } else {
-            console.log(`🏆 META FINAL KRAKEN ALCANZADA ($${botState.pnlSession.toFixed(2)}). 3 Extensiones logradas. Deteniendo sesión.`);
-            botState.isRunning = false;
-            saveState();
-            return;
-        }
+    if (botState.pnlSession <= -botState.maxDailyLoss || botState.dailyLoss >= botState.maxDailyLoss) {
+        console.log(`🚫 LÍMITE DE PÉRDIDA MÁXIMA ALCANZADO ($${botState.pnlSession.toFixed(2)}). Bot detenido.`);
+        botState.isRunning = false;
+        saveState();
+        return;
     }
     
     botState.activeContractId = null;
@@ -1129,7 +1002,7 @@ app.post('/api/engine-toggle', (req, res) => {
 });
 
 app.post('/api/config', (req, res) => {
-    const { stake, maxDailyLoss, takeProfit, cooldownMs, maxTradesPerDay, cooldownMode } = req.body;
+    const { stake, maxDailyLoss, takeProfit, cooldownMs, maxTradesPerDay, cooldownMode, coberturaEnabled } = req.body;
     
     if (stake !== undefined) botState.stake = Math.max(0.35, parseFloat(stake));
     if (maxDailyLoss !== undefined) botState.maxDailyLoss = parseFloat(maxDailyLoss);
@@ -1140,9 +1013,15 @@ app.post('/api/config', (req, res) => {
     if (cooldownMs !== undefined) botState.cooldownMs = Math.max(1000, parseInt(cooldownMs));
     if (maxTradesPerDay !== undefined) botState.maxTradesPerDay = Math.max(1, parseInt(maxTradesPerDay));
     if (cooldownMode !== undefined) botState.cooldownMode = cooldownMode;
+    if (coberturaEnabled !== undefined) {
+        botState.coberturaEnabled = !!coberturaEnabled;
+        if (!botState.coberturaEnabled) {
+            botState.coberturaActive = false; // reset when disabled
+        }
+    }
     
     saveState();
-    console.log(`⚙️ CONFIGURACIÓN KRAKEN MODIFICADA.`);
+    console.log(`⚙️ CONFIGURACIÓN KRAKEN MODIFICADA. Cobertura: ${botState.coberturaEnabled}`);
     return res.json({ success: true, message: 'Parámetros actualizados con éxito.' });
 });
 
