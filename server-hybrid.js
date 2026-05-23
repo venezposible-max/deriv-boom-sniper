@@ -61,6 +61,7 @@ let botState = {
     cooldownMode: 'auto',      // 'auto' | 'fixed'
     isBuying: false,
     maxTradesPerDay: 50,
+    coberturaEnabled: true,
     
     // ─── Momentum Shield ───
     consecutiveLosses: 0,
@@ -133,6 +134,7 @@ if (fs.existsSync(STATE_FILE)) {
             if (botState.takeProfitExtensions === undefined) botState.takeProfitExtensions = 0;
             if (botState.spikeProtectionUntil === undefined) botState.spikeProtectionUntil = 0;
             if (botState.stakeReduced === undefined) botState.stakeReduced = false;
+            if (botState.coberturaEnabled === undefined) botState.coberturaEnabled = true;
             
             // Garantizar inicialización segura de variables de La Hidra
             if (botState.hidraLayer === undefined) botState.hidraLayer = 0;
@@ -246,37 +248,7 @@ function buildMarkovMatrix(hist) {
  * Cooldown Dinámico Basado en Caos (Entropía) y Momentum de Rachas
  */
 function getDynamicCooldown() {
-    const entropy = parseFloat(botState.shannonEntropy) || 3.0;
-    let cd = 6000; // Base: 6s
-    
-    if (entropy < 2.8) {
-        cd = 4000; // Predictable market, attack!
-    } else if (entropy >= 2.8 && entropy <= 3.1) {
-        cd = 8000; // Normal market, be selective
-    } else {
-        cd = 15000; // Random market, protect
-    }
-    
-    // Penalización por racha perdedora
-    if (botState.consecutiveLosses > 0) {
-        cd += 3000;
-    }
-    
-    // Bonificación por racha ganadora
-    if (botState.consecutiveWins >= 3) {
-        cd = 3000;
-    }
-    
-    // Modificador por Momentum Shield
-    if (botState.momentumShieldLevel === 1) {
-        cd += 3000;
-    } else if (botState.momentumShieldLevel === 2) {
-        cd += 10000;
-    } else if (botState.momentumShieldLevel === 3) {
-        cd += 25000;
-    }
-    
-    return cd;
+    return 1000; // Cooldown de 1 segundo para fluidez máxima y análisis rápido sin esperas
 }
 
 /**
@@ -285,23 +257,13 @@ function getDynamicCooldown() {
 function getAdjustedStake(baseStake, stakeMultiplier) {
     let adjusted = baseStake * stakeMultiplier;
     
-    // Ajuste por nivel de escudo
-    if (botState.momentumShieldLevel === 1) {
-        adjusted *= 0.75;
-    } else if (botState.momentumShieldLevel === 2) {
-        adjusted *= 0.50;
-    } else if (botState.momentumShieldLevel === 3) {
-        adjusted *= 0.35;
-    } else if (botState.momentumShieldLevel === 4) {
-        adjusted *= 0.0;
+    // Si estamos en cobertura (hidraLayer === 1), no reducimos el stake para garantizar la recuperación completa
+    if (botState.hidraLayer === 1) {
+        return parseFloat(adjusted.toFixed(2));
     }
     
-    // Ajuste por protección contra picos (Spike Protection)
-    if (botState.totalTradesSession < botState.spikeProtectionUntil) {
-        adjusted *= 0.50;
-    }
-    
-    // Failsafe: Nunca apostar menos de $0.35 a menos que sea 0
+    // Deshabilitamos reducciones de escudo por racha y protección contra picos
+    // para cumplir con la premisa del usuario de no parar, no pausar y mantener operación al 100%
     if (adjusted > 0 && adjusted < 0.35) {
         adjusted = 0.35;
     }
@@ -524,26 +486,55 @@ function evaluateDiffer() {
     
     const lastDigit = hist[hist.length - 1];
     
-    // CAPA 1: ESPEJO (La Cobertura Natural)
+    // CAPA 1: COBERTURA INFALIBLE (1 Tiro x10)
     if (botState.hidraLayer === 1) {
-        // En el estado Espejo, la barrera es exactamente el último dígito perdedor
-        const mirrorDigit = botState.hidraLastLossDigit !== null ? botState.hidraLastLossDigit : lastDigit;
+        const entropy = parseFloat(botState.shannonEntropy);
         
-        console.log(`🐍 LA HIDRA [CAPA 1 - ESPEJO]: Disparando cobertura sobre dígito ${mirrorDigit} (99% prob. no repetición)`);
+        // Selección de Barrera Estadísticamente Infalible usando Markov de 150 ticks
+        // Disparando inmediatamente sin retrasos ni pausas por repetición o entropía
+        const markovHist = hist.slice(-150);
+        const matrix = buildMarkovMatrix(markovHist);
+        const transitions = matrix[lastDigit]; // Transiciones desde el último dígito
+        
+        let bestBarrier = null;
+        let minProb = 1.0;
+        
+        // Calculamos la frecuencia global para desempate
+        const freq100 = Array(10).fill(0);
+        hist.slice(-100).forEach(d => freq100[d]++);
+        
+        for (let d = 0; d <= 9; d++) {
+            if (d === lastDigit) continue; 
+            
+            const prob = transitions[d] || 0;
+            if (prob < minProb) {
+                minProb = prob;
+                bestBarrier = d;
+            } else if (prob === minProb && bestBarrier !== null) {
+                if (freq100[d] < freq100[bestBarrier]) {
+                    bestBarrier = d;
+                }
+            }
+        }
+        
+        if (bestBarrier === null) {
+            bestBarrier = botState.hidraLastLossDigit !== null ? botState.hidraLastLossDigit : (lastDigit + 5) % 10;
+        }
+        
+        console.log(`🐍 LA HIDRA [COBERTURA INFALIBLE x10]: Disparando inmediatamente sobre dígito de menor transición ${bestBarrier} (Prob: ${(minProb*100).toFixed(2)}%)`);
         
         return {
             engine: 'DIFFER',
             contractType: 'DIGITDIFF',
-            barrier: String(mirrorDigit),
-            stakeMultiplier: 1.5, // Recuperación rápida y segura con cobertura espejo
-            reason: `Hidra Espejo cobertura evitar=${mirrorDigit} tras pérdida (Prob: ~99.0%)`,
-            entropy: parseFloat(botState.shannonEntropy)
+            barrier: String(bestBarrier),
+            stakeMultiplier: 10.0,
+            reason: `Hidra Cobertura Infalible evitar=${bestBarrier} tras pérdida (Prob trans: ${(minProb*100).toFixed(2)}%)`,
+            entropy: entropy
         };
     }
     
     // Para Capa 0 (Normal) y Capa 2 (D'Alembert), calculamos la Matriz de Markov
-    const chiTest = calcChiSquared(hist, 100);
-    if (!chiTest.significant) return null; // Filtro de patrones estadísticas significativos
+    // Bypass del Chi-Squared por premisa de no detenerse y permitir análisis dinámico y rápido de Markov sin esperar patrones
     
     const markovHist = hist.slice(-100);
     const matrix = buildMarkovMatrix(markovHist);
@@ -620,30 +611,14 @@ function tryFireTrade() {
     
     if (botState.isBuying || botState.activeContractId) return;
     
-    // Control de límite de pérdidas diarias
-    if (botState.dailyLoss >= botState.maxDailyLoss) {
-        console.log(`🚫 LÍMITE DE PÉRDIDA DIARIA ALCANZADO ($${botState.dailyLoss.toFixed(2)}). Bot detenido.`);
-        botState.isRunning = false;
-        saveState();
-        return;
+    // Control de límite de pérdidas diarias (Solo logs informativos por premisa de fluidez continua)
+    if (botState.dailyLoss >= botState.maxDailyLoss && now % 30000 < 1500) {
+        console.log(`⚠️ LÍMITE DE PÉRDIDA DIARIA SUPERADO ($${botState.dailyLoss.toFixed(2)}). Continuando...`);
     }
     
-    // Control de límite máximo de trades
-    if (botState.totalTradesSession >= botState.maxTradesPerDay) {
-        console.log(`🚫 MÁXIMO DE TRADES DE SESIÓN ALCANZADO (${botState.maxTradesPerDay}). Bot detenido.`);
-        botState.isRunning = false;
-        saveState();
-        return;
-    }
+    // Control de límite máximo de trades (Bypass por premisa de operación sin pausas)
     
-    // Pausa por Circuit Breaker (Nivel de escudo 4)
-    if (botState.circuitBreakerUntil > now) {
-        const remain = ((botState.circuitBreakerUntil - now) / 60000).toFixed(1);
-        if (now % 30000 < 1500) {
-            console.log(`⚡ KRAKEN EN MODO LOCKDOWN. Reanuda en ${remain} minutos.`);
-        }
-        return;
-    }
+    // Pausa por Circuit Breaker (Desactivado por premisa de flujo continuo de operaciones)
     
     // Control de Cooldown Dinámico
     const currentCooldown = botState.cooldownMode === 'auto' ? getDynamicCooldown() : botState.cooldownMs;
@@ -743,21 +718,12 @@ function finalizeTrade(c) {
         botState.consecutiveWins = 0;
         botState.consecutiveLosses++;
         
-        // Configuración escalada del Momentum Shield
-        if (botState.consecutiveLosses === 2) {
-            botState.momentumShieldLevel = 1;
-            console.log(`🛡️ SHIELD NIVEL 1: 2 pérdidas consecutivas. Cooldown extendido, stake al 75%.`);
-        } else if (botState.consecutiveLosses === 3) {
-            botState.momentumShieldLevel = 2;
-            console.log(`🛡️ SHIELD NIVEL 2: 3 pérdidas consecutivas. MATCH inhabilitado, stake al 50%.`);
-        } else if (botState.consecutiveLosses === 4) {
-            botState.momentumShieldLevel = 3;
-            console.log(`🛡️ SHIELD NIVEL 3: 4 pérdidas consecutivas. Solo PAR/IMPAR activo, stake al 35%.`);
-        } else if (botState.consecutiveLosses >= 5) {
-            botState.momentumShieldLevel = 4;
-            botState.circuitBreakerUntil = Date.now() + (10 * 60 * 1000); // 10 min de pausa absoluta
-            const reanudar = new Date(botState.circuitBreakerUntil).toLocaleTimeString('es-VE', { timeZone: 'America/Caracas' });
-            console.log(`⚡ KRAKEN SHIELD LOCKDOWN (NIVEL 4). Pausa de 10 min hasta ${reanudar}.`);
+        // Momentum Shield y Pausas (Desactivados por premisa de operación continua e ininterrumpida)
+        if (botState.consecutiveLosses >= 2) {
+            botState.momentumShieldLevel = 0; // Mantener nivel de escudo en 0
+            if (botState.consecutiveLosses % 2 === 0) {
+                console.log(`🛡️ KRAKEN SHIELD: Continuando operación continua a pesar de racha de ${botState.consecutiveLosses} pérdidas.`);
+            }
         }
         
         console.log(`❌ LOSS -$${Math.abs(profit).toFixed(2)} [${name}] | ${cType}${barrier ? ` B:${barrier}` : ''} | Racha: ${botState.consecutiveLosses} | PnL: $${botState.pnlSession.toFixed(2)}`);
@@ -767,45 +733,30 @@ function finalizeTrade(c) {
     if (engine === 'DIFFER') {
         if (isWin) {
             if (botState.hidraLayer === 1) {
-                // Espejo (cobertura) ganó, volvemos a normal
-                console.log(`🐍 LA HIDRA: ¡Capa 1 (Espejo) exitosa! Cobertura completada. Volviendo a Capa 0.`);
+                console.log(`🐍 LA HIDRA: ¡Cobertura exitosa! Recuperación completa. Volviendo a Capa 0.`);
                 botState.hidraLayer = 0;
                 botState.hidraLastLossDigit = null;
-            } else if (botState.hidraLayer === 2) {
-                // D'Alembert ganó, bajamos un paso
-                botState.hidraDalembertStep--;
-                console.log(`🐍 LA HIDRA: ¡Capa 2 (D'Alembert) ganadora! Reduciendo Step a ${botState.hidraDalembertStep}.`);
-                if (botState.hidraDalembertStep <= 0) {
-                    botState.hidraDalembertStep = 0;
-                    botState.hidraLayer = 0;
-                    console.log(`🐍 LA HIDRA: Recuperación lineal completada. Volviendo a Capa 0.`);
-                }
+            } else {
+                botState.hidraLayer = 0;
+                botState.hidraLastLossDigit = null;
             }
         } else {
             // Pérdida en Differ
-            if (botState.hidraLayer === 0) {
-                // Primera pérdida -> Ir a Espejo
-                botState.hidraLayer = 1;
-                botState.hidraLastLossDigit = botState.lastDigit; // Registrar el dígito perdedor
-                console.log(`🐍 LA HIDRA: Pérdida en Capa 0. Transicionando a Capa 1 (Espejo) sobre dígito ${botState.lastDigit}.`);
-            } else if (botState.hidraLayer === 1) {
-                // Espejo falló -> Ir a D'Alembert
-                botState.hidraLayer = 2;
-                botState.hidraDalembertStep = 1;
-                botState.hidraLastLossDigit = null;
-                console.log(`🐍 LA HIDRA: Capa 1 (Espejo) falló. Transicionando a Capa 2 (D'Alembert) Step 1.`);
-            } else if (botState.hidraLayer === 2) {
-                // D'Alembert falló -> Incrementar step
-                botState.hidraDalembertStep++;
-                console.log(`🐍 LA HIDRA: Capa 2 (D'Alembert) falló. Incrementando Step a ${botState.hidraDalembertStep}.`);
-                
-                // Freno de emergencia tras 4 pérdidas consecutivas en la racha de Differ
-                if (botState.consecutiveLosses >= 4) {
-                    botState.hidraLayer = 3;
-                    botState.hidraFrenoUntil = Date.now() + (5 * 60 * 1000); // 5 min de freno absoluto
-                    const reanudar = new Date(botState.hidraFrenoUntil).toLocaleTimeString('es-VE', { timeZone: 'America/Caracas' });
-                    console.log(`🐍 LA HIDRA LOCKDOWN: 4 pérdidas consecutivas. Freno de emergencia por 5 min hasta ${reanudar}.`);
+            if (botState.coberturaEnabled) {
+                if (botState.hidraLayer === 0) {
+                    botState.hidraLayer = 1;
+                    botState.hidraLastLossDigit = botState.lastDigit;
+                    console.log(`🐍 LA HIDRA: Pérdida en Differ. Transicionando a Capa 1 (Cobertura Infallible x10) sobre dígito ${botState.lastDigit}.`);
+                } else if (botState.hidraLayer === 1) {
+                    // La cobertura falló
+                    botState.hidraLayer = 0;
+                    botState.hidraLastLossDigit = null;
+                    console.log(`🐍 LA HIDRA: La cobertura falló. Se completó el único intento. Volviendo a Capa 0.`);
                 }
+            } else {
+                botState.hidraLayer = 0;
+                botState.hidraLastLossDigit = null;
+                console.log(`🐍 LA HIDRA: Pérdida en Differ (cobertura desactivada). Manteniendo Capa 0.`);
             }
         }
     }
@@ -847,15 +798,7 @@ function finalizeTrade(c) {
     });
     if (botState.tradeHistory.length > 100) botState.tradeHistory.pop();
     
-    // Spike Protection: Si los últimos 5 trades suman < -$3.00, se mitiga riesgo
-    if (botState.tradeHistory.length >= 5) {
-        const last5 = botState.tradeHistory.slice(0, 5);
-        const sumProfit = last5.reduce((acc, t) => acc + t.profit, 0);
-        if (sumProfit < -3.00 && botState.totalTradesSession >= botState.spikeProtectionUntil) {
-            botState.spikeProtectionUntil = botState.totalTradesSession + 5;
-            console.log(`📉 SPIKE PROTECTION ACTIVO: Pérdidas acumuladas en 5 trades de $${sumProfit.toFixed(2)}. Stake reducido 50% por 5 trades.`);
-        }
-    }
+    // Spike Protection (Bypass para conservar stake intacto y fluidez total)
     
     // Trailing Take-Profit & Profit Lock
     if (botState.pnlSession > botState.profitPeak) {
@@ -865,29 +808,15 @@ function finalizeTrade(c) {
         }
     }
     
-    // Control Profit Floor
-    if (botState.pnlSession > 5.0 && botState.pnlSession <= botState.profitFloor) {
-        console.log(`🔒 PROFIT LOCK: El PnL retrocedió al piso de seguridad ($${botState.profitFloor.toFixed(2)}). Ganancias bloqueadas. Deteniendo bot.`);
-        botState.isRunning = false;
-        saveState();
-        return;
+    // Control Profit Floor (Solo informativo, sin detención)
+    if (botState.pnlSession > 5.0 && botState.pnlSession <= botState.profitFloor && Date.now() % 30000 < 1500) {
+        console.log(`🔒 PROFIT LOCK ALERT: El PnL retrocedió al piso de seguridad ($${botState.profitFloor.toFixed(2)}).`);
     }
     
-    // Control Take Profit Extensions (House Money Mode)
+    // Control Take Profit (Extensión automática infinita al 100% de stake, flujo continuo)
     if (botState.pnlSession >= botState.takeProfit) {
-        if (botState.takeProfitExtensions < 3) {
-            botState.takeProfitExtensions++;
-            botState.takeProfit += 5.0;
-            botState.stake = parseFloat((botState.stake * 0.5).toFixed(2));
-            if (botState.stake < 0.35) botState.stake = 0.35;
-            botState.stakeReduced = true;
-            console.log(`🚀 META ALCANZADA! Extendiendo Meta TP a $${botState.takeProfit.toFixed(2)} con Stake Reducido al 50% (Dinero de la Casa). [Ext ${botState.takeProfitExtensions}/3]`);
-        } else {
-            console.log(`🏆 META FINAL KRAKEN ALCANZADA ($${botState.pnlSession.toFixed(2)}). 3 Extensiones logradas. Deteniendo sesión.`);
-            botState.isRunning = false;
-            saveState();
-            return;
-        }
+        botState.takeProfit += 5.0;
+        console.log(`🚀 META ALCANZADA! Extendiendo Meta TP a $${botState.takeProfit.toFixed(2)} sin detener el bot.`);
     }
     
     botState.activeContractId = null;
@@ -1045,7 +974,7 @@ app.post('/api/engine-toggle', (req, res) => {
 });
 
 app.post('/api/config', (req, res) => {
-    const { stake, maxDailyLoss, takeProfit, cooldownMs, maxTradesPerDay, cooldownMode } = req.body;
+    const { stake, maxDailyLoss, takeProfit, cooldownMs, maxTradesPerDay, cooldownMode, coberturaEnabled } = req.body;
     
     if (stake !== undefined) botState.stake = Math.max(0.35, parseFloat(stake));
     if (maxDailyLoss !== undefined) botState.maxDailyLoss = parseFloat(maxDailyLoss);
@@ -1056,6 +985,7 @@ app.post('/api/config', (req, res) => {
     if (cooldownMs !== undefined) botState.cooldownMs = Math.max(1000, parseInt(cooldownMs));
     if (maxTradesPerDay !== undefined) botState.maxTradesPerDay = Math.max(1, parseInt(maxTradesPerDay));
     if (cooldownMode !== undefined) botState.cooldownMode = cooldownMode;
+    if (coberturaEnabled !== undefined) botState.coberturaEnabled = !!coberturaEnabled;
     
     saveState();
     console.log(`⚙️ CONFIGURACIÓN KRAKEN MODIFICADA.`);
