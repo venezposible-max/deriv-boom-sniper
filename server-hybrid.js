@@ -789,12 +789,13 @@ function finalizeTrade(c) {
         engineKey: engine,
         contractType: cType,
         barrier: barrier,
+        digit: botState.lastDigit,
         profit: profit,
         result: isWin ? 'WIN ✅' : 'LOSS ❌',
         time: new Date().toISOString(),
-        lastDigit: botState.lastDigit,
         stake: botState.currentStake,
-        entropy: botState.shannonEntropy
+        entropy: botState.shannonEntropy,
+        balanceAfter: botState.balance
     });
     if (botState.tradeHistory.length > 100) botState.tradeHistory.pop();
     
