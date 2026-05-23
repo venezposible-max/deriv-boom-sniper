@@ -1179,7 +1179,12 @@ function connectDeriv() {
         }
         
         if (msg.msg_type === 'tick' && msg.tick) {
-            const price = String(msg.tick.quote);
+            // Obtener el dígito final de manera precisa, conservando ceros decimales mediante pip_size
+            let decimals = 2;
+            if (msg.tick.pip_size) {
+                decimals = Math.abs(Math.round(Math.log10(msg.tick.pip_size)));
+            }
+            const price = msg.tick.quote.toFixed(decimals);
             const digit = parseInt(price[price.length - 1]);
             
             botState.lastTickPrice = parseFloat(msg.tick.quote);
