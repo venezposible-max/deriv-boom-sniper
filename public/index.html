@@ -1544,7 +1544,7 @@ body::before {
       <div class="shield-level" id="shieldLevel4">Nivel 4</div>
     </div>
     <div class="shield-info">
-      <span class="shield-status" id="shieldStatusText">Normal — Todos los motores activos</span>
+      <span class="shield-status" id="shieldStatusText">Normal — Motor DIFFER activo (Flujo Continuo)</span>
       <span class="shield-cooldown" id="shieldCooldown">Cooldown: 6s</span>
     </div>
   </div>
@@ -1902,11 +1902,11 @@ function updateUI(data) {
   }
 
   const shieldTexts = {
-    0: 'Normal — Todos los motores activos',
-    1: 'Alerta — Stake al 75% | Cooldown +3s',
-    2: 'Defensa — Stake al 50% | Motor MATCH desactivado | Cooldown +10s',
-    3: 'Crítico — Stake al 35% | Solo PAR/IMPAR activo | Cooldown +25s',
-    4: 'LOCKDOWN — Circuit Breaker activo'
+    0: 'Normal — Motor DIFFER activo (Flujo Continuo)',
+    1: 'Alerta — Continuando operación al 100% de stake',
+    2: 'Defensa — Continuando operación al 100% de stake',
+    3: 'Crítico — Continuando operación al 100% de stake',
+    4: 'LOCKDOWN — Continuando operación al 100% de stake'
   };
   $('shieldStatusText').textContent = shieldTexts[shieldLevel] || shieldTexts[0];
 
