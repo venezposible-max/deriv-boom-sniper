@@ -64,6 +64,7 @@ let botState = {
     maxTradesPerDay: 50,
     coberturaEnabled: true,
     differPrecision98: false,
+    franklinPerezLogic: true,
     
     // ─── Momentum Shield ───
     consecutiveLosses: 0,
@@ -147,6 +148,7 @@ if (fs.existsSync(STATE_FILE)) {
             if (botState.stakeReduced === undefined) botState.stakeReduced = false;
             if (botState.coberturaEnabled === undefined) botState.coberturaEnabled = true;
             if (botState.differPrecision98 === undefined) botState.differPrecision98 = false;
+            if (botState.franklinPerezLogic === undefined) botState.franklinPerezLogic = true;
             
             // Garantizar inicialización segura de variables de La Hidra
             if (botState.hidraLayer === undefined) botState.hidraLayer = 0;
@@ -858,9 +860,15 @@ function finalizeTrade(c) {
             // Pérdida en Differ
             if (botState.coberturaEnabled) {
                 if (botState.hidraLayer === 0) {
-                    botState.hidraLayer = 1;
-                    botState.hidraLastLossDigit = botState.lastDigit;
-                    console.log(`🐍 LA HIDRA: Pérdida en Differ. Transicionando a Capa 1 (Cobertura Infallible x10) sobre dígito ${botState.lastDigit}.`);
+                    if (botState.franklinPerezLogic && botState.pnlSession > 0) {
+                        botState.hidraLayer = 0; // Se mantiene en normal
+                        botState.hidraLastLossDigit = null;
+                        console.log(`🧠 LÓGICA FRANKLIN PÉREZ: Pérdida detectada, pero el PnL de la sesión sigue siendo positivo ($${botState.pnlSession.toFixed(2)}). Se opera con STAKE NORMAL sin arriesgar Cobertura.`);
+                    } else {
+                        botState.hidraLayer = 1;
+                        botState.hidraLastLossDigit = botState.lastDigit;
+                        console.log(`🧠 LÓGICA FRANKLIN PÉREZ: El PnL de la sesión es negativo ($${botState.pnlSession.toFixed(2)}). Transicionando a Capa 1 (Cobertura Infallible x10) sobre dígito ${botState.lastDigit}.`);
+                    }
                 } else if (botState.hidraLayer === 1) {
                     // La cobertura falló
                     botState.hidraLayer = 0;
