@@ -32,6 +32,7 @@ const STATE_FILE = path.join(__dirname, 'persistent-state-hybrid.json');
 
 // Símbolo actual (por defecto R_25)
 let SYMBOL = 'R_25';
+let symbolDecimals = 2; // Rastreador dinámico de precisión decimal
 
 // ════════════════════════════════════════════════════════════════
 //  ESTADO GLOBAL
@@ -1081,6 +1082,7 @@ app.post('/api/switch-market', (req, res) => {
     }
     
     SYMBOL = symbol;
+    symbolDecimals = 2; // Reiniciar seguimiento de decimales para el nuevo mercado
     botState.digitHistory = [];
     botState.digitFrequency = {};
     botState.hotDigit = null;
@@ -1175,12 +1177,13 @@ function connectDeriv() {
         }
         
         if (msg.msg_type === 'tick' && msg.tick) {
-            // Obtener el dígito final de manera precisa, conservando ceros decimales mediante pip_size
-            let decimals = 2;
-            if (msg.tick.pip_size) {
-                decimals = Math.abs(Math.round(Math.log10(msg.tick.pip_size)));
+            // Obtener el dígito final de manera precisa, adaptándonos dinámicamente a la precisión real del activo
+            const quoteStr = String(msg.tick.quote);
+            const parts = quoteStr.split('.');
+            if (parts[1] && parts[1].length > symbolDecimals && parts[1].length <= 4) {
+                symbolDecimals = parts[1].length;
             }
-            const price = msg.tick.quote.toFixed(decimals);
+            const price = msg.tick.quote.toFixed(symbolDecimals);
             const digit = parseInt(price[price.length - 1]);
             
             botState.lastTickPrice = parseFloat(msg.tick.quote);
