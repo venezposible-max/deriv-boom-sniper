@@ -259,6 +259,36 @@ function buildMarkovMatrix(hist) {
 }
 
 /**
+ * Matriz de Markov de 2do Orden (Basada en los 2 últimos dígitos)
+ */
+function build2ndOrderMarkovMatrix(hist) {
+    const matrix = {};
+    // Inicializar 100 estados posibles (00 a 99)
+    for (let i = 0; i <= 99; i++) {
+        matrix[i] = {};
+        for (let j = 0; j <= 9; j++) matrix[i][j] = 0;
+    }
+    
+    // Contar transiciones
+    for (let k = 2; k < hist.length; k++) {
+        const state = (hist[k - 2] * 10) + hist[k - 1]; // Ej: dígito 3 luego 7 = estado 37
+        const nextDigit = hist[k];
+        matrix[state][nextDigit]++;
+    }
+    
+    // Calcular probabilidades
+    for (let i = 0; i <= 99; i++) {
+        const total = Object.values(matrix[i]).reduce((a, b) => a + b, 0);
+        if (total > 0) {
+            for (let j = 0; j <= 9; j++) matrix[i][j] = matrix[i][j] / total;
+        } else {
+            for (let j = 0; j <= 9; j++) matrix[i][j] = 0.1; // fallback
+        }
+    }
+    return matrix;
+}
+
+/**
  * Cooldown Dinámico Basado en Caos (Entropía) y Momentum de Rachas
  */
 function getDynamicCooldown() {
@@ -579,7 +609,7 @@ function evaluateDiffer() {
     
     // Buscamos el dígito con la menor probabilidad de transición
     for (let d = 0; d <= 9; d++) {
-        const prob = transitions[d];
+        const prob = transitions2[d];
         if (prob < minProb) {
             minProb = prob;
             bestBarrier = d;
