@@ -517,6 +517,10 @@ function evaluateDiffer() {
     const lastDigit = hist[hist.length - 1];
     const prevDigit = hist[hist.length - 2];
     
+    // Frecuencia de los últimos 100 para desempate global
+    const freq100 = Array(10).fill(0);
+    hist.slice(-100).forEach(d => freq100[d]++);
+    
     // CAPA 3: Freno de emergencia
     if (botState.hidraLayer === 3) {
         if (now >= botState.hidraFrenoUntil) {
@@ -541,10 +545,6 @@ function evaluateDiffer() {
         
         let bestBarrier = null;
         let minProb = 1.0;
-        
-        // Frecuencia de los últimos 100 para desempate
-        const freq100 = Array(10).fill(0);
-        hist.slice(-100).forEach(d => freq100[d]++);
         
         // Intentamos usar transiciones de 2do orden primero
         let has2ndOrderData = Object.values(transitions2).some(p => p !== 0.1);
@@ -607,12 +607,18 @@ function evaluateDiffer() {
     let bestBarrier = null;
     let minProb = 1.0;
     
-    // Buscamos el dígito con la menor probabilidad de transición
+    // Buscamos el dígito con la menor probabilidad de transición (excluyendo el último para seguridad)
     for (let d = 0; d <= 9; d++) {
+        if (d === lastDigit) continue;
         const prob = transitions2[d];
         if (prob < minProb) {
             minProb = prob;
             bestBarrier = d;
+        } else if (prob === minProb && bestBarrier !== null) {
+            // Desempate por frecuencia global (últimos 100 ticks)
+            if (freq100[d] < freq100[bestBarrier]) {
+                bestBarrier = d;
+            }
         }
     }
     
