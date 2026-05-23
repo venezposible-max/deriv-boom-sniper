@@ -77,11 +77,16 @@ let botState = {
     takeProfitExtensions: 0,
     spikeProtectionUntil: 0,   // trade session index until which stake is halved
     
-    // ─── Interruptores de motores ───
-    engineEvenOdd: true,
-    engineOverUnder: true,
-    engineMatch: true,
+    // ─── Interruptores de motores (Solo DIFFER activo por premisa del usuario)
+    engineEvenOdd: false,
+    engineOverUnder: false,
+    engineMatch: false,
     engineDiffer: true,
+    
+    // ─── Variables del Escudo de Trade Fantasma (Ghost Shield) ───
+    ghostNextTradeReal: false,
+    ghostPendingBarrier: null,
+    ghostActive: false,
     
     // ─── Información del trade activo ───
     currentEngine: null,       // 'EVEN_ODD' | 'OVER_UNDER' | 'MATCH' | 'DIFFER'
@@ -141,6 +146,15 @@ if (fs.existsSync(STATE_FILE)) {
             if (botState.hidraDalembertStep === undefined) botState.hidraDalembertStep = 0;
             if (botState.hidraLastLossDigit === undefined) botState.hidraLastLossDigit = null;
             if (botState.hidraFrenoUntil === undefined) botState.hidraFrenoUntil = 0;
+            if (botState.ghostNextTradeReal === undefined) botState.ghostNextTradeReal = false;
+            if (botState.ghostPendingBarrier === undefined) botState.ghostPendingBarrier = null;
+            if (botState.ghostActive === undefined) botState.ghostActive = false;
+            
+            // Forzar solo DIFFER activo para asegurar la premisa del usuario
+            botState.engineEvenOdd = false;
+            botState.engineOverUnder = false;
+            botState.engineMatch = false;
+            botState.engineDiffer = true;
             
             // Forzar estados de arranque seguros
             botState.isRunning = false;
@@ -470,6 +484,8 @@ function evaluateDiffer() {
     if (hist.length < 100) return null;
     
     const now = Date.now();
+    const lastDigit = hist[hist.length - 1];
+    const prevDigit = hist[hist.length - 2];
     
     // CAPA 3: Freno de emergencia
     if (botState.hidraLayer === 3) {
@@ -480,39 +496,59 @@ function evaluateDiffer() {
             botState.hidraLastLossDigit = null;
             saveState();
         } else {
-            return null; // El motor Differ está temporalmente bloqueado en este cooldown
+            return null;
         }
     }
-    
-    const lastDigit = hist[hist.length - 1];
     
     // CAPA 1: COBERTURA INFALIBLE (1 Tiro x10)
     if (botState.hidraLayer === 1) {
         const entropy = parseFloat(botState.shannonEntropy);
         
-        // Selección de Barrera Estadísticamente Infalible usando Markov de 150 ticks
-        // Disparando inmediatamente sin retrasos ni pausas por repetición o entropía
-        const markovHist = hist.slice(-150);
-        const matrix = buildMarkovMatrix(markovHist);
-        const transitions = matrix[lastDigit]; // Transiciones desde el último dígito
+        // Selección de Barrera Estadísticamente Infalible usando Markov de 2do orden + 1er orden
+        const state = (prevDigit * 10) + lastDigit;
+        const matrix2 = build2ndOrderMarkovMatrix(hist.slice(-200));
+        const transitions2 = matrix2[state];
         
         let bestBarrier = null;
         let minProb = 1.0;
         
-        // Calculamos la frecuencia global para desempate
+        // Frecuencia de los últimos 100 para desempate
         const freq100 = Array(10).fill(0);
         hist.slice(-100).forEach(d => freq100[d]++);
         
-        for (let d = 0; d <= 9; d++) {
-            if (d === lastDigit) continue; 
-            
-            const prob = transitions[d] || 0;
-            if (prob < minProb) {
-                minProb = prob;
-                bestBarrier = d;
-            } else if (prob === minProb && bestBarrier !== null) {
-                if (freq100[d] < freq100[bestBarrier]) {
+        // Intentamos usar transiciones de 2do orden primero
+        let has2ndOrderData = Object.values(transitions2).some(p => p !== 0.1);
+        
+        if (has2ndOrderData) {
+            for (let d = 0; d <= 9; d++) {
+                if (d === lastDigit) continue;
+                const prob = transitions2[d] || 0;
+                if (prob < minProb) {
+                    minProb = prob;
                     bestBarrier = d;
+                } else if (prob === minProb && bestBarrier !== null) {
+                    if (freq100[d] < freq100[bestBarrier]) {
+                        bestBarrier = d;
+                    }
+                }
+            }
+        }
+        
+        // Si no hay datos de 2do orden, caemos al 1er orden
+        if (bestBarrier === null || minProb >= 0.1) {
+            const matrix1 = buildMarkovMatrix(hist.slice(-150));
+            const transitions1 = matrix1[lastDigit];
+            minProb = 1.0;
+            for (let d = 0; d <= 9; d++) {
+                if (d === lastDigit) continue;
+                const prob = transitions1[d] || 0;
+                if (prob < minProb) {
+                    minProb = prob;
+                    bestBarrier = d;
+                } else if (prob === minProb && bestBarrier !== null) {
+                    if (freq100[d] < freq100[bestBarrier]) {
+                        bestBarrier = d;
+                    }
                 }
             }
         }
@@ -521,7 +557,7 @@ function evaluateDiffer() {
             bestBarrier = botState.hidraLastLossDigit !== null ? botState.hidraLastLossDigit : (lastDigit + 5) % 10;
         }
         
-        console.log(`🐍 LA HIDRA [COBERTURA INFALIBLE x10]: Disparando inmediatamente sobre dígito de menor transición ${bestBarrier} (Prob: ${(minProb*100).toFixed(2)}%)`);
+        console.log(`🐍 LA HIDRA [COBERTURA INFALIBLE x10]: Disparando cobertura sobre dígito ${bestBarrier} (Prob: ${(minProb*100).toFixed(2)}%)`);
         
         return {
             engine: 'DIFFER',
@@ -533,12 +569,10 @@ function evaluateDiffer() {
         };
     }
     
-    // Para Capa 0 (Normal) y Capa 2 (D'Alembert), calculamos la Matriz de Markov
-    // Bypass del Chi-Squared por premisa de no detenerse y permitir análisis dinámico y rápido de Markov sin esperar patrones
-    
-    const markovHist = hist.slice(-100);
-    const matrix = buildMarkovMatrix(markovHist);
-    const transitions = matrix[lastDigit];
+    // CAPA 0: NORMAL (Usando Markov de 2do Orden para máxima precisión)
+    const state = (prevDigit * 10) + lastDigit;
+    const matrix2 = build2ndOrderMarkovMatrix(hist.slice(-200));
+    const transitions2 = matrix2[state];
     
     let bestBarrier = null;
     let minProb = 1.0;
@@ -626,28 +660,37 @@ function tryFireTrade() {
     
     let signal = null;
     
-    // Orquestación secuencial en base a Edge y Escudo de Momentum
-    // Prioridad 1: MATCH
-    if (!signal && botState.engineMatch && !botState.engineStats.MATCH.autoDisabled && botState.momentumShieldLevel < 2) {
-        signal = evaluateMatch();
-    }
-    // Prioridad 2: DIFFER ("El Cirujano")
-    if (!signal && botState.engineDiffer && !botState.engineStats.DIFFER.autoDisabled && botState.momentumShieldLevel < 3) {
+    // Evaluación EXCLUSIVA de DIFFER ("El Cirujano") por premisa del usuario
+    if (botState.engineDiffer) {
         signal = evaluateDiffer();
-    }
-    // Prioridad 3: OVER/UNDER
-    if (!signal && botState.engineOverUnder && !botState.engineStats.OVER_UNDER.autoDisabled && botState.momentumShieldLevel < 3) {
-        signal = evaluateOverUnder();
-    }
-    // Prioridad 4: EVEN/ODD
-    if (!signal && botState.engineEvenOdd && !botState.engineStats.EVEN_ODD.autoDisabled && botState.momentumShieldLevel < 4) {
-        signal = evaluateEvenOdd();
     }
     
     if (!signal) return;
     
+    // ─── INTERCEPTOR DEL ESCUDO FANTASMA (GHOST SHIELD) ───
+    // El trade solo se realiza con dinero real si estamos en cobertura (Capa 1) 
+    // o si el Ghost Shield dio luz verde (ghostNextTradeReal === true).
+    const isRealTrade = (botState.hidraLayer === 1) || botState.ghostNextTradeReal;
+    
+    if (!isRealTrade) {
+        botState.ghostPendingBarrier = signal.barrier;
+        botState.ghostActive = true;
+        botState.ghostNextTradeReal = false;
+        
+        console.log(`👻 GHOST TRADE: Señal Differ detectada para evitar=${signal.barrier}. Simulando trade fantasma en memoria...`);
+        
+        botState.lastTradeTime = now;
+        saveState();
+        return;
+    }
+    
+    // Si es un trade real, consumimos el activador
+    if (botState.ghostNextTradeReal) {
+        botState.ghostNextTradeReal = false;
+    }
+    
     const finalStake = getAdjustedStake(botState.stake, signal.stakeMultiplier);
-    if (finalStake <= 0) return; // Escudo bloqueando stake
+    if (finalStake <= 0) return;
     
     botState.currentEngine = signal.engine;
     botState.currentContractType = signal.contractType;
@@ -1113,6 +1156,21 @@ function connectDeriv() {
             
             if (botState.digitHistory.length >= 50) {
                 botState.shannonEntropy = calcEntropy(botState.digitHistory, 100).toFixed(3);
+            }
+            
+            // RESOLVER GHOST TRADE SI ESTÁ ACTIVO
+            if (botState.ghostActive && botState.ghostPendingBarrier !== null) {
+                const isGhostLoss = (digit === parseInt(botState.ghostPendingBarrier));
+                if (isGhostLoss) {
+                    botState.ghostNextTradeReal = true; // ¡ALERTA! El fantasma perdió. Habilitando entrada REAL.
+                    console.log(`🚨 GHOST SHIELD TRIGGERED: El trade fantasma PERDIÓ (barrera ${botState.ghostPendingBarrier} golpeada por dígito ${digit}). ¡Habilitando disparo REAL!`);
+                } else {
+                    botState.ghostNextTradeReal = false;
+                    console.log(`✓ GHOST SHIELD: El trade fantasma GANÓ (barrera ${botState.ghostPendingBarrier} a salvo con dígito ${digit}). Continuando observación fantasma...`);
+                }
+                botState.ghostActive = false;
+                botState.ghostPendingBarrier = null;
+                saveState();
             }
             
             tryFireTrade();
