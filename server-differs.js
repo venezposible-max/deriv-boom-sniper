@@ -703,27 +703,7 @@ function tryFireTrade() {
     
     if (!signal) return;
     
-    // ─── INTERCEPTOR DEL ESCUDO FANTASMA (GHOST SHIELD) ───
-    // El trade solo se realiza con dinero real si estamos en cobertura (Capa 1) 
-    // o si el Ghost Shield dio luz verde (ghostNextTradeReal === true).
-    const isRealTrade = (botState.hidraLayer === 1) || botState.ghostNextTradeReal;
-    
-    if (!isRealTrade) {
-        botState.ghostPendingBarrier = signal.barrier;
-        botState.ghostActive = true;
-        botState.ghostNextTradeReal = false;
-        
-        console.log(`👻 GHOST TRADE: Señal Differ detectada para evitar=${signal.barrier}. Simulando trade fantasma en memoria...`);
-        
-        botState.lastTradeTime = now;
-        saveState();
-        return;
-    }
-    
-    // Si es un trade real, consumimos el activador
-    if (botState.ghostNextTradeReal) {
-        botState.ghostNextTradeReal = false;
-    }
+    // (Escudo Fantasma desactivado por solicitud del usuario para operar con fluidez en tiempo real)
     
     const finalStake = getAdjustedStake(botState.stake, signal.stakeMultiplier);
     if (finalStake <= 0) return;
@@ -1197,21 +1177,6 @@ function connectDeriv() {
             
             if (botState.digitHistory.length >= 50) {
                 botState.shannonEntropy = calcEntropy(botState.digitHistory, 100).toFixed(3);
-            }
-            
-            // RESOLVER GHOST TRADE SI ESTÁ ACTIVO
-            if (botState.ghostActive && botState.ghostPendingBarrier !== null) {
-                const isGhostLoss = (digit === parseInt(botState.ghostPendingBarrier));
-                if (isGhostLoss) {
-                    botState.ghostNextTradeReal = true; // ¡ALERTA! El fantasma perdió. Habilitando entrada REAL.
-                    console.log(`🚨 GHOST SHIELD TRIGGERED: El trade fantasma PERDIÓ (barrera ${botState.ghostPendingBarrier} golpeada por dígito ${digit}). ¡Habilitando disparo REAL!`);
-                } else {
-                    botState.ghostNextTradeReal = false;
-                    console.log(`✓ GHOST SHIELD: El trade fantasma GANÓ (barrera ${botState.ghostPendingBarrier} a salvo con dígito ${digit}). Continuando observación fantasma...`);
-                }
-                botState.ghostActive = false;
-                botState.ghostPendingBarrier = null;
-                saveState();
             }
             
             tryFireTrade();
