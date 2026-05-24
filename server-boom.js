@@ -336,16 +336,10 @@ function getAdjustedStake(baseStake, engineMultiplier) {
  */
 function evaluateEvenOdd() {
     const hist = botState.digitHistory;
-    if (hist.length < 50) return null;
+    if (hist.length < 20) return null;
     
-    // Chi-Cuadrado de última ventana
-    const chiTest = calcChiSquared(hist, 50);
-    if (!chiTest.significant) return null; // No operar si el mercado es uniformemente ruidoso
-    
-    // Ventanas analíticas
     const sub10 = hist.slice(-10);
     const sub20 = hist.slice(-20);
-    const sub40 = hist.slice(-40);
     
     let ev10 = 0, od10 = 0;
     sub10.forEach(d => { if (d % 2 === 0) ev10++; else od10++; });
@@ -353,41 +347,30 @@ function evaluateEvenOdd() {
     let ev20 = 0, od20 = 0;
     sub20.forEach(d => { if (d % 2 === 0) ev20++; else od20++; });
     
-    let ev40 = 0, od40 = 0;
-    sub40.forEach(d => { if (d % 2 === 0) ev40++; else od40++; });
+    const sigOdd10 = od10 >= 6;
+    const sigEven10 = ev10 >= 6;
     
-    // Señales por ventana
-    const sigOdd10 = ev10 >= 7;   // Reversión a IMPAR
-    const sigEven10 = od10 >= 7;  // Reversión a PAR
+    const sigOdd20 = od20 >= 11;
+    const sigEven20 = ev20 >= 11;
     
-    const sigOdd20 = ev20 >= 13;
-    const sigEven20 = od20 >= 13;
-    
-    const sigOdd40 = ev40 >= 25;
-    const sigEven40 = od40 >= 25;
-    
-    // Consenso: 2 de 3
-    const scoreOdd = (sigOdd10 ? 1 : 0) + (sigOdd20 ? 1 : 0) + (sigOdd40 ? 1 : 0);
-    const scoreEven = (sigEven10 ? 1 : 0) + (sigEven20 ? 1 : 0) + (sigEven40 ? 1 : 0);
-    
-    if (scoreOdd >= 2) {
+    if (sigOdd10 && sigOdd20) {
         return {
             engine: 'EVEN_ODD',
             contractType: 'DIGITODD',
             barrier: null,
             stakeMultiplier: 1.0,
-            reason: `Consenso IMPAR [10:${ev10}/10, 20:${ev20}/20, 40:${ev40}/40] | Chi2:${chiTest.chi2.toFixed(1)}`,
+            reason: `Consenso IMPAR [10:${od10}/10, 20:${od20}/20]`,
             entropy: parseFloat(botState.shannonEntropy)
         };
     }
     
-    if (scoreEven >= 2) {
+    if (sigEven10 && sigEven20) {
         return {
             engine: 'EVEN_ODD',
             contractType: 'DIGITEVEN',
             barrier: null,
             stakeMultiplier: 1.0,
-            reason: `Consenso PAR [10:${od10}/10, 20:${od20}/20, 40:${od40}/40] | Chi2:${chiTest.chi2.toFixed(1)}`,
+            reason: `Consenso PAR [10:${ev10}/10, 20:${ev20}/20]`,
             entropy: parseFloat(botState.shannonEntropy)
         };
     }
@@ -401,55 +384,35 @@ function evaluateEvenOdd() {
  */
 function evaluateOverUnder() {
     const hist = botState.digitHistory;
-    if (hist.length < 100) return null;
+    if (hist.length < 30) return null;
     
-    const chiTest = calcChiSquared(hist, 100);
-    if (!chiTest.significant) return null;
-    
-    const markovHist = hist.slice(-100); // Ventana adaptativa a ruido
+    const markovHist = hist.slice(-30);
     const matrix = buildMarkovMatrix(markovHist);
     const lastDigit = hist[hist.length - 1];
     const transitions = matrix[lastDigit];
     
     let probOver = 0;
-    for (let d = 5; d <= 9; d++) probOver += transitions[d];
+    for (let d = 5; d <= 9; d++) probOver += transitions[d] || 0;
     let probUnder = 1 - probOver;
     
-    const edge = Math.abs(probOver - 0.5);
-    const edgePercent = edge * 100;
-    botState.markovEdge = edgePercent.toFixed(1);
-    
-    // Elevamos ventaja necesaria a 10% (estricto)
-    if (edgePercent < 10) return null;
-    
-    const last30 = hist.slice(-30);
-    
-    // P(dígito > 4) >= 60%
-    if (probOver >= 0.60) {
-        const countOver = last30.filter(d => d > 4).length;
-        if (countOver < 15) return null; // Abortar si contradice la frecuencia reciente del 50%
-        
+    if (probOver >= 0.55) {
         return {
             engine: 'OVER_UNDER',
             contractType: 'DIGITOVER',
             barrier: '4',
             stakeMultiplier: 1.0,
-            reason: `Markov P(>4)=${(probOver * 100).toFixed(1)}% | Edge: ${edgePercent.toFixed(1)}% | Freq30: ${countOver}/30`,
+            reason: `Markov P(>4)=${(probOver * 100).toFixed(1)}%`,
             entropy: parseFloat(botState.shannonEntropy)
         };
     }
     
-    // P(dígito < 5) >= 60%
-    if (probUnder >= 0.60) {
-        const countUnder = last30.filter(d => d < 5).length;
-        if (countUnder < 15) return null;
-        
+    if (probUnder >= 0.55) {
         return {
             engine: 'OVER_UNDER',
             contractType: 'DIGITUNDER',
             barrier: '5',
             stakeMultiplier: 1.0,
-            reason: `Markov P(<5)=${(probUnder * 100).toFixed(1)}% | Edge: ${edgePercent.toFixed(1)}% | Freq30: ${countUnder}/30`,
+            reason: `Markov P(<5)=${(probUnder * 100).toFixed(1)}%`,
             entropy: parseFloat(botState.shannonEntropy)
         };
     }
@@ -1153,11 +1116,10 @@ app.listen(PORT, '0.0.0.0', () => {
     console.log('═'.repeat(75));
     console.log(`  🐙 KRAKEN ENGINE v2.0 — "THE VALUE HARVESTER" — ONLINE`);
     console.log(`  🌐 Port: ${PORT} | Active Symbol: ${SYMBOL}`);
-    console.log('  🔪 Motor 1: PAR/IMPAR       (Consensus Reversion & Chi-Square)');
-    console.log('  📊 Motor 2: OVER/UNDER      (Markov Transition Matrix & Cross-Val)');
-    console.log('  💎 Motor 3: MATCH           (Exponential Hot Digit & Freq Momentum)');
-    console.log('  🔪 Motor 4: DIFFER          (Markov Multi-Barrier Dynamic Edge)');
-    console.log('  🛡️  Protection: Momentum Shield (0-4) + Darwin Auto-Disable + Trailing TP');
+    console.log('  🔪 Motor 1: PAR/IMPAR       (Consensus Reversion)');
+    console.log('  📊 Motor 2: OVER/UNDER      (Markov Transition Matrix)');
+    console.log('  💎 Motor 3: MATCH           (Exponential Hot Digit)');
+    console.log('  🛡️  Protection: Martingala Segura + Momentum Shield');
     console.log('═'.repeat(75));
     connectDeriv();
 });
