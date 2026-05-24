@@ -1060,6 +1060,17 @@ function connectDeriv() {
             
             botState.digitFrequency[digit] = (botState.digitFrequency[digit] || 0) + 1;
             
+            // --- LOGGING VISUAL PARA EL USUARIO ---
+            botState.totalTicksProcessed = (botState.totalTicksProcessed || 0) + 1;
+            const ticks = botState.totalTicksProcessed;
+            if (ticks < 100 && ticks % 20 === 0) {
+                console.log(`⏳ Analizando mercado... recopilados [${ticks}/100] ticks para matriz predictiva.`);
+            } else if (ticks === 100) {
+                console.log(`✅ Matrices y Filtros cargados (100 ticks). ¡Iniciando búsqueda de oportunidades virtuales!`);
+            } else if (ticks > 100 && ticks % 100 === 0 && !botState.ghostNextTradeReal && !botState.ghostPendingTrade) {
+                console.log(`👁️ KRAKEN VIGILANDO: ${ticks} ticks procesados en esta sesión. Esperando borde estadístico > 60%...`);
+            }
+            
             if (botState.digitHistory.length >= 50) {
                 botState.shannonEntropy = calcEntropy(botState.digitHistory, 100).toFixed(3);
             }
