@@ -397,11 +397,12 @@ function getDynamicCooldown() {
 function getAdjustedStake(baseStake, engineMultiplier) {
     let adjusted = baseStake * engineMultiplier;
     
-    // Aplicar multiplicador de Martingala x2.1 para recuperar pérdidas en Even/Odd o Over/Under
+    // Aplicar Cobertura Cuántica (Progresión Lineal D'Alembert: +1x stake base por cada paso)
     if (botState.martingaleStep > 0 && botState.coberturaEnabled) {
-        // limitamos la martingala al maximo permitido
         const steps = Math.min(botState.martingaleStep, botState.maxMartingaleSteps || 6);
-        adjusted = adjusted * Math.pow(2.1, steps);
+        // La progresión lineal D'Alembert incrementa de forma lineal (+1x, +2x, +3x) en lugar de exponencial (x2.1, x4.4, x9.2).
+        // Esto protege drásticamente el capital del usuario ante rachas de mercado adversas.
+        adjusted = adjusted * (1 + steps);
     }
     
     return parseFloat(adjusted.toFixed(2));
@@ -763,20 +764,20 @@ function finalizeTrade(c) {
         console.log(`❌ LOSS -$${Math.abs(profit).toFixed(2)} [${tradeSymbol} - ${name}] | ${cType}${barrier ? ` B:${barrier}` : ''} | Racha: ${botState.consecutiveLosses} | PnL: $${botState.pnlSession.toFixed(2)}`);
     }
     
-    // ─── ACTUALIZACIÓN DE ESTADO DE MARTINGALA ───
+    // ─── ACTUALIZACIÓN DE ESTADO DE COBERTURA CUÁNTICA ───
     if (isWin) {
         if (botState.martingaleStep > 0) {
-            console.log(`🛡️ MARTINGALA: ¡Cobertura exitosa! Recuperación completa en nivel ${botState.martingaleStep}. Volviendo a stake base.`);
+            console.log(`🛡️ COBERTURA CUÁNTICA: ¡Recuperación exitosa! Cobertura completada en nivel ${botState.martingaleStep}. Volviendo a stake base.`);
         }
         botState.martingaleStep = 0;
     } else {
         if (botState.coberturaEnabled) {
             botState.martingaleStep++;
             if (botState.martingaleStep > botState.maxMartingaleSteps) {
-                console.log(`💀 MARTINGALA: Límite máximo de pasos (${botState.maxMartingaleSteps}) superado. Asumiendo pérdida completa y reiniciando stake para proteger la cuenta.`);
+                console.log(`💀 COBERTURA CUÁNTICA: Límite máximo de pasos (${botState.maxMartingaleSteps}) superado. Asumiendo pérdida completa y reiniciando stake base para proteger la cuenta.`);
                 botState.martingaleStep = 0;
             } else {
-                console.log(`📈 MARTINGALA: Pérdida. Escalando a Nivel ${botState.martingaleStep} (Multiplicador x2.1)`);
+                console.log(`📈 COBERTURA CUÁNTICA: Pérdida real. Escalando Cobertura (Progresión Lineal D'Alembert) a Nivel ${botState.martingaleStep} (Multiplicador: x${1 + botState.martingaleStep})`);
             }
         }
     }
