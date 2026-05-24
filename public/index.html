@@ -1056,6 +1056,21 @@ body::before {
   border: 1px solid rgba(255, 51, 102, 0.3);
 }
 
+.asset-badge {
+  display: inline-block;
+  padding: 3px 8px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 700;
+  background: rgba(0, 210, 255, 0.08);
+  color: var(--accent-blue);
+  border: 1px solid rgba(0, 210, 255, 0.2);
+  letter-spacing: 0.5px;
+  font-family: 'Outfit', sans-serif;
+  text-align: center;
+  min-width: 42px;
+}
+
 .empty-history {
   padding: 48px 24px;
   text-align: center;
@@ -1526,6 +1541,7 @@ body::before {
           <tr>
             <th>#</th>
             <th>Hora</th>
+            <th>Activo</th>
             <th>Motor</th>
             <th>Tipo</th>
             <th>Barrera</th>
@@ -1537,7 +1553,7 @@ body::before {
         </thead>
         <tbody id="historyBody">
           <tr>
-            <td colspan="9" class="empty-history">
+            <td colspan="10" class="empty-history">
               <span>📭</span>
               No hay operaciones registradas aún
             </td>
@@ -1960,7 +1976,7 @@ function renderHistory(history) {
   const countEl = $('historyCount');
 
   if (!history || history.length === 0) {
-    tbody.innerHTML = `<tr><td colspan="9" class="empty-history"><span>📭</span>No hay operaciones registradas aún</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="10" class="empty-history"><span>📭</span>No hay operaciones registradas aún</td></tr>`;
     countEl.textContent = '0 operaciones';
     return;
   }
@@ -1986,9 +2002,12 @@ function renderHistory(history) {
       'MATCH': 'Match'
     }[t.engine] || t.engine || '—';
 
+    const assetFormatted = t.symbol ? t.symbol.replace('R_', 'V') : '—';
+
     return `<tr class="${rowClass}">
       <td>${num}</td>
       <td>${time}</td>
+      <td><span class="asset-badge">${assetFormatted}</span></td>
       <td>${engineLabel}</td>
       <td>${t.contractType || t.type || '—'}</td>
       <td>${t.barrier !== undefined && t.barrier !== null ? t.barrier : '—'}</td>
