@@ -1481,6 +1481,18 @@ body::before {
 
       <div class="control-separator"></div>
 
+      <div class="control-group" style="display:flex; flex-direction:column; align-items:center; min-width: 100px;">
+        <label style="color: var(--accent-blue); font-weight: 700;">Quirúrgico</label>
+        <label class="toggle" style="width: 40px; height: 22px; margin-top:4px;">
+          <input type="checkbox" id="toggleQuirurgico" onchange="handleQuirurgicoToggle(this.checked)">
+          <div class="toggle-track" style="border-radius: 12px;"></div>
+          <div class="toggle-thumb" style="width: 16px; height: 16px; top: 3px; left: 3px;"></div>
+        </label>
+        <div style="font-size: 11px; margin-top: 6px; font-weight: bold; color: var(--text-muted);" id="quirurgicoStatusDisplay">Modo: Normal</div>
+      </div>
+
+      <div class="control-separator"></div>
+
       <button class="btn btn-reset" onclick="handleResetDay()">
         🔄 Reset Día
       </button>
@@ -1707,6 +1719,17 @@ function updateUI(data) {
   const levelDisplay = $('martingaleLevelDisplay');
   if (levelDisplay) {
     levelDisplay.textContent = 'Paso: ' + (data.martingaleStep || 0);
+  }
+
+  // Quirúrgico sync
+  const toggleQui = $('toggleQuirurgico');
+  if (toggleQui) {
+    toggleQui.checked = !!data.quirurgicoMode;
+  }
+  const quiDisplay = $('quirurgicoStatusDisplay');
+  if (quiDisplay) {
+    quiDisplay.textContent = 'Modo: ' + (data.quirurgicoMode ? 'Quirúrgico' : 'Normal');
+    quiDisplay.style.color = data.quirurgicoMode ? 'var(--accent-blue)' : 'var(--text-muted)';
   }
 
   // Engine cards active state
@@ -2219,6 +2242,20 @@ async function handleCoberturaToggle(checked) {
     showToast(`Martingala ${checked ? 'activada' : 'desactivada'}`, 'success');
   } catch (e) {
     showToast('Error al actualizar Martingala', 'error');
+  }
+  fetchStatus();
+}
+
+async function handleQuirurgicoToggle(checked) {
+  try {
+    await fetch('/api/config', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ quirurgicoMode: checked })
+    });
+    showToast(`Modo Quirúrgico ${checked ? 'ACTIVADO (Precisión Quirúrgica 🎯)' : 'desactivado (Modo Normal 🎰)'}`, checked ? 'success' : 'info');
+  } catch (e) {
+    showToast('Error al actualizar Modo Quirúrgico', 'error');
   }
   fetchStatus();
 }

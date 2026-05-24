@@ -77,6 +77,7 @@ let botState = {
     coberturaEnabled: true,
     differPrecision98: false,
     franklinPerezLogic: true,
+    quirurgicoMode: false,
     
     // ─── Momentum Shield ───
     consecutiveLosses: 0,
@@ -188,6 +189,7 @@ if (fs.existsSync(STATE_FILE)) {
             if (botState.coberturaEnabled === undefined) botState.coberturaEnabled = true;
             if (botState.differPrecision98 === undefined) botState.differPrecision98 = false;
             if (botState.franklinPerezLogic === undefined) botState.franklinPerezLogic = true;
+            if (botState.quirurgicoMode === undefined) botState.quirurgicoMode = false;
             
             // Garantizar inicialización segura de variables de La Hidra
             if (botState.hidraLayer === undefined) botState.hidraLayer = 0;
@@ -387,9 +389,10 @@ function evaluateEvenOdd(mState) {
     const hist = mState.digitHistory;
     if (hist.length < 50) return null;
     
-    // Chi-Cuadrado de última ventana (Estricto)
+    // Chi-Cuadrado de última ventana (Estricto en modo Quirúrgico, relajado en modo Normal)
     const chiTest = calcChiSquared(hist, 50);
-    if (!chiTest.significant) return null; // Debe haber desbalance estadístico
+    const requiredChi = botState.quirurgicoMode ? 16.92 : 5.0;
+    if (chiTest.chi2 < requiredChi) return null; // Debe haber desbalance estadístico
     
     const sub10 = hist.slice(-10);
     const sub20 = hist.slice(-20);
@@ -441,8 +444,9 @@ function evaluateOverUnder(mState) {
     if (hist.length < 100) return null;
     
     const chiTest = calcChiSquared(hist, 100);
-    // Filtro Chi-Cuadrado estricto (95% de confianza, p = 0.05) para asegurar desbalances significativos
-    if (!chiTest.significant) return null;
+    // Filtro Chi-Cuadrado estricto en modo Quirúrgico, relajado en modo Normal
+    const requiredChi = botState.quirurgicoMode ? 16.92 : 5.0;
+    if (chiTest.chi2 < requiredChi) return null;
     
     const markovHist = hist.slice(-100);
     const matrix = buildMarkovMatrix(markovHist);
@@ -453,8 +457,10 @@ function evaluateOverUnder(mState) {
     for (let d = 5; d <= 9; d++) probOver += transitions[d] || 0;
     let probUnder = 1 - probOver;
     
-    // Probabilidad estricta >= 60% para máxima precisión de disparo
-    if (probOver >= 0.60) {
+    // Probabilidad estricta (62% en Quirúrgico para máxima precisión, 60% en Normal)
+    const requiredProb = botState.quirurgicoMode ? 0.62 : 0.60;
+    
+    if (probOver >= requiredProb) {
         return {
             engine: 'OVER_UNDER',
             contractType: 'DIGITOVER',
@@ -465,7 +471,7 @@ function evaluateOverUnder(mState) {
         };
     }
     
-    if (probUnder >= 0.60) {
+    if (probUnder >= requiredProb) {
         return {
             engine: 'OVER_UNDER',
             contractType: 'DIGITUNDER',
@@ -942,7 +948,7 @@ app.post('/api/engine-toggle', (req, res) => {
 });
 
 app.post('/api/config', (req, res) => {
-    const { stake, maxDailyLoss, takeProfit, cooldownMs, maxTradesPerDay, cooldownMode, coberturaEnabled, differPrecision98 } = req.body;
+    const { stake, maxDailyLoss, takeProfit, cooldownMs, maxTradesPerDay, cooldownMode, coberturaEnabled, differPrecision98, quirurgicoMode } = req.body;
     
     if (stake !== undefined) botState.stake = Math.max(0.35, parseFloat(stake));
     if (maxDailyLoss !== undefined) botState.maxDailyLoss = parseFloat(maxDailyLoss);
@@ -955,6 +961,7 @@ app.post('/api/config', (req, res) => {
     if (cooldownMode !== undefined) botState.cooldownMode = cooldownMode;
     if (coberturaEnabled !== undefined) botState.coberturaEnabled = !!coberturaEnabled;
     if (differPrecision98 !== undefined) botState.differPrecision98 = !!differPrecision98;
+    if (quirurgicoMode !== undefined) botState.quirurgicoMode = !!quirurgicoMode;
     
     saveState();
     console.log(`⚙️ CONFIGURACIÓN KRAKEN MODIFICADA.`);
