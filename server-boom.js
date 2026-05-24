@@ -206,12 +206,6 @@ if (fs.existsSync(STATE_FILE)) {
             if (botState.lossPauseTicksProcessed === undefined) botState.lossPauseTicksProcessed = 0;
             if (botState.lastLossBarrier === undefined) botState.lastLossBarrier = null;
             
-            // Forzar solo DIFFER activo para asegurar la premisa del usuario
-            botState.engineEvenOdd = false;
-            botState.engineOverUnder = false;
-            botState.engineMatch = false;
-            botState.engineDiffer = true;
-            
             // Forzar estados de arranque seguros
             botState.isRunning = false;
             botState.isBuying = false;
