@@ -578,9 +578,26 @@ function tryFireTrade() {
         return;
     }
     
-    // Control de Cooldown Dinámico
-    const currentCooldown = botState.cooldownMode === 'auto' ? getDynamicCooldown() : botState.cooldownMs;
-    if ((now - botState.lastTradeTime) < currentCooldown) return;
+    // Control de Cooldown Dinámico (Omitido para señales forzadas de venganza del Ghost Shield)
+    if (!botState.forcedSignal) {
+        let currentCooldown = botState.cooldownMode === 'auto' ? getDynamicCooldown() : botState.cooldownMs;
+        
+        // En Modo Quirúrgico, forzamos un cooldown mínimo estricto de 3 minutos (180,000 ms)
+        // para dar tiempo a que la ventana deslizante se limpie por completo y evitar cascadas.
+        if (botState.quirurgicoMode) {
+            const minQuirurgicoCooldown = 180000; // 3 minutos
+            currentCooldown = Math.max(currentCooldown, minQuirurgicoCooldown);
+        }
+        
+        if ((now - botState.lastTradeTime) < currentCooldown) {
+            // Loguear de forma no intrusiva cada 30 segundos si está en Modo Quirúrgico
+            if (botState.quirurgicoMode && (now % 30000 < 1500)) {
+                const secsRemaining = Math.ceil((currentCooldown - (now - botState.lastTradeTime)) / 1000);
+                console.log(`⏳ MODO QUIRÚRGICO: Bloqueando nuevas señales por cooldown de ventana deslizante (${secsRemaining}s restantes)...`);
+            }
+            return;
+        }
+    }
     
     let signal = null;
     let signalSymbol = null;
