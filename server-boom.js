@@ -207,6 +207,7 @@ if (fs.existsSync(STATE_FILE)) {
             if (botState.lastLossBarrier === undefined) botState.lastLossBarrier = null;
             
             // Forzar estados de arranque seguros
+            botState.engineMatch = false; // Desactivado permanentemente porque está oculto en la UI
             botState.isRunning = false;
             botState.isBuying = false;
             botState.activeContractId = null;
