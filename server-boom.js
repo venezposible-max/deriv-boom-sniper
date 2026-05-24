@@ -350,12 +350,12 @@ function evaluateEvenOdd() {
     let ev20 = 0, od20 = 0;
     sub20.forEach(d => { if (d % 2 === 0) ev20++; else od20++; });
     
-    // Señales por ventana (70% de consenso en M10 y 65% en M20)
-    const sigOdd10 = od10 >= 7;
-    const sigEven10 = ev10 >= 7;
+    // Señales por ventana (60% de consenso en M10 y 60% en M20) - Relajado gracias al Ghost Shield
+    const sigOdd10 = od10 >= 6;
+    const sigEven10 = ev10 >= 6;
     
-    const sigOdd20 = od20 >= 13;
-    const sigEven20 = ev20 >= 13;
+    const sigOdd20 = od20 >= 12;
+    const sigEven20 = ev20 >= 12;
     
     if (sigOdd10 && sigOdd20) {
         return {
@@ -391,7 +391,8 @@ function evaluateOverUnder() {
     if (hist.length < 100) return null;
     
     const chiTest = calcChiSquared(hist, 100);
-    if (!chiTest.significant) return null;
+    // Relajamos Chi-Cuadrado de 16.92 a 12.0 (p ≈ 0.20) para mayor frecuencia, escudados por Ghost Trade
+    if (chiTest.chi2 < 12.0) return null;
     
     const markovHist = hist.slice(-100);
     const matrix = buildMarkovMatrix(markovHist);
@@ -402,8 +403,8 @@ function evaluateOverUnder() {
     for (let d = 5; d <= 9; d++) probOver += transitions[d] || 0;
     let probUnder = 1 - probOver;
     
-    // Probabilidad estricta >= 60%
-    if (probOver >= 0.60) {
+    // Probabilidad relajada >= 55% gracias al Ghost Shield
+    if (probOver >= 0.55) {
         return {
             engine: 'OVER_UNDER',
             contractType: 'DIGITOVER',
@@ -414,7 +415,7 @@ function evaluateOverUnder() {
         };
     }
     
-    if (probUnder >= 0.60) {
+    if (probUnder >= 0.55) {
         return {
             engine: 'OVER_UNDER',
             contractType: 'DIGITUNDER',
