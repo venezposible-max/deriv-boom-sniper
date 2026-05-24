@@ -1770,66 +1770,7 @@ function updateUI(data) {
   if (document.activeElement !== $('inputMaxLoss')) $('inputMaxLoss').value = data.maxDailyLoss;
   if (document.activeElement !== $('inputTakeProfit')) $('inputTakeProfit').value = data.takeProfit;
 
-  // Risk metrics
-  const maxLoss = data.maxDailyLoss || 20;
-  const tp = data.takeProfit || 15;
-  $('riskDailyLoss').textContent = '$' + Math.abs(data.dailyLoss || 0).toFixed(2) + ' / $' + maxLoss;
-  $('riskDailyProfit').textContent = '$' + (data.dailyProfit || 0).toFixed(2) + ' / $' + tp;
 
-  const lossPct = Math.min((Math.abs(data.dailyLoss || 0) / maxLoss) * 100, 100);
-  const profitPct = Math.min(((data.dailyProfit || 0) / tp) * 100, 100);
-  $('progressLoss').style.width = lossPct + '%';
-  $('progressProfit').style.width = profitPct + '%';
-
-  // Profit Lock visual sync
-  const profitLockVal = data.profitFloor || 0;
-  const peakVal = data.profitPeak || 0;
-  $('riskProfitLock').textContent = '$' + profitLockVal.toFixed(2);
-  $('profitLockInfo').textContent = `Piso: $${profitLockVal.toFixed(2)} | Pico: $${peakVal.toFixed(2)}`;
-  const progressLockPct = Math.min((profitLockVal / Math.max(peakVal, tp, 1)) * 100, 100);
-  $('progressProfitLock').style.width = progressLockPct + '%';
-
-  const remaining = (data.maxTradesPerDay || 50) - (data.totalTradesSession || 0);
-  $('riskTradesRemaining').textContent = remaining + ' / ' + (data.maxTradesPerDay || 50);
-
-  const consec = data.consecutiveLosses || 0;
-  const consecEl = $('riskConsecLosses');
-  consecEl.textContent = consec;
-  consecEl.style.color = consec >= 3 ? 'var(--accent-red)' : 'var(--text-primary)';
-
-  const cbEl = $('riskCircuitBreaker');
-  if (data.circuitBreakerUntil && data.circuitBreakerUntil > Date.now()) {
-    const secsLeft = Math.ceil((data.circuitBreakerUntil - Date.now()) / 1000);
-    cbEl.className = 'ri-badge danger';
-    cbEl.textContent = '⚠ Activo — ' + secsLeft + 's';
-  } else {
-    cbEl.className = 'ri-badge ok';
-    cbEl.textContent = '✓ Inactivo';
-  }
-
-  // Momentum Shield visual sync
-  const shieldLevel = data.momentumShieldLevel || 0;
-  for (let i = 0; i <= 4; i++) {
-    const el = $('shieldLevel' + i);
-    if (el) {
-      el.className = 'shield-level';
-      if (i === shieldLevel) {
-        el.classList.add('level-' + i + '-active');
-      }
-    }
-  }
-
-  const shieldTexts = {
-    0: 'Normal — Motor DIFFER activo (Flujo Continuo)',
-    1: 'Alerta — Continuando operación al 100% de stake',
-    2: 'Defensa — Continuando operación al 100% de stake',
-    3: 'Crítico — Continuando operación al 100% de stake',
-    4: 'LOCKDOWN — Continuando operación al 100% de stake'
-  };
-  $('shieldStatusText').textContent = shieldTexts[shieldLevel] || shieldTexts[0];
-
-  const cooldownSecs = (data.dynamicCooldown || 6000) / 1000;
-  $('shieldCooldown').textContent = `Cooldown: ${cooldownSecs.toFixed(0)}s`;
 
   // Sparkline Chart update on every status poll
   const currentPnl = data.pnlSession || 0;
