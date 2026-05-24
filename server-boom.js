@@ -90,8 +90,7 @@ let botState = {
     
     // ─── Variables del Escudo de Trade Fantasma (Ghost Shield) ───
     ghostNextTradeReal: false,
-    ghostPendingBarrier: null,
-    ghostActive: false,
+    ghostPendingTrade: null,
     
     // ─── Información del trade activo ───
     currentEngine: null,       // 'EVEN_ODD' | 'OVER_UNDER' | 'MATCH'
@@ -115,7 +114,7 @@ let botState = {
     
     // ─── Martingala Segura (Recuperación x2.1) ───
     martingaleStep: 0,         // Nivel actual de martingala (0 = stake base)
-    maxMartingaleSteps: 6,     // Límite máximo para evitar quemar cuenta
+    maxMartingaleSteps: 4, // Reducido a 4 porque el Ghost Trading evita el primer nivel de pérdida     // Límite máximo para evitar quemar cuenta
     
     // ─── Enfriamiento inteligente y re-evaluación post-pérdida ───
     lossPauseUntil: null,
@@ -336,7 +335,11 @@ function getAdjustedStake(baseStake, engineMultiplier) {
  */
 function evaluateEvenOdd() {
     const hist = botState.digitHistory;
-    if (hist.length < 20) return null;
+    if (hist.length < 50) return null;
+    
+    // Chi-Cuadrado de última ventana (Estricto)
+    const chiTest = calcChiSquared(hist, 50);
+    if (!chiTest.significant) return null; // Debe haber desbalance estadístico
     
     const sub10 = hist.slice(-10);
     const sub20 = hist.slice(-20);
@@ -347,11 +350,12 @@ function evaluateEvenOdd() {
     let ev20 = 0, od20 = 0;
     sub20.forEach(d => { if (d % 2 === 0) ev20++; else od20++; });
     
-    const sigOdd10 = od10 >= 6;
-    const sigEven10 = ev10 >= 6;
+    // Señales por ventana (70% de consenso en M10 y 65% en M20)
+    const sigOdd10 = od10 >= 7;
+    const sigEven10 = ev10 >= 7;
     
-    const sigOdd20 = od20 >= 11;
-    const sigEven20 = ev20 >= 11;
+    const sigOdd20 = od20 >= 13;
+    const sigEven20 = ev20 >= 13;
     
     if (sigOdd10 && sigOdd20) {
         return {
@@ -384,9 +388,12 @@ function evaluateEvenOdd() {
  */
 function evaluateOverUnder() {
     const hist = botState.digitHistory;
-    if (hist.length < 30) return null;
+    if (hist.length < 100) return null;
     
-    const markovHist = hist.slice(-30);
+    const chiTest = calcChiSquared(hist, 100);
+    if (!chiTest.significant) return null;
+    
+    const markovHist = hist.slice(-100);
     const matrix = buildMarkovMatrix(markovHist);
     const lastDigit = hist[hist.length - 1];
     const transitions = matrix[lastDigit];
@@ -395,7 +402,8 @@ function evaluateOverUnder() {
     for (let d = 5; d <= 9; d++) probOver += transitions[d] || 0;
     let probUnder = 1 - probOver;
     
-    if (probOver >= 0.55) {
+    // Probabilidad estricta >= 60%
+    if (probOver >= 0.60) {
         return {
             engine: 'OVER_UNDER',
             contractType: 'DIGITOVER',
@@ -406,7 +414,7 @@ function evaluateOverUnder() {
         };
     }
     
-    if (probUnder >= 0.55) {
+    if (probUnder >= 0.60) {
         return {
             engine: 'OVER_UNDER',
             contractType: 'DIGITUNDER',
@@ -559,10 +567,25 @@ function tryFireTrade() {
     
     if (!signal) return;
 
-    // Guardamos qué motor disparó para la próxima rotación
     botState.lastEngineFired = signal.engine;
     
-    // (Escudo Fantasma desactivado por solicitud del usuario para operar con fluidez en tiempo real)
+    // ─── GHOST TRADING LOGIC ───
+    if (!botState.ghostNextTradeReal) {
+        if (!botState.ghostPendingTrade && botState.isRunning) {
+            console.log(`👻 GHOST TRADE: Señal de ${signal.engine} [${signal.contractType} B:${signal.barrier || '-'}]. Simulando entrada virtual...`);
+            botState.ghostPendingTrade = {
+                engine: signal.engine,
+                contractType: signal.contractType,
+                barrier: signal.barrier,
+                entryTickPrice: botState.lastTickPrice
+            };
+            botState.lastTradeTime = Date.now();
+        }
+        return;
+    }
+    
+    // Si llegamos aquí, ghostNextTradeReal es TRUE. ¡Disparamos REAL!
+    botState.ghostNextTradeReal = false; // Resetear el escudo
     
     const finalStake = getAdjustedStake(botState.stake, signal.stakeMultiplier);
     if (finalStake <= 0) return;
@@ -1044,6 +1067,30 @@ function connectDeriv() {
             // Incrementar conteo de ticks capturados en la pausa
             if (botState.lossPauseUntil && Date.now() < botState.lossPauseUntil) {
                 botState.lossPauseTicksProcessed = (botState.lossPauseTicksProcessed || 0) + 1;
+            }
+            
+            // Evaluar resultado del Ghost Trade (1 tick de duración)
+            if (botState.ghostPendingTrade) {
+                const pt = botState.ghostPendingTrade;
+                let won = false;
+                
+                if (pt.contractType === 'DIGITEVEN') won = digit % 2 === 0;
+                else if (pt.contractType === 'DIGITODD') won = digit % 2 !== 0;
+                else if (pt.contractType === 'DIGITOVER') won = digit > parseInt(pt.barrier);
+                else if (pt.contractType === 'DIGITUNDER') won = digit < parseInt(pt.barrier);
+                else if (pt.contractType === 'DIGITMATCH') won = digit === parseInt(pt.barrier);
+                else if (pt.contractType === 'DIGITDIFF') won = digit !== parseInt(pt.barrier);
+                
+                console.log(`👻 GHOST RESULT: ${pt.engine} [${pt.contractType}] -> Result digit: ${digit} -> ${won ? 'WIN ✅' : 'LOSS ❌'}`);
+                
+                botState.ghostPendingTrade = null; // Limpiar para el siguiente
+                
+                if (won) {
+                    botState.ghostNextTradeReal = false;
+                } else {
+                    botState.ghostNextTradeReal = true;
+                    console.log(`🔥 GHOST SHIELD: ¡Pérdida virtual detectada! El bot está ARMADO para entrar con dinero REAL en la próxima señal.`);
+                }
             }
             
             tryFireTrade();
