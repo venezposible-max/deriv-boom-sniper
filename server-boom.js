@@ -83,11 +83,10 @@ let botState = {
     takeProfitExtensions: 0,
     spikeProtectionUntil: 0,   // trade session index until which stake is halved
     
-    // ─── Interruptores de motores (Solo DIFFER activo por premisa del usuario)
-    engineEvenOdd: false,
-    engineOverUnder: false,
+    // ─── Interruptores de motores (Por instrucción del usuario, fuera DIFFER)
+    engineEvenOdd: true,
+    engineOverUnder: true,
     engineMatch: false,
-    engineDiffer: true,
     
     // ─── Variables del Escudo de Trade Fantasma (Ghost Shield) ───
     ghostNextTradeReal: false,
@@ -95,7 +94,7 @@ let botState = {
     ghostActive: false,
     
     // ─── Información del trade activo ───
-    currentEngine: null,       // 'EVEN_ODD' | 'OVER_UNDER' | 'MATCH' | 'DIFFER'
+    currentEngine: null,       // 'EVEN_ODD' | 'OVER_UNDER' | 'MATCH'
     currentContractType: null,
     currentBarrier: null,
     currentStake: 0,
@@ -104,8 +103,7 @@ let botState = {
     engineStats: {
         EVEN_ODD: { wins: 0, losses: 0, pnl: 0, autoDisabled: false },
         OVER_UNDER: { wins: 0, losses: 0, pnl: 0, autoDisabled: false },
-        MATCH: { wins: 0, losses: 0, pnl: 0, autoDisabled: false },
-        DIFFER: { wins: 0, losses: 0, pnl: 0, autoDisabled: false }
+        MATCH: { wins: 0, losses: 0, pnl: 0, autoDisabled: false }
     },
     
     // ─── Analíticas ───
@@ -115,18 +113,13 @@ let botState = {
     hotDigitFreq: 0,
     chiSquaredSignificant: false,
     
-    // ─── La Hidra (Motor de Cobertura y Recuperación para Differ) ───
-    hidraLayer: 0,             // 0=Normal, 1=Espejo, 2=D'Alembert, 3=Freno
-    hidraDalembertStep: 0,
-    hidraLastLossDigit: null,
-    hidraFrenoUntil: 0,
+    // ─── Martingala Segura (Recuperación x2.1) ───
+    martingaleStep: 0,         // Nivel actual de martingala (0 = stake base)
+    maxMartingaleSteps: 6,     // Límite máximo para evitar quemar cuenta
     
     // ─── Enfriamiento inteligente y re-evaluación post-pérdida ───
     lossPauseUntil: null,
-    lossPauseTicksProcessed: 0,
-    
-    // ─── Barrera prohibida (la que acaba de fallar) ───
-    lastLossBarrier: null
+    lossPauseTicksProcessed: 0
 };
 
 // ════════════════════════════════════════════════════════════════
@@ -294,7 +287,9 @@ function build2ndOrderMarkovMatrix(hist) {
         const state = (hist[k - 2] * 10) + hist[k - 1]; // Ej: dígito 3 luego 7 = estado 37
         const nextDigit = hist[k];
         matrix[state][nextDigit]++;
-    }
+    }// ════════════════════════════════════════════════════════════════
+//  (Sección Quantum Edge eliminada por transición a Even/Odd)
+// ════════════════════════════════════════════════════════════════
     
     // Calcular probabilidades
     for (let i = 0; i <= 99; i++) {
@@ -316,185 +311,19 @@ function getDynamicCooldown() {
 }
 
 /**
- * Calcular Stake Ajustado según Escudo de Momentum y Spike Protection
+ * Calcular Stake Ajustado según Escudo de Momentum y Martingala
  */
-function getAdjustedStake(baseStake, stakeMultiplier) {
-    let adjusted = baseStake * stakeMultiplier;
+function getAdjustedStake(baseStake, engineMultiplier) {
+    let adjusted = baseStake * engineMultiplier;
     
-    // Si estamos en cobertura (hidraLayer === 1), no reducimos el stake para garantizar la recuperación completa
-    if (botState.hidraLayer === 1) {
-        return parseFloat(adjusted.toFixed(2));
-    }
-    
-    // Deshabilitamos reducciones de escudo por racha y protección contra picos
-    // para cumplir con la premisa del usuario de no parar, no pausar y mantener operación al 100%
-    if (adjusted > 0 && adjusted < 0.35) {
-        adjusted = 0.35;
+    // Aplicar multiplicador de Martingala x2.1 para recuperar pérdidas en Even/Odd o Over/Under
+    if (botState.martingaleStep > 0 && botState.coberturaEnabled) {
+        // limitamos la martingala al maximo permitido
+        const steps = Math.min(botState.martingaleStep, botState.maxMartingaleSteps || 6);
+        adjusted = adjusted * Math.pow(2.1, steps);
     }
     
     return parseFloat(adjusted.toFixed(2));
-}
-
-// ════════════════════════════════════════════════════════════════
-//  SISTEMA QUANTUM EDGE — TABLAS ESTADÍSTICAS REALES
-//  Fuente: Análisis forense de 6,000 ticks reales (Mayo 2026)
-//  Método: Chi², Markov O1/O2, Autocorrelación, Anti-repetición
-// ════════════════════════════════════════════════════════════════
-
-/**
- * TABLA DE ANTI-REPETICIÓN POR SÍMBOLO
- * Cuando el último dígito fue Y, la barrera X tiene un WR histórico verificado.
- * Solo se incluyen combinaciones con edge ≥ 3% sobre baseline 90% (n ≥ 150).
- * Formato: { lastDigit: [{ barrier, wr, zScore }] }
- */
-const QUANTUM_EDGE_TABLE = {
-    'R_10': {
-        // Edge principal: anti-repetición y Markov (Autocorrelación Lag4 detectada)
-        antiRepetition: [
-            { digit: 0, p: 0.0733 },  // si aparece 0, P(0 de nuevo)=7.33% → WR 92.67%
-            { digit: 3, p: 0.0785 },  // si aparece 3, P(3 de nuevo)=7.85% → WR 92.15%
-        ],
-        // Transiciones Markov anómalas validadas (z > 2.0)
-        markovAnomaly: [
-            { from: 4, barrier: 7, wr: 0.9531, z: -2.45 },  // 4→7 solo 4.69%
-            { from: 0, barrier: 3, wr: 0.9529, z: -2.44 },  // 0→3 solo 4.71%
-            { from: 6, barrier: 9, wr: 0.9392, z: -1.88 },
-            { from: 7, barrier: 6, wr: 0.9378, z: -1.85 },
-            { from: 9, barrier: 1, wr: 0.9378, z: -1.85 },
-            { from: 2, barrier: 7, wr: 0.9366, z: -1.82 },
-            { from: 8, barrier: 5, wr: 0.9301, z: -1.68 },
-        ],
-        // Coiling: dígitos que permanecen fríos (anti-gamblers-fallacy)
-        coldCoiling: [
-            { digit: 7, absenceTicks: 10, p: 0.042 },  // WR estimado 95.8%
-            { digit: 0, absenceTicks: 10, p: 0.056 },
-            { digit: 4, absenceTicks: 10, p: 0.056 },
-        ]
-    },
-    'R_25': {
-        antiRepetition: [
-            { digit: 9, p: 0.0743 },  // WR 92.57%
-        ],
-        markovAnomaly: [
-            { from: 5, barrier: 6, wr: 0.9421, z: -1.93 },  // 5→6 baja frecuencia
-            { from: 7, barrier: 0, wr: 0.9378, z: -1.85 },
-            { from: 7, barrier: 8, wr: 0.9378, z: -1.85 },
-            { from: 4, barrier: 5, wr: 0.9356, z: -1.82 },
-            { from: 3, barrier: 9, wr: 0.9336, z: -1.78 },
-            { from: 0, barrier: 1, wr: 0.9320, z: -1.75 },
-            { from: 9, barrier: 5, wr: 0.9307, z: -1.72 },
-            { from: 8, barrier: 2, wr: 0.9299, z: -1.70 },
-        ],
-        coldCoiling: [
-            { digit: 5, absenceTicks: 10, p: 0.014 },  // WR estimado 98.6% (experimental)
-            { digit: 3, absenceTicks: 10, p: 0.041 },
-        ]
-    },
-    'R_50': {
-        // Datos limitados, usar solo Markov dinámico
-        antiRepetition: [],
-        markovAnomaly: [],
-        coldCoiling: []
-    },
-    'R_75': {
-        antiRepetition: [
-            { digit: 8, p: 0.0476 },  // PRINCIPAL: WR 95.24% — el más fuerte del análisis
-        ],
-        markovAnomaly: [
-            { from: 8, barrier: 8, wr: 0.9524, z: -2.40 },  // DOBLE CONFIRMACIÓN
-            { from: 2, barrier: 6, wr: 0.9521, z: -2.38 },
-            { from: 6, barrier: 0, wr: 0.9444, z: -2.20 },
-            { from: 6, barrier: 5, wr: 0.9444, z: -2.20 },
-            { from: 3, barrier: 0, wr: 0.9362, z: -2.01 },
-            { from: 9, barrier: 2, wr: 0.9303, z: -1.88 },
-        ],
-        coldCoiling: [
-            { digit: 3, absenceTicks: 10, p: 0.043 },
-            { digit: 6, absenceTicks: 5,  p: 0.055 },
-            { digit: 9, absenceTicks: 5,  p: 0.065 },
-        ]
-    },
-    'R_100': {
-        antiRepetition: [],
-        markovAnomaly: [],
-        coldCoiling: []
-    }
-};
-
-/**
- * QUANTUM EDGE SCORER
- * Calcula un score compuesto para cada barrera potencial combinando:
- * 1. Probabilidad Markov dinámica (calculada en tiempo real)
- * 2. Edge estadístico validado de la tabla QUANTUM_EDGE_TABLE
- * 3. Anti-repetición: si el último dígito = barrera, aplica penalización
- * 4. Coiling: si la barrera lleva N ticks sin aparecer, aplica bonus/penalización
- *
- * @returns {{ barrier: number, score: number, reason: string }[]} - ordenado de mayor a menor score
- */
-function quantumEdgeScore(hist, lastDigit, prevDigit, symbol, dynamicMarkovProbs) {
-    const edgeTable = QUANTUM_EDGE_TABLE[symbol] || QUANTUM_EDGE_TABLE['R_25'];
-    const scores = [];
-
-    for (let d = 0; d <= 9; d++) {
-        if (d === lastDigit) continue; // No operar el mismo dígito que acaba de aparecer como barrera principal
-
-        let score = 1.0 - dynamicMarkovProbs[d]; // Base: mayor score = menor probabilidad Markov dinámica
-        let reasons = [];
-
-        // ─── Factor 1: Edge de tabla Markov validado ───
-        const markovEntry = edgeTable.markovAnomaly.find(e => e.from === lastDigit && e.barrier === d);
-        if (markovEntry) {
-            const tableBonus = (markovEntry.wr - 0.90) * 2.0; // Amplificar el edge estadístico
-            score += tableBonus;
-            reasons.push(`Markov validado WR=${(markovEntry.wr*100).toFixed(1)}% (z=${markovEntry.z})`);
-        }
-
-        // ─── Factor 2: Anti-repetición validada ───
-        // Si la barrera a elegir (d) es el mismo que LAST DIGIT, el score ya fue eliminado arriba.
-        // Pero si d es un dígito con anti-repetición documentada Y ese dígito acaba de aparecer:
-        const antiRepEntry = edgeTable.antiRepetition.find(e => e.digit === lastDigit && d === lastDigit);
-        // (Nota: esto es anti-repetición pura: apostamos que el último dígito NO volverá)
-        if (lastDigit === d) {
-            // Ya excluido por la condición de arriba
-        } else {
-            // Bonus por ser barrera diferente al último cuando hay anti-repetición del último
-            const antiRep = edgeTable.antiRepetition.find(e => e.digit === lastDigit);
-            if (antiRep) {
-                // El último dígito tiene tendencia anti-repetición → la barrera d=lastDigit sería muy buena
-                // pero ya fue excluida. Ahora aplicamos pequeño bonus general para d != lastDigit
-                score += 0.02;
-                if (d === lastDigit) reasons.push(`Anti-rep directa P=${(antiRep.p*100).toFixed(1)}%`);
-            }
-        }
-
-        // ─── Factor 3: Coiling inverso (fríos permanecen fríos) ───
-        for (const coil of edgeTable.coldCoiling) {
-            if (coil.digit === d) {
-                // Contar cuántos ticks lleva sin aparecer
-                let absence = 0;
-                for (let i = hist.length - 1; i >= 0; i--) {
-                    if (hist[i] === d) break;
-                    absence++;
-                    if (absence >= 30) break;
-                }
-
-                if (absence >= coil.absenceTicks) {
-                    const coilingBonus = (0.1 - coil.p) * 1.5; // Bonus proporcional al edge de coiling
-                    score += coilingBonus;
-                    reasons.push(`Coiling frío: ${absence} ticks sin aparecer (P real≈${(coil.p*100).toFixed(1)}%)`);
-                }
-            }
-        }
-
-        scores.push({
-            barrier: d,
-            score,
-            reason: reasons.length > 0 ? reasons.join(' | ') : `Markov dinámico P=${(dynamicMarkovProbs[d]*100).toFixed(1)}%`
-        });
-    }
-
-    scores.sort((a, b) => b.score - a.score);
-    return scores;
 }
 
 // ════════════════════════════════════════════════════════════════
@@ -687,181 +516,7 @@ function evaluateMatch() {
     };
 }
 
-/**
- * Motor 4: DIFFER — "El Cirujano"
- * Optimización multivariante probando barreras dinámicas para explotar la máxima ventaja Markov
- */
-function evaluateDiffer() {
-    const hist = botState.digitHistory;
-    if (hist.length < 100) return null;
-    
-    const now = Date.now();
-    const lastDigit = hist[hist.length - 1];
-    const prevDigit = hist[hist.length - 2];
-    
-    // Frecuencia de los últimos 100 para desempate global
-    const freq100 = Array(10).fill(0);
-    hist.slice(-100).forEach(d => freq100[d]++);
-    
-    // CAPA 3: Freno de emergencia
-    if (botState.hidraLayer === 3) {
-        if (now >= botState.hidraFrenoUntil) {
-            console.log(`🐍 LA HIDRA: Freno de emergencia finalizado. Reanudando en Capa 0 (Normal).`);
-            botState.hidraLayer = 0;
-            botState.hidraDalembertStep = 0;
-            botState.hidraLastLossDigit = null;
-            saveState();
-        } else {
-            return null;
-        }
-    }
-    
-    // CAPA 1: COBERTURA INFALIBLE (1 Tiro x10)
-    if (botState.hidraLayer === 1) {
-        const entropy = parseFloat(botState.shannonEntropy);
-        
-        // Selección de Barrera Estadísticamente Infalible usando Markov de 2do orden + 1er orden
-        const state = (prevDigit * 10) + lastDigit;
-        const matrix2 = build2ndOrderMarkovMatrix(hist.slice(-200));
-        const transitions2 = matrix2[state];
-        
-        let bestBarrier = null;
-        let minProb = 1.0;
-        
-        // Intentamos usar transiciones de 2do orden primero
-        let has2ndOrderData = Object.values(transitions2).some(p => p !== 0.1);
-        
-        if (has2ndOrderData) {
-            for (let d = 0; d <= 9; d++) {
-                if (d === lastDigit) continue;
-                if (botState.lastLossBarrier !== null && d === botState.lastLossBarrier) continue;
-                const prob = transitions2[d] || 0;
-                if (prob < minProb) {
-                    minProb = prob;
-                    bestBarrier = d;
-                } else if (prob === minProb && bestBarrier !== null) {
-                    if (freq100[d] < freq100[bestBarrier]) {
-                        bestBarrier = d;
-                    }
-                }
-            }
-        }
-        
-        // Si no hay datos de 2do orden, caemos al 1er orden
-        if (bestBarrier === null || minProb >= 0.1) {
-            const matrix1 = buildMarkovMatrix(hist.slice(-150));
-            const transitions1 = matrix1[lastDigit];
-            minProb = 1.0;
-            for (let d = 0; d <= 9; d++) {
-                if (d === lastDigit) continue;
-                if (botState.lastLossBarrier !== null && d === botState.lastLossBarrier) continue;
-                const prob = transitions1[d] || 0;
-                if (prob < minProb) {
-                    minProb = prob;
-                    bestBarrier = d;
-                } else if (prob === minProb && bestBarrier !== null) {
-                    if (freq100[d] < freq100[bestBarrier]) {
-                        bestBarrier = d;
-                    }
-                }
-            }
-        }
-        
-        if (bestBarrier === null) {
-            bestBarrier = botState.hidraLastLossDigit !== null ? botState.hidraLastLossDigit : (lastDigit + 5) % 10;
-        }
-        
-        console.log(`🐍 LA HIDRA [COBERTURA INFALIBLE x10]: Disparando cobertura sobre dígito ${bestBarrier} (Prob: ${(minProb*100).toFixed(2)}%)`);
-        
-        return {
-            engine: 'DIFFER',
-            contractType: 'DIGITDIFF',
-            barrier: String(bestBarrier),
-            stakeMultiplier: 10.0,
-            reason: `Hidra Cobertura Infalible evitar=${bestBarrier} tras pérdida (Prob trans: ${(minProb*100).toFixed(2)}%)`,
-            entropy: entropy
-        };
-    }
-    
-    // ═══════════════════════════════════════════════════════════════
-    //  CAPA 0: QUANTUM EDGE NORMAL
-    //  Combina Markov dinámico + Tablas estadísticas validadas
-    // ═══════════════════════════════════════════════════════════════
-    const state = (prevDigit * 10) + lastDigit;
-    const markovHist = hist.slice(-200);
-    const matrix2 = build2ndOrderMarkovMatrix(markovHist);
-    const transitions2 = matrix2[state];
-    
-    // Contar ocurrencias del estado actual para el filtro de tamaño de muestra
-    let stateOccurrences = 0;
-    for (let k = 2; k < markovHist.length; k++) {
-        const s = (markovHist[k - 2] * 10) + markovHist[k - 1];
-        if (s === state) stateOccurrences++;
-    }
-    
-    // ─── QUANTUM EDGE SCORER: Combina Markov + Tablas Validadas + Coiling ───
-    // Usar transiciones de 2do orden si hay datos suficientes, o caer a 1er orden
-    let dynamicMarkovProbs;
-    if (stateOccurrences >= 5) {
-        dynamicMarkovProbs = transitions2;
-    } else {
-        const matrix1 = buildMarkovMatrix(hist.slice(-150));
-        dynamicMarkovProbs = matrix1[lastDigit];
-    }
-    
-    // Calcular scores compuestos para cada barrera potencial
-    const rankedBarriers = quantumEdgeScore(hist, lastDigit, prevDigit, SYMBOL, dynamicMarkovProbs);
-    
-    // Filtrar la barrera prohibida (la que acaba de fallar)
-    const validBarriers = rankedBarriers.filter(b =>
-        b.barrier !== botState.lastLossBarrier
-    );
-    
-    if (validBarriers.length === 0) return null;
-    
-    const top = validBarriers[0];
-    const bestBarrier = top.barrier;
-    const estimatedWinRate = (dynamicMarkovProbs[bestBarrier] !== undefined)
-        ? (1 - dynamicMarkovProbs[bestBarrier]) * 100
-        : 92.0; // fallback conservador
-    
-    // En modo diferPrecision98 exigimos score muy alto
-    const minScore = botState.differPrecision98 ? 0.10 : 0.03;
-    if (top.score < minScore) return null;
-    
-    console.log(`🔬 QUANTUM EDGE: Barrera=${bestBarrier} | Score=${top.score.toFixed(4)} | ${top.reason}`);
-    
-    if (botState.hidraLayer === 0) {
-        // CAPA 0: NORMAL con Quantum Edge
-        return {
-            engine: 'DIFFER',
-            contractType: 'DIGITDIFF',
-            barrier: String(bestBarrier),
-            stakeMultiplier: 0.8,
-            reason: `Quantum Edge [${SYMBOL}] evitar=${bestBarrier} (WR Est.${estimatedWinRate.toFixed(1)}%) | ${top.reason}`,
-            entropy: parseFloat(botState.shannonEntropy)
-        };
-    }
-    
-    if (botState.hidraLayer === 2) {
-        // CAPA 2: D'ALEMBERT con Quantum Edge
-        const dStep = botState.hidraDalembertStep || 1;
-        const stakeMult = 0.8 + (dStep * 0.35);
-        
-        console.log(`🐍 LA HIDRA [CAPA 2 - D'ALEMBERT Step ${dStep}]: Quantum Edge barrera=${bestBarrier} StakeMult=${stakeMult.toFixed(2)}`);
-        
-        return {
-            engine: 'DIFFER',
-            contractType: 'DIGITDIFF',
-            barrier: String(bestBarrier),
-            stakeMultiplier: stakeMult,
-            reason: `Quantum Edge + D'Alembert Step ${dStep} evitar=${bestBarrier} | ${top.reason}`,
-            entropy: parseFloat(botState.shannonEntropy)
-        };
-    }
-    
-    return null;
-}
+
 
 // ════════════════════════════════════════════════════════════════
 //  ORQUESTADOR & FINALIZADOR
@@ -923,12 +578,26 @@ function tryFireTrade() {
     
     let signal = null;
     
-    // Evaluación EXCLUSIVA de DIFFER ("El Cirujano") por premisa del usuario
-    if (botState.engineDiffer) {
-        signal = evaluateDiffer();
+    // Evaluación con Rotación (Alternancia de prioridad)
+    const nextPriority = botState.lastEngineFired === 'OVER_UNDER' ? 'EVEN_ODD' : 'OVER_UNDER';
+
+    if (nextPriority === 'EVEN_ODD') {
+        if (botState.engineEvenOdd && !signal) signal = evaluateEvenOdd();
+        if (botState.engineOverUnder && !signal) signal = evaluateOverUnder();
+    } else {
+        if (botState.engineOverUnder && !signal) signal = evaluateOverUnder();
+        if (botState.engineEvenOdd && !signal) signal = evaluateEvenOdd();
+    }
+
+    // El motor Match siempre se evalúa al final si está activo
+    if (botState.engineMatch && !signal) {
+        signal = evaluateMatch();
     }
     
     if (!signal) return;
+
+    // Guardamos qué motor disparó para la próxima rotación
+    botState.lastEngineFired = signal.engine;
     
     // (Escudo Fantasma desactivado por solicitud del usuario para operar con fluidez en tiempo real)
     
@@ -1021,43 +690,20 @@ function finalizeTrade(c) {
         console.log(`❌ LOSS -$${Math.abs(profit).toFixed(2)} [${name}] | ${cType}${barrier ? ` B:${barrier}` : ''} | Racha: ${botState.consecutiveLosses} | PnL: $${botState.pnlSession.toFixed(2)}`);
     }
     
-    // ─── ACTUALIZACIÓN DE ESTADO DE LA HIDRA (DIFFER) ───
-    if (engine === 'DIFFER') {
-        if (isWin) {
-            if (botState.hidraLayer === 1) {
-                console.log(`🐍 LA HIDRA: ¡Cobertura exitosa! Recuperación completa. Volviendo a Capa 0.`);
-                botState.hidraLayer = 0;
-                botState.hidraLastLossDigit = null;
+    // ─── ACTUALIZACIÓN DE ESTADO DE MARTINGALA ───
+    if (isWin) {
+        if (botState.martingaleStep > 0) {
+            console.log(`🛡️ MARTINGALA: ¡Cobertura exitosa! Recuperación completa en nivel ${botState.martingaleStep}. Volviendo a stake base.`);
+        }
+        botState.martingaleStep = 0;
+    } else {
+        if (botState.coberturaEnabled) {
+            botState.martingaleStep++;
+            if (botState.martingaleStep > botState.maxMartingaleSteps) {
+                console.log(`💀 MARTINGALA: Límite máximo de pasos (${botState.maxMartingaleSteps}) superado. Asumiendo pérdida completa y reiniciando stake para proteger la cuenta.`);
+                botState.martingaleStep = 0;
             } else {
-                botState.hidraLayer = 0;
-                botState.hidraLastLossDigit = null;
-            }
-            botState.lastLossBarrier = null;
-        } else {
-            // Pérdida en Differ
-            if (botState.coberturaEnabled) {
-                if (botState.hidraLayer === 0) {
-                    botState.lastLossBarrier = barrier !== null ? parseInt(barrier) : null;
-                    console.log(`🚫 BARRERA PROHIBIDA: La barrera ${barrier} queda excluida del próximo trade.`);
-                    if (botState.franklinPerezLogic && botState.pnlSession > 0) {
-                        botState.hidraLayer = 0;
-                        botState.hidraLastLossDigit = null;
-                        console.log(`🧠 LÓGICA FRANKLIN PÉREZ: Pérdida detectada, pero el PnL de la sesión sigue siendo positivo ($${botState.pnlSession.toFixed(2)}). Se opera con STAKE NORMAL sin arriesgar Cobertura.`);
-                    } else {
-                        botState.hidraLayer = 1;
-                        botState.hidraLastLossDigit = botState.lastDigit;
-                        console.log(`🧠 LÓGICA FRANKLIN PÉREZ: El PnL de la sesión es negativo ($${botState.pnlSession.toFixed(2)}). Transicionando a Capa 1 (Cobertura Infallible x10) sobre dígito ${botState.lastDigit}.`);
-                    }
-                } else if (botState.hidraLayer === 1) {
-                    // La cobertura falló
-                    botState.hidraLayer = 0;
-                    botState.hidraLastLossDigit = null;
-                    console.log(`🐍 LA HIDRA: La cobertura falló. Se completó el único intento. Volviendo a Capa 0.`);
-                }
-            } else {
-                botState.hidraLayer = 0;
-                botState.hidraLastLossDigit = null;
-                console.log(`🐍 LA HIDRA: Pérdida en Differ (cobertura desactivada). Manteniendo Capa 0.`);
+                console.log(`📈 MARTINGALA: Pérdida. Escalando a Nivel ${botState.martingaleStep} (Multiplicador x2.1)`);
             }
         }
     }
@@ -1075,7 +721,6 @@ function finalizeTrade(c) {
             const wr = (stats.wins / totalTrades) * 100;
             let breakEven = 52.5;
             if (engine === 'MATCH') breakEven = 14.0;
-            else if (engine === 'DIFFER') breakEven = 91.3;
             
             if (wr < breakEven) {
                 stats.autoDisabled = true;

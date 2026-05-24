@@ -1235,7 +1235,7 @@ body::before {
   <!-- ═══════════════════════════ ENGINE CARDS ═══════════════════════════ -->
   <div class="engines-row">
     <!-- EVEN/ODD -->
-    <div class="engine-card glass engine-evenodd" id="engineCardEvenOdd" style="display: none !important;">
+    <div class="engine-card glass engine-evenodd" id="engineCardEvenOdd">
       <div class="engine-header">
         <div class="engine-info">
           <div class="engine-icon">🍞</div>
@@ -1279,7 +1279,7 @@ body::before {
     </div>
 
     <!-- OVER/UNDER -->
-    <div class="engine-card glass engine-overunder" id="engineCardOverUnder" style="display: none !important;">
+    <div class="engine-card glass engine-overunder" id="engineCardOverUnder">
       <div class="engine-header">
         <div class="engine-info">
           <div class="engine-icon">⚡</div>
@@ -1366,69 +1366,7 @@ body::before {
       </div>
     </div>
 
-    <!-- DIFFER -->
-    <div class="engine-card glass engine-differ" id="engineCardDiffer">
-      <div class="engine-header">
-        <div class="engine-info">
-          <div class="engine-icon">🔪</div>
-          <div>
-            <div class="engine-name">DIFFER</div>
-            <div class="engine-subtitle">El Cirujano</div>
-          </div>
-        </div>
-        <label class="toggle">
-          <input type="checkbox" id="toggleDiffer" checked>
-          <div class="toggle-track"></div>
-          <div class="toggle-thumb"></div>
-        </label>
-      </div>
-      <div class="engine-status" style="display: flex; justify-content: space-between; align-items: center; padding: 0 24px; margin-bottom: 12px;">
-        <span class="engine-status-text disabled" id="statusDiffer">
-          <span>●</span> Desactivado
-        </span>
-        <div style="display: flex; align-items: center; gap: 12px;">
-          <!-- Cobertura Toggle -->
-          <div style="display: flex; align-items: center; gap: 6px;">
-            <span style="font-size: 11px; font-weight: 700; color: var(--text-muted); letter-spacing: 0.5px; text-transform: uppercase;">Cobertura</span>
-            <label class="toggle" style="width: 38px; height: 20px;">
-              <input type="checkbox" id="toggleCobertura" onchange="handleCoberturaToggle(this.checked)">
-              <div class="toggle-track" style="border-radius: 10px;"></div>
-              <div class="toggle-thumb" style="width: 14px; height: 14px; top: 3px; left: 3px;"></div>
-            </label>
-          </div>
-          <!-- 98% Probabilidad Toggle -->
-          <div style="display: flex; align-items: center; gap: 6px;">
-            <span style="font-size: 11px; font-weight: 700; color: var(--accent-green); letter-spacing: 0.5px; text-transform: uppercase;">98% Prob</span>
-            <label class="toggle" style="width: 38px; height: 20px;">
-              <input type="checkbox" id="toggleDiffer98" onchange="handleDiffer98Toggle(this.checked)">
-              <div class="toggle-track" style="border-radius: 10px; background: rgba(16, 185, 129, 0.15);"></div>
-              <div class="toggle-thumb" style="width: 14px; height: 14px; top: 3px; left: 3px;"></div>
-            </label>
-          </div>
-        </div>
-      </div>
-      <div class="darwin-badge" id="darwinBadgeDiffer">
-        🦎 Auto-desactivado por Darwin
-      </div>
-      <div class="engine-stats">
-        <div class="engine-stat">
-          <span class="es-label">Ganadas</span>
-          <span class="es-value positive" id="diWins">0</span>
-        </div>
-        <div class="engine-stat">
-          <span class="es-label">Perdidas</span>
-          <span class="es-value negative" id="diLosses">0</span>
-        </div>
-        <div class="engine-stat">
-          <span class="es-label">PnL</span>
-          <span class="es-value neutral" id="diPnl">$0.00</span>
-        </div>
-        <div class="engine-stat">
-          <span class="es-label">Win Rate</span>
-          <span class="es-value neutral" id="diWinRate">0.0%</span>
-        </div>
-      </div>
-    </div>
+
   </div>
 
   <!-- ═══════════════════════════ DIGIT DISPLAY ═══════════════════════════ -->
@@ -1501,6 +1439,18 @@ body::before {
       <div class="control-group">
         <label>Take Profit ($)</label>
         <input type="number" id="inputTakeProfit" value="15" min="1" max="1000" step="1" onchange="handleConfigChange()" onblur="handleConfigChange()">
+      </div>
+
+      <div class="control-separator"></div>
+
+      <div class="control-group" style="display:flex; flex-direction:column; align-items:center; min-width: 90px;">
+        <label style="color: var(--accent-green);">Martingala</label>
+        <label class="toggle" style="width: 40px; height: 22px; margin-top:4px;">
+          <input type="checkbox" id="toggleCobertura" onchange="handleCoberturaToggle(this.checked)">
+          <div class="toggle-track" style="border-radius: 12px;"></div>
+          <div class="toggle-thumb" style="width: 16px; height: 16px; top: 3px; left: 3px;"></div>
+        </label>
+        <div style="font-size: 11px; margin-top: 6px; font-weight: bold; color: var(--text-muted);" id="martingaleLevelDisplay">Paso: 0</div>
       </div>
 
       <div class="control-separator"></div>
@@ -1637,12 +1587,10 @@ let state = {
   engineEvenOdd: true,
   engineOverUnder: true,
   engineMatch: true,
-  engineDiffer: true,
   engineStats: {
     EVEN_ODD: { wins: 0, losses: 0, pnl: 0, autoDisabled: false },
     OVER_UNDER: { wins: 0, losses: 0, pnl: 0, autoDisabled: false },
-    MATCH: { wins: 0, losses: 0, pnl: 0, autoDisabled: false },
-    DIFFER: { wins: 0, losses: 0, pnl: 0, autoDisabled: false }
+    MATCH: { wins: 0, losses: 0, pnl: 0, autoDisabled: false }
   },
   shannonEntropy: 0,
   markovEdge: 0,
@@ -1784,38 +1732,34 @@ function updateUI(data) {
   $('toggleEvenOdd').checked = data.engineEvenOdd;
   $('toggleOverUnder').checked = data.engineOverUnder;
   $('toggleMatch').checked = data.engineMatch;
-  $('toggleDiffer').checked = data.engineDiffer;
-  
+
+  // Martingale sync
   const toggleCob = $('toggleCobertura');
   if (toggleCob) {
     toggleCob.checked = !!data.coberturaEnabled;
   }
-  
-  const toggleD98 = $('toggleDiffer98');
-  if (toggleD98) {
-    toggleD98.checked = !!data.differPrecision98;
+  const levelDisplay = $('martingaleLevelDisplay');
+  if (levelDisplay) {
+    levelDisplay.textContent = 'Paso: ' + (data.martingaleStep || 0);
   }
 
   // Engine cards active state
   updateEngineCard('engineCardEvenOdd', 'statusEvenOdd', data.engineEvenOdd, data.isRunning, data.currentEngine === 'EVEN_ODD');
   updateEngineCard('engineCardOverUnder', 'statusOverUnder', data.engineOverUnder, data.isRunning, data.currentEngine === 'OVER_UNDER');
   updateEngineCard('engineCardMatch', 'statusMatch', data.engineMatch, data.isRunning, data.currentEngine === 'MATCH');
-  updateEngineCard('engineCardDiffer', 'statusDiffer', data.engineDiffer, data.isRunning, data.currentEngine === 'DIFFER');
 
   // Engine stats
   updateEngineStats('eo', data.engineStats.EVEN_ODD);
   updateEngineStats('ou', data.engineStats.OVER_UNDER);
   updateEngineStats('ma', data.engineStats.MATCH);
-  updateEngineStats('di', data.engineStats.DIFFER);
 
   // Darwin mode badges toggling
-  ['EVEN_ODD', 'OVER_UNDER', 'MATCH', 'DIFFER'].forEach(eng => {
+  ['EVEN_ODD', 'OVER_UNDER', 'MATCH'].forEach(eng => {
     const stats = data.engineStats[eng];
     const badgeId = {
       'EVEN_ODD': 'darwinBadgeEvenOdd',
       'OVER_UNDER': 'darwinBadgeOverUnder',
-      'MATCH': 'darwinBadgeMatch',
-      'DIFFER': 'darwinBadgeDiffer'
+      'MATCH': 'darwinBadgeMatch'
     }[eng];
     const badge = $(badgeId);
     if (badge) {
@@ -2094,11 +2038,9 @@ function renderHistory(history) {
     const time = formatTimeVE(t.time);
     const num = history.length - idx;
 
-    const engineLabel = {
       'EVEN_ODD': 'Even/Odd',
       'OVER_UNDER': 'Over/Under',
-      'MATCH': 'Match',
-      'DIFFER': 'Differ'
+      'MATCH': 'Match'
     }[t.engine] || t.engine || '—';
 
     return `<tr class="${rowClass}">
@@ -2284,11 +2226,9 @@ async function handleEngineToggle(engine, enabled) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ engine, enabled })
     });
-    const engineNames = {
       'EVEN_ODD': 'Even/Odd',
       'OVER_UNDER': 'Over/Under',
-      'MATCH': 'Match',
-      'DIFFER': 'Differ'
+      'MATCH': 'Match'
     };
     showToast(`Motor ${engineNames[engine]} ${enabled ? 'activado' : 'desactivado'}`, 'info');
   } catch (e) {
@@ -2342,9 +2282,6 @@ $('toggleOverUnder').addEventListener('change', function() {
 $('toggleMatch').addEventListener('change', function() {
   handleEngineToggle('MATCH', this.checked);
 });
-$('toggleDiffer').addEventListener('change', function() {
-  handleEngineToggle('DIFFER', this.checked);
-});
 
 async function handleCoberturaToggle(checked) {
   try {
@@ -2353,27 +2290,12 @@ async function handleCoberturaToggle(checked) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ coberturaEnabled: checked })
     });
-    showToast(`Cobertura ${checked ? 'activada' : 'desactivada'}`, 'success');
+    showToast(`Martingala ${checked ? 'activada' : 'desactivada'}`, 'success');
   } catch (e) {
-    showToast('Error al actualizar cobertura', 'error');
+    showToast('Error al actualizar Martingala', 'error');
   }
   fetchStatus();
 }
-
-async function handleDiffer98Toggle(checked) {
-  try {
-    await fetch('/api/config', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ differPrecision98: checked })
-    });
-    showToast(`Modo 98% Probabilidad ${checked ? 'activado' : 'desactivado'}`, 'success');
-  } catch (e) {
-    showToast('Error al actualizar precisión', 'error');
-  }
-  fetchStatus();
-}
-
 // ── Toast System ───────────────────────────────────────────────────────────
 function showToast(message, type = 'info') {
   const container = $('toastContainer');
