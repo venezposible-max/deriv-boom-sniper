@@ -18,6 +18,7 @@
 
 import fs from 'fs';
 import path from 'path';
+import https from 'https';
 import { fileURLToPath } from 'url';
 import express from 'express';
 import cors from 'cors';
@@ -1068,8 +1069,39 @@ let ws = null;
 let reconnectTimeout = null;
 let heartbeatInterval = null;
 
+function checkPublicIP() {
+    const options = {
+        hostname: 'api.ipify.org',
+        port: 443,
+        path: '/?format=json',
+        method: 'GET'
+    };
+    if (process.env.PROXY_URL) {
+        options.agent = new HttpsProxyAgent(process.env.PROXY_URL);
+    }
+    const req = https.request(options, (res) => {
+        let data = '';
+        res.on('data', (chunk) => { data += chunk; });
+        res.on('end', () => {
+            try {
+                const ip = JSON.parse(data).ip;
+                console.log(`📡 IP PÚBLICA ACTIVA DEL BOT: ${ip} ${process.env.PROXY_URL ? '(Vía Proxy Residencial)' : '(Directo/Railway)'}`);
+            } catch (e) {
+                console.log('📡 IP PÚBLICA: No se pudo parsear la respuesta.');
+            }
+        });
+    });
+    req.on('error', (e) => {
+        console.error('📡 IP PÚBLICA: Error de red o credenciales de proxy inválidas:', e.message);
+    });
+    req.end();
+}
+
 function connectDeriv() {
     if (ws && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING)) return;
+    
+    // Consultar IP pública de forma asíncrona para diagnóstico
+    checkPublicIP();
     
     if (reconnectTimeout) {
         clearTimeout(reconnectTimeout);
