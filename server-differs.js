@@ -120,7 +120,10 @@ let botState = {
     
     // ─── Enfriamiento inteligente y re-evaluación post-pérdida ───
     lossPauseUntil: null,
-    lossPauseTicksProcessed: 0
+    lossPauseTicksProcessed: 0,
+    
+    // ─── Barrera prohibida (la que acaba de fallar) ───
+    lastLossBarrier: null
 };
 
 // ════════════════════════════════════════════════════════════════
@@ -162,6 +165,7 @@ if (fs.existsSync(STATE_FILE)) {
             // Garantizar variables de enfriamiento
             if (botState.lossPauseUntil === undefined) botState.lossPauseUntil = null;
             if (botState.lossPauseTicksProcessed === undefined) botState.lossPauseTicksProcessed = 0;
+            if (botState.lastLossBarrier === undefined) botState.lastLossBarrier = null;
             
             // Forzar solo DIFFER activo para asegurar la premisa del usuario
             botState.engineEvenOdd = false;
@@ -565,6 +569,7 @@ function evaluateDiffer() {
         if (has2ndOrderData) {
             for (let d = 0; d <= 9; d++) {
                 if (d === lastDigit) continue;
+                if (botState.lastLossBarrier !== null && d === botState.lastLossBarrier) continue; // 🚫 Excluir barrera que acaba de fallar
                 const prob = transitions2[d] || 0;
                 if (prob < minProb) {
                     minProb = prob;
@@ -584,6 +589,7 @@ function evaluateDiffer() {
             minProb = 1.0;
             for (let d = 0; d <= 9; d++) {
                 if (d === lastDigit) continue;
+                if (botState.lastLossBarrier !== null && d === botState.lastLossBarrier) continue; // 🚫 Excluir barrera que acaba de fallar
                 const prob = transitions1[d] || 0;
                 if (prob < minProb) {
                     minProb = prob;
@@ -628,9 +634,10 @@ function evaluateDiffer() {
     let bestBarrier = null;
     let minProb = 1.0;
     
-    // Buscamos el dígito con la menor probabilidad de transición (excluyendo el último para seguridad)
+    // Buscamos el dígito con la menor probabilidad de transición (excluyendo el último y la barrera prohibida)
     for (let d = 0; d <= 9; d++) {
         if (d === lastDigit) continue;
+        if (botState.lastLossBarrier !== null && d === botState.lastLossBarrier) continue; // 🚫 Excluir barrera que acaba de fallar
         const prob = transitions2[d];
         if (prob < minProb) {
             minProb = prob;
@@ -856,10 +863,13 @@ function finalizeTrade(c) {
                 botState.hidraLayer = 0;
                 botState.hidraLastLossDigit = null;
             }
+            botState.lastLossBarrier = null; // ✅ Limpiar barrera prohibida tras victoria
         } else {
             // Pérdida en Differ
             if (botState.coberturaEnabled) {
                 if (botState.hidraLayer === 0) {
+                    botState.lastLossBarrier = barrier !== null ? parseInt(barrier) : null; // 🚫 Guardar barrera que falló
+                    console.log(`🚫 BARRERA PROHIBIDA: La barrera ${barrier} queda excluida del próximo trade.`);
                     if (botState.franklinPerezLogic && botState.pnlSession > 0) {
                         botState.hidraLayer = 0; // Se mantiene en normal
                         botState.hidraLastLossDigit = null;
