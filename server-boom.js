@@ -156,6 +156,7 @@ if (fs.existsSync(STATE_FILE)) {
             if (botState.ghostNextTradeReal === undefined) botState.ghostNextTradeReal = false;
             if (botState.ghostPendingBarrier === undefined) botState.ghostPendingBarrier = null;
             if (botState.ghostActive === undefined) botState.ghostActive = false;
+            if (botState.forcedSignal === undefined) botState.forcedSignal = null;
             
             // Garantizar variables de enfriamiento
             if (botState.lossPauseUntil === undefined) botState.lossPauseUntil = null;
@@ -563,20 +564,26 @@ function tryFireTrade() {
     
     let signal = null;
     
-    // Evaluación con Rotación (Alternancia de prioridad)
-    const nextPriority = botState.lastEngineFired === 'OVER_UNDER' ? 'EVEN_ODD' : 'OVER_UNDER';
-
-    if (nextPriority === 'EVEN_ODD') {
-        if (botState.engineEvenOdd && !signal) signal = evaluateEvenOdd();
-        if (botState.engineOverUnder && !signal) signal = evaluateOverUnder();
+    // Si tenemos una señal forzada (como la venganza inmediata de un Ghost Trade perdido), la usamos y saltamos los filtros
+    if (botState.forcedSignal) {
+        signal = botState.forcedSignal;
+        botState.forcedSignal = null;
     } else {
-        if (botState.engineOverUnder && !signal) signal = evaluateOverUnder();
-        if (botState.engineEvenOdd && !signal) signal = evaluateEvenOdd();
-    }
+        // Evaluación con Rotación (Alternancia de prioridad)
+        const nextPriority = botState.lastEngineFired === 'OVER_UNDER' ? 'EVEN_ODD' : 'OVER_UNDER';
 
-    // El motor Match siempre se evalúa al final si está activo
-    if (botState.engineMatch && !signal) {
-        signal = evaluateMatch();
+        if (nextPriority === 'EVEN_ODD') {
+            if (botState.engineEvenOdd && !signal) signal = evaluateEvenOdd();
+            if (botState.engineOverUnder && !signal) signal = evaluateOverUnder();
+        } else {
+            if (botState.engineOverUnder && !signal) signal = evaluateOverUnder();
+            if (botState.engineEvenOdd && !signal) signal = evaluateEvenOdd();
+        }
+
+        // El motor Match siempre se evalúa al final si está activo
+        if (botState.engineMatch && !signal) {
+            signal = evaluateMatch();
+        }
     }
     
     if (!signal) return;
@@ -1120,7 +1127,14 @@ function connectDeriv() {
                     botState.ghostNextTradeReal = false;
                 } else {
                     botState.ghostNextTradeReal = true;
-                    console.log(`🔥 GHOST SHIELD: ¡Pérdida virtual detectada! El bot está ARMADO para entrar con dinero REAL en la próxima señal.`);
+                    botState.forcedSignal = {
+                        engine: pt.engine,
+                        contractType: pt.contractType,
+                        barrier: pt.barrier,
+                        stakeMultiplier: 1.0,
+                        reason: 'Ghost Shield (Entrada INMEDIATA)'
+                    };
+                    console.log(`🔥 GHOST SHIELD: ¡Pérdida virtual detectada! El bot está ARMADO para entrar con dinero REAL en el PRÓXIMO TICK.`);
                 }
             }
             
