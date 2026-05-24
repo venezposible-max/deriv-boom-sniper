@@ -57,7 +57,11 @@ let botState = {
         R_10: { symbol: 'R_10', digitHistory: [], digitFrequency: {}, shannonEntropy: 3.322, totalTicksProcessed: 0, lastTickPrice: 0, lastDigit: null, symbolDecimals: 2 },
         R_25: { symbol: 'R_25', digitHistory: [], digitFrequency: {}, shannonEntropy: 3.322, totalTicksProcessed: 0, lastTickPrice: 0, lastDigit: null, symbolDecimals: 2 },
         R_50: { symbol: 'R_50', digitHistory: [], digitFrequency: {}, shannonEntropy: 3.322, totalTicksProcessed: 0, lastTickPrice: 0, lastDigit: null, symbolDecimals: 2 },
-        R_100: { symbol: 'R_100', digitHistory: [], digitFrequency: {}, shannonEntropy: 3.322, totalTicksProcessed: 0, lastTickPrice: 0, lastDigit: null, symbolDecimals: 2 }
+        R_75: { symbol: 'R_75', digitHistory: [], digitFrequency: {}, shannonEntropy: 3.322, totalTicksProcessed: 0, lastTickPrice: 0, lastDigit: null, symbolDecimals: 2 },
+        R_100: { symbol: 'R_100', digitHistory: [], digitFrequency: {}, shannonEntropy: 3.322, totalTicksProcessed: 0, lastTickPrice: 0, lastDigit: null, symbolDecimals: 2 },
+        '1HZ10V': { symbol: '1HZ10V', digitHistory: [], digitFrequency: {}, shannonEntropy: 3.322, totalTicksProcessed: 0, lastTickPrice: 0, lastDigit: null, symbolDecimals: 2 },
+        '1HZ25V': { symbol: '1HZ25V', digitHistory: [], digitFrequency: {}, shannonEntropy: 3.322, totalTicksProcessed: 0, lastTickPrice: 0, lastDigit: null, symbolDecimals: 2 },
+        '1HZ100V': { symbol: '1HZ100V', digitHistory: [], digitFrequency: {}, shannonEntropy: 3.322, totalTicksProcessed: 0, lastTickPrice: 0, lastDigit: null, symbolDecimals: 2 }
     },
     
     lastTickPrice: 0,
@@ -133,11 +137,13 @@ let botState = {
 //  CARGAR ESTADO PERSISTENTE
 // ════════════════════════════════════════════════════════════════
 // Inicializar digitFrequency de cada mercado
-const SCAN_SYMBOLS = ['R_10', 'R_25', 'R_50', 'R_100'];
+const SCAN_SYMBOLS = ['R_10', 'R_25', 'R_50', 'R_75', 'R_100', '1HZ10V', '1HZ25V', '1HZ100V'];
 SCAN_SYMBOLS.forEach(sym => {
     const m = botState.markets[sym];
-    for (let d = 0; d <= 9; d++) {
-        m.digitFrequency[d] = 0;
+    if (m && m.digitFrequency) {
+        for (let d = 0; d <= 9; d++) {
+            m.digitFrequency[d] = 0;
+        }
     }
 });
 
@@ -608,8 +614,7 @@ function tryFireTrade() {
         signalSymbol = botState.forcedSignal.symbol;
         botState.forcedSignal = null;
     } else {
-        const SCAN_SYMBOLS = ['R_10', 'R_25', 'R_50', 'R_100'];
-        // Escanear los 4 mercados en paralelo en busca de oportunidades estadísticas
+        // Escanear los mercados en paralelo en busca de oportunidades estadísticas
         for (const sym of SCAN_SYMBOLS) {
             const mState = botState.markets[sym];
             if (!mState || mState.digitHistory.length < 50) continue;
@@ -1012,7 +1017,7 @@ app.post('/api/config', (req, res) => {
 app.post('/api/switch-market', (req, res) => {
     const { symbol } = req.body;
     
-    const validSymbols = ['R_10', 'R_25', 'R_50', 'R_100'];
+    const validSymbols = SCAN_SYMBOLS;
     if (!validSymbols.includes(symbol)) {
         return res.status(400).json({ success: false, error: 'Símbolo inválido.' });
     }
@@ -1076,9 +1081,6 @@ function connectDeriv() {
             
             ws.send(JSON.stringify({ forget_all: 'ticks' }));
             ws.send(JSON.stringify({ forget_all: 'proposal_open_contract' }));
-            
-            const SCAN_SYMBOLS = ['R_10', 'R_25', 'R_50', 'R_100'];
-            
             // Descargar historial de 300 ticks en paralelo para todos los mercados
             setTimeout(() => {
                 if (ws && ws.readyState === WebSocket.OPEN) {

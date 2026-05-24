@@ -1402,11 +1402,15 @@ body::before {
     <div class="digit-card glass">
       <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 20px; flex-wrap:wrap; gap:12px;">
         <span style="font-family:'Outfit',sans-serif; font-weight:600; font-size:14px; color:var(--text-secondary); text-transform:uppercase; letter-spacing:1px;">🎯 Mercado Enfocado</span>
-        <div class="market-pills" id="marketPills">
+        <div class="market-pills" id="marketPills" style="gap: 6px;">
           <button class="pill" data-symbol="R_10" onclick="switchMarketFocus('R_10')">V10</button>
           <button class="pill active" data-symbol="R_25" onclick="switchMarketFocus('R_25')">V25</button>
           <button class="pill" data-symbol="R_50" onclick="switchMarketFocus('R_50')">V50</button>
+          <button class="pill" data-symbol="R_75" onclick="switchMarketFocus('R_75')">V75</button>
           <button class="pill" data-symbol="R_100" onclick="switchMarketFocus('R_100')">V100</button>
+          <button class="pill" data-symbol="1HZ10V" onclick="switchMarketFocus('1HZ10V')">V10(1s)</button>
+          <button class="pill" data-symbol="1HZ25V" onclick="switchMarketFocus('1HZ25V')">V25(1s)</button>
+          <button class="pill" data-symbol="1HZ100V" onclick="switchMarketFocus('1HZ100V')">V100(1s)</button>
         </div>
       </div>
       <div class="digit-circles-wrapper">
@@ -1977,7 +1981,16 @@ function renderHistory(history) {
       'MATCH': 'Match'
     }[t.engine] || t.engine || '—';
 
-    const assetFormatted = t.symbol ? t.symbol.replace('R_', 'V') : '—';
+    let assetFormatted = '—';
+    if (t.symbol) {
+      if (t.symbol.startsWith('R_')) assetFormatted = t.symbol.replace('R_', 'V');
+      else if (t.symbol === '1HZ10V') assetFormatted = 'V10(1s)';
+      else if (t.symbol === '1HZ25V') assetFormatted = 'V25(1s)';
+      else if (t.symbol === '1HZ50V') assetFormatted = 'V50(1s)';
+      else if (t.symbol === '1HZ75V') assetFormatted = 'V75(1s)';
+      else if (t.symbol === '1HZ100V') assetFormatted = 'V100(1s)';
+      else assetFormatted = t.symbol;
+    }
 
     return `<tr class="${rowClass}">
       <td>${num}</td>
