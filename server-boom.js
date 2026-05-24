@@ -605,6 +605,15 @@ function finalizeTrade(c) {
     const profit = parseFloat(c.profit);
     const isWin = profit > 0;
     
+    let exitDigit = botState.lastDigit;
+    if (c.exit_tick_display_value) {
+        const val = String(c.exit_tick_display_value);
+        exitDigit = parseInt(val.charAt(val.length - 1));
+    } else if (c.current_spot_display_value) {
+        const val = String(c.current_spot_display_value);
+        exitDigit = parseInt(val.charAt(val.length - 1));
+    }
+    
     botState.pnlSession += profit;
     botState.totalTradesSession++;
     
@@ -698,7 +707,7 @@ function finalizeTrade(c) {
         engineKey: engine,
         contractType: cType,
         barrier: barrier,
-        digit: botState.lastDigit,
+        digit: exitDigit,
         profit: profit,
         result: isWin ? 'WIN ✅' : 'LOSS ❌',
         time: new Date().toISOString(),
