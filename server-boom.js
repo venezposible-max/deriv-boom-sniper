@@ -406,8 +406,8 @@ function evaluateOverUnder() {
     if (hist.length < 100) return null;
     
     const chiTest = calcChiSquared(hist, 100);
-    // Relajamos Chi-Cuadrado de 16.92 a 12.0 (p ≈ 0.20) para mayor frecuencia, escudados por Ghost Trade
-    if (chiTest.chi2 < 12.0) return null;
+    // Filtro Chi-Cuadrado estricto (95% de confianza, p = 0.05) para asegurar desbalances significativos
+    if (!chiTest.significant) return null;
     
     const markovHist = hist.slice(-100);
     const matrix = buildMarkovMatrix(markovHist);
@@ -418,8 +418,8 @@ function evaluateOverUnder() {
     for (let d = 5; d <= 9; d++) probOver += transitions[d] || 0;
     let probUnder = 1 - probOver;
     
-    // Probabilidad relajada >= 55% gracias al Ghost Shield
-    if (probOver >= 0.55) {
+    // Probabilidad estricta >= 60% para máxima precisión de disparo
+    if (probOver >= 0.60) {
         return {
             engine: 'OVER_UNDER',
             contractType: 'DIGITOVER',
@@ -430,7 +430,7 @@ function evaluateOverUnder() {
         };
     }
     
-    if (probUnder >= 0.55) {
+    if (probUnder >= 0.60) {
         return {
             engine: 'OVER_UNDER',
             contractType: 'DIGITUNDER',
