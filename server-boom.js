@@ -1090,13 +1090,13 @@ function connectDeriv() {
             }
         }
         
-        // CANAL DE DATOS ULTRA-CALIENTE: Enviar Pings de calentamiento cada 10s para mantener la ventana TCP al máximo
+        // CANAL DE DATOS ULTRA-CALIENTE: Enviar Pings de calentamiento cada 30s (óptimo para mantener caliente la conexión sin saturar el límite de tasa de Deriv)
         if (heartbeatInterval) clearInterval(heartbeatInterval);
         heartbeatInterval = setInterval(() => {
             if (ws && ws.readyState === WebSocket.OPEN) {
                 ws.send(JSON.stringify({ ping: 1 }));
             }
-        }, 10000);
+        }, 30000);
         
         setTimeout(() => {
             if (ws && ws.readyState === WebSocket.OPEN) {
@@ -1120,37 +1120,46 @@ function connectDeriv() {
             
             ws.send(JSON.stringify({ forget_all: 'ticks' }));
             ws.send(JSON.stringify({ forget_all: 'proposal_open_contract' }));
-            // Descargar historial de 300 ticks en paralelo para todos los mercados
+            // Descargar historial de 300 ticks espaciado (Pacing de 250ms) para evitar tasa de límite (Rate Limit 80 req/min de Deriv)
             setTimeout(() => {
                 if (ws && ws.readyState === WebSocket.OPEN) {
-                    SCAN_SYMBOLS.forEach(sym => {
-                        console.log(`📥 Descargando historial de 300 ticks para ${sym}...`);
-                        ws.send(JSON.stringify({
-                            ticks_history: sym,
-                            count: 300,
-                            end: 'latest',
-                            style: 'ticks',
-                            adjust_start_time: 1
-                        }));
+                    SCAN_SYMBOLS.forEach((sym, idx) => {
+                        setTimeout(() => {
+                            if (ws && ws.readyState === WebSocket.OPEN) {
+                                console.log(`📥 Descargando historial de 300 ticks para ${sym}...`);
+                                ws.send(JSON.stringify({
+                                    ticks_history: sym,
+                                    count: 300,
+                                    end: 'latest',
+                                    style: 'ticks',
+                                    adjust_start_time: 1
+                                }));
+                            }
+                        }, idx * 250); // Espaciado a 250ms entre cada mercado
                     });
                 }
-            }, 1000);
+            }, 3000); // Demorado a 3 segundos para estabilizar la conexión
             
+            // Suscripción a ticks en vivo espaciado (Pacing de 250ms)
             setTimeout(() => {
                 if (ws && ws.readyState === WebSocket.OPEN) {
-                    SCAN_SYMBOLS.forEach(sym => {
-                        ws.send(JSON.stringify({ subscribe: 1, ticks: sym }));
-                        console.log(`📡 Suscripción ticks en vivo activada para ${sym}`);
+                    SCAN_SYMBOLS.forEach((sym, idx) => {
+                        setTimeout(() => {
+                            if (ws && ws.readyState === WebSocket.OPEN) {
+                                ws.send(JSON.stringify({ subscribe: 1, ticks: sym }));
+                                console.log(`📡 Suscripción ticks en vivo activada para ${sym}`);
+                            }
+                        }, idx * 250); // Espaciado a 250ms entre cada mercado
                     });
                 }
-            }, 3500); // Demorado a 3.5s para permitir que el historial se reciba primero
+            }, 6000); // Iniciado tras terminar la carga de historiales
             
             setTimeout(() => {
                 if (ws && ws.readyState === WebSocket.OPEN) {
                     ws.send(JSON.stringify({ balance: 1, subscribe: 1 }));
                     console.log(`💰 Suscripción balance activada.`);
                 }
-            }, 5000);
+            }, 9000);
         }
         
         if (msg.error) {
