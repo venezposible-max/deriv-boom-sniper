@@ -12,6 +12,7 @@
     "dependencies": {
         "cors": "^2.8.6",
         "express": "^4.22.1",
+        "https-proxy-agent": "^9.0.0",
         "ws": "^8.20.0"
     }
 }

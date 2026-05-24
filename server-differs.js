@@ -19,6 +19,7 @@ import { fileURLToPath } from 'url';
 import express from 'express';
 import cors from 'cors';
 import WebSocket from 'ws';
+import { HttpsProxyAgent } from 'https-proxy-agent';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -1173,7 +1174,13 @@ function connectDeriv() {
         reconnectTimeout = null;
     }
     
-    ws = new WebSocket(`wss://ws.derivws.com/websockets/v3?app_id=${APP_ID}`);
+    const options = {};
+    if (process.env.PROXY_URL) {
+        console.log(`🔒 ENRUTAMIENTO SEGURO: Conectando a Deriv a través de Proxy Residencial.`);
+        options.agent = new HttpsProxyAgent(process.env.PROXY_URL);
+    }
+    
+    ws = new WebSocket(`wss://ws.derivws.com/websockets/v3?app_id=${APP_ID}`, options);
     
     ws.on('open', () => {
         console.log('🔌 Conexión establecida con WebSocket de Deriv. Autenticando...');
