@@ -1958,7 +1958,7 @@ function renderHistory(history) {
 
   countEl.textContent = history.length + ' operaciones';
 
-  const last30 = history.slice(-30).reverse();
+  const last30 = history.slice(0, 30);
   const newHTML = last30.map((t, idx) => {
     const isWin = t.result === 'WIN' || t.profit > 0;
     const rowClass = isWin ? 'win' : 'loss';

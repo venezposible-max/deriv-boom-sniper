@@ -275,6 +275,30 @@ function calcChiSquared(hist, range) {
     return { chi2, significant: chi2 > 16.92 };
 }
 
+function updateHotDigit(mState) {
+    const hist = mState.digitHistory;
+    if (!hist || hist.length === 0) {
+        mState.hotDigit = null;
+        mState.hotDigitFreq = 0;
+        return;
+    }
+    const freq = {};
+    for (let d = 0; d <= 9; d++) freq[d] = 0;
+    hist.forEach(d => freq[d]++);
+    
+    let hotDigit = 0;
+    let maxFreq = 0;
+    for (let d = 0; d <= 9; d++) {
+        if (freq[d] > maxFreq) {
+            maxFreq = freq[d];
+            hotDigit = d;
+        }
+    }
+    const pct = hist.length > 0 ? (maxFreq / hist.length) * 100 : 0;
+    mState.hotDigit = hotDigit;
+    mState.hotDigitFreq = pct.toFixed(1);
+}
+
 /**
  * Frecuencia Exponencial Ponderada (EWM Frequency)
  * Da más peso a los dígitos recientes aplicando decaimiento exponencial.
@@ -1121,6 +1145,7 @@ function connectDeriv() {
                 
                 if (mState.digitHistory.length >= 50) {
                     mState.shannonEntropy = calcEntropy(mState.digitHistory, 100).toFixed(3);
+                    updateHotDigit(mState);
                 }
                 
                 // Sincronizar foco principal si coincide con la selección visual activa
@@ -1166,6 +1191,7 @@ function connectDeriv() {
                 
                 if (mState.digitHistory.length >= 50) {
                     mState.shannonEntropy = calcEntropy(mState.digitHistory, 100).toFixed(3);
+                    updateHotDigit(mState);
                 }
                 
                 // Incrementar conteo de ticks capturados en la pausa (solo si es el mercado que disparó la pausa)
