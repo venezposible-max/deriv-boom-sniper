@@ -534,12 +534,25 @@ function tryFireTrade() {
     
     if (botState.isBuying || botState.activeContractId) return;
     
-    // Control de límite de pérdidas diarias (Solo logs informativos por premisa de fluidez continua)
-    if (botState.dailyLoss >= botState.maxDailyLoss && now % 30000 < 1500) {
-        console.log(`⚠️ LÍMITE DE PÉRDIDA DIARIA SUPERADO ($${botState.dailyLoss.toFixed(2)}). Continuando...`);
+    // Control de límite de pérdidas diarias estricto basado en el PnL de la sesión
+    if (botState.pnlSession <= -botState.maxDailyLoss) {
+        if (now % 30000 < 1500) {
+            console.log(`⛔ LÍMITE DE PÉRDIDA DIARIA ALCANZADO (PnL: $${botState.pnlSession.toFixed(2)}). El bot se ha detenido por seguridad.`);
+        }
+        botState.isRunning = false;
+        saveState();
+        return;
     }
     
-    // Control de límite máximo de trades (Bypass por premisa de operación sin pausas)
+    // Control Take Profit estricto
+    if (botState.pnlSession >= botState.takeProfit) {
+        if (now % 30000 < 1500) {
+            console.log(`🚀 META ALCANZADA (PnL: $${botState.pnlSession.toFixed(2)}). El bot se ha detenido victoriosamente.`);
+        }
+        botState.isRunning = false;
+        saveState();
+        return;
+    }
     
     // Pausa por Circuit Breaker (Desactivado por premisa de flujo continuo de operaciones)
     
@@ -755,10 +768,16 @@ function finalizeTrade(c) {
         console.log(`🔒 PROFIT LOCK ALERT: El PnL retrocedió al piso de seguridad ($${botState.profitFloor.toFixed(2)}).`);
     }
     
-    // Control Take Profit (Extensión automática infinita al 100% de stake, flujo continuo)
+    // Control Take Profit (Detención estricta al llegar a la meta)
     if (botState.pnlSession >= botState.takeProfit) {
-        botState.takeProfit += 5.0;
-        console.log(`🚀 META ALCANZADA! Extendiendo Meta TP a $${botState.takeProfit.toFixed(2)} sin detener el bot.`);
+        botState.isRunning = false;
+        console.log(`🚀 META DE GANANCIA ALCANZADA: $${botState.pnlSession.toFixed(2)} / $${botState.takeProfit}. Bot detenido automáticamente.`);
+    }
+    
+    // Control Stop Loss (Detención estricta al tocar la pérdida máxima)
+    if (botState.pnlSession <= -botState.maxDailyLoss) {
+        botState.isRunning = false;
+        console.log(`⛔ LÍMITE DE PÉRDIDA ALCANZADO: $${botState.pnlSession.toFixed(2)} / -$${botState.maxDailyLoss}. Bot detenido para proteger la cuenta.`);
     }
     
     botState.activeContractId = null;
