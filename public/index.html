@@ -2226,6 +2226,7 @@ async function handleEngineToggle(engine, enabled) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ engine, enabled })
     });
+    const engineNames = {
       'EVEN_ODD': 'Even/Odd',
       'OVER_UNDER': 'Over/Under',
       'MATCH': 'Match'
