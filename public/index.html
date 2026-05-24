@@ -518,6 +518,42 @@ body::before {
   padding: 24px;
 }
 
+/* Market selector pills styling */
+.market-pills {
+  display: flex;
+  gap: 8px;
+  background: rgba(255, 255, 255, 0.03);
+  padding: 4px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.pill {
+  background: transparent;
+  color: var(--text-secondary);
+  border: none;
+  padding: 6px 16px;
+  font-family: 'Outfit', sans-serif;
+  font-size: 13px;
+  font-weight: 600;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  letter-spacing: 0.5px;
+}
+
+.pill:hover {
+  color: #fff;
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.pill.active {
+  background: linear-gradient(135deg, var(--accent-blue), #2563eb);
+  color: #fff;
+  box-shadow: 0 0 12px rgba(0, 210, 255, 0.4);
+  font-weight: 700;
+}
+
 .digit-circles-wrapper {
   overflow: hidden;
   margin-bottom: 24px;
@@ -1391,6 +1427,15 @@ body::before {
   <div class="digit-section">
     <div class="section-title">📊 Visualización de Dígitos en Tiempo Real</div>
     <div class="digit-card glass">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 20px; flex-wrap:wrap; gap:12px;">
+        <span style="font-family:'Outfit',sans-serif; font-weight:600; font-size:14px; color:var(--text-secondary); text-transform:uppercase; letter-spacing:1px;">🎯 Mercado Enfocado</span>
+        <div class="market-pills" id="marketPills">
+          <button class="pill" data-symbol="R_10" onclick="switchMarketFocus('R_10')">V10</button>
+          <button class="pill active" data-symbol="R_25" onclick="switchMarketFocus('R_25')">V25</button>
+          <button class="pill" data-symbol="R_50" onclick="switchMarketFocus('R_50')">V50</button>
+          <button class="pill" data-symbol="R_100" onclick="switchMarketFocus('R_100')">V100</button>
+        </div>
+      </div>
       <div class="digit-circles-wrapper">
         <div class="digit-circles" id="digitCircles">
           <div style="color:var(--text-muted);font-size:13px;padding:20px 0;">Esperando datos de dígitos...</div>
@@ -1432,17 +1477,7 @@ body::before {
         ⏹ DETENER
       </button>
 
-      <div class="control-separator"></div>
 
-      <div class="control-group">
-        <label>Enfoque Visual</label>
-        <select id="selectMarket" onchange="handleMarketChange()">
-          <option value="R_10">Volatility 10</option>
-          <option value="R_25" selected>Volatility 25</option>
-          <option value="R_50">Volatility 50</option>
-          <option value="R_100">Volatility 100</option>
-        </select>
-      </div>
 
       <div class="control-group">
         <label>Stake ($)</label>
@@ -1762,8 +1797,16 @@ function updateUI(data) {
     btnStart.innerHTML = '▶ INICIAR';
   }
 
-  // Market select
-  $('selectMarket').value = data.symbol || 'R_25';
+  // Market pills focus visual highlight
+  const currentSymbol = data.symbol || 'R_25';
+  const pills = document.querySelectorAll('#marketPills .pill');
+  pills.forEach(pill => {
+    if (pill.getAttribute('data-symbol') === currentSymbol) {
+      pill.classList.add('active');
+    } else {
+      pill.classList.remove('active');
+    }
+  });
 
   // Config inputs (only update if not focused)
   if (document.activeElement !== $('inputStake')) $('inputStake').value = data.stake;
@@ -2138,19 +2181,32 @@ async function handleEngineToggle(engine, enabled) {
   fetchStatus();
 }
 
-async function handleMarketChange() {
-  const symbol = $('selectMarket').value;
+async function switchMarketFocus(symbol) {
   try {
-    await fetch('/api/switch-market', {
+    const res = await fetch('/api/switch-market', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ symbol })
     });
-    showToast('Mercado cambiado a ' + symbol, 'info');
+    const json = await res.json();
+    if (json.success) {
+      showToast('Enfoque visual cambiado a ' + symbol, 'info');
+      // Highlight immediately
+      const pills = document.querySelectorAll('#marketPills .pill');
+      pills.forEach(pill => {
+        if (pill.getAttribute('data-symbol') === symbol) {
+          pill.classList.add('active');
+        } else {
+          pill.classList.remove('active');
+        }
+      });
+      fetchStatus();
+    } else {
+      showToast('Error al cambiar enfoque: ' + (json.message || ''), 'error');
+    }
   } catch (e) {
-    showToast('Error al cambiar mercado', 'error');
+    showToast('Error al conectar con el servidor', 'error');
   }
-  fetchStatus();
 }
 
 function handleConfigChange() {

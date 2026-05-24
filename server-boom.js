@@ -51,9 +51,18 @@ let botState = {
     tradeHistory: [],
     currentContractId: null,
     activeContractId: null,
+    
+    // Soporte para Multi-Mercados escaneados en paralelo
+    markets: {
+        R_10: { symbol: 'R_10', digitHistory: [], digitFrequency: {}, shannonEntropy: 3.322, totalTicksProcessed: 0, lastTickPrice: 0, lastDigit: null, symbolDecimals: 2 },
+        R_25: { symbol: 'R_25', digitHistory: [], digitFrequency: {}, shannonEntropy: 3.322, totalTicksProcessed: 0, lastTickPrice: 0, lastDigit: null, symbolDecimals: 2 },
+        R_50: { symbol: 'R_50', digitHistory: [], digitFrequency: {}, shannonEntropy: 3.322, totalTicksProcessed: 0, lastTickPrice: 0, lastDigit: null, symbolDecimals: 2 },
+        R_100: { symbol: 'R_100', digitHistory: [], digitFrequency: {}, shannonEntropy: 3.322, totalTicksProcessed: 0, lastTickPrice: 0, lastDigit: null, symbolDecimals: 2 }
+    },
+    
     lastTickPrice: 0,
     lastDigit: null,
-    digitHistory: [],          // Últimos 300 dígitos
+    digitHistory: [],          // Últimos 300 dígitos (sincronizados con el foco de la UI)
     digitFrequency: {},
     stake: 1,
     maxDailyLoss: 20,
@@ -124,6 +133,15 @@ let botState = {
 // ════════════════════════════════════════════════════════════════
 //  CARGAR ESTADO PERSISTENTE
 // ════════════════════════════════════════════════════════════════
+// Inicializar digitFrequency de cada mercado
+const SCAN_SYMBOLS = ['R_10', 'R_25', 'R_50', 'R_100'];
+SCAN_SYMBOLS.forEach(sym => {
+    const m = botState.markets[sym];
+    for (let d = 0; d <= 9; d++) {
+        m.digitFrequency[d] = 0;
+    }
+});
+
 if (fs.existsSync(STATE_FILE)) {
     try {
         const saved = JSON.parse(fs.readFileSync(STATE_FILE));
@@ -131,6 +149,31 @@ if (fs.existsSync(STATE_FILE)) {
             // Preservar estructura robusta ante actualizaciones de versión
             const defaultStats = { ...botState.engineStats };
             botState = { ...botState, ...saved.botState };
+            
+            // Garantizar inicialización segura de mercados en paralelo
+            if (!botState.markets) {
+                botState.markets = {};
+            }
+            SCAN_SYMBOLS.forEach(sym => {
+                if (!botState.markets[sym]) {
+                    botState.markets[sym] = {
+                        symbol: sym,
+                        digitHistory: [],
+                        digitFrequency: {},
+                        shannonEntropy: 3.322,
+                        totalTicksProcessed: 0,
+                        lastTickPrice: 0,
+                        lastDigit: null,
+                        symbolDecimals: 2
+                    };
+                }
+                if (!botState.markets[sym].digitFrequency || Object.keys(botState.markets[sym].digitFrequency).length === 0) {
+                    botState.markets[sym].digitFrequency = {};
+                    for (let d = 0; d <= 9; d++) {
+                        botState.markets[sym].digitFrequency[d] = 0;
+                    }
+                }
+            });
             
             // Garantizar que todos los campos del nuevo KRAKEN existan
             botState.engineStats = { ...defaultStats, ...botState.engineStats };
