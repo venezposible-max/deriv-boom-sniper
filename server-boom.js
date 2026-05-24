@@ -92,17 +92,16 @@ let botState = {
     takeProfitExtensions: 0,
     spikeProtectionUntil: 0,   // trade session index until which stake is halved
     
-    // ─── Interruptores de motores (Por instrucción del usuario, fuera DIFFER)
+    // ─── Interruptores de motores
     engineEvenOdd: true,
     engineOverUnder: true,
-    engineMatch: false,
     
     // ─── Variables del Escudo de Trade Fantasma (Ghost Shield) ───
     ghostNextTradeReal: false,
     ghostPendingTrade: null,
     
     // ─── Información del trade activo ───
-    currentEngine: null,       // 'EVEN_ODD' | 'OVER_UNDER' | 'MATCH'
+    currentEngine: null,       // 'EVEN_ODD' | 'OVER_UNDER'
     currentContractType: null,
     currentBarrier: null,
     currentStake: 0,
@@ -110,8 +109,7 @@ let botState = {
     // ─── Métricas por motor ───
     engineStats: {
         EVEN_ODD: { wins: 0, losses: 0, pnl: 0, autoDisabled: false },
-        OVER_UNDER: { wins: 0, losses: 0, pnl: 0, autoDisabled: false },
-        MATCH: { wins: 0, losses: 0, pnl: 0, autoDisabled: false }
+        OVER_UNDER: { wins: 0, losses: 0, pnl: 0, autoDisabled: false }
     },
     
     // ─── Analíticas ───
@@ -207,7 +205,6 @@ if (fs.existsSync(STATE_FILE)) {
             if (botState.lastLossBarrier === undefined) botState.lastLossBarrier = null;
             
             // Forzar estados de arranque seguros
-            botState.engineMatch = false; // Desactivado permanentemente porque está oculto en la UI
             botState.isRunning = false;
             botState.isBuying = false;
             botState.activeContractId = null;
@@ -482,64 +479,7 @@ function evaluateOverUnder(mState) {
     return null;
 }
 
-/**
- * Motor 3: MATCH — "El Multiplicador"
- * Dígito caliente, momentum severo en 5 ticks y EWM Confirmation
- */
-function evaluateMatch(mState) {
-    const hist = mState.digitHistory;
-    if (hist.length < 50) return null;
-    
-    const chiTest = calcChiSquared(hist, 50);
-    if (!chiTest.significant) return null;
-    
-    const window50 = hist.slice(-50);
-    const freq = {};
-    for (let d = 0; d <= 9; d++) freq[d] = 0;
-    window50.forEach(d => freq[d]++);
-    
-    let hotDigit = 0;
-    let maxFreq = 0;
-    for (let d = 0; d <= 9; d++) {
-        if (freq[d] > maxFreq) {
-            maxFreq = freq[d];
-            hotDigit = d;
-        }
-    }
-    
-    const hotDigitFreqPercent = (maxFreq / 50) * 100;
-    mState.hotDigit = hotDigit;
-    mState.hotDigitFreq = hotDigitFreqPercent.toFixed(1);
-    
-    // Umbral subido de 16% a 20%
-    if (hotDigitFreqPercent < 20) return null;
-    
-    // Momentum en los últimos 5 ticks (debe haber aparecido al menos 2 veces)
-    const last5 = hist.slice(-5);
-    const momentumCount = last5.filter(d => d === hotDigit).length;
-    if (momentumCount < 2) return null;
-    
-    // Confirmación mediante media exponencial
-    const ewmFreqs = calcEWMFrequency(hist, 0.05);
-    let highestEWMDigit = 0;
-    let highestEWMValue = 0;
-    for (let d = 0; d <= 9; d++) {
-        if (ewmFreqs[d] > highestEWMValue) {
-            highestEWMValue = ewmFreqs[d];
-            highestEWMDigit = d;
-        }
-    }
-    if (highestEWMDigit !== hotDigit) return null; // La EWM no apoya la señal
-    
-    return {
-        engine: 'MATCH',
-        contractType: 'DIGITMATCH',
-        barrier: String(hotDigit),
-        stakeMultiplier: 0.5,
-        reason: `Dígito caliente ${hotDigit}: ${maxFreq}/50 (${hotDigitFreqPercent.toFixed(1)}%) | Last5: ${momentumCount}x | EWM OK`,
-        entropy: parseFloat(mState.shannonEntropy)
-    };
-}
+
 
 
 
@@ -637,10 +577,6 @@ function tryFireTrade() {
                 if (botState.engineEvenOdd && !signal) signal = evaluateEvenOdd(mState);
             }
             
-            if (botState.engineMatch && !signal) {
-                signal = evaluateMatch(mState);
-            }
-            
             if (signal) {
                 signalSymbol = sym;
                 break; // Detener escaneo al encontrar la primera señal válida
@@ -703,8 +639,8 @@ function tryFireTrade() {
     botState.isBuying = true;
     botState.lastTradeTime = now;
     
-    const emojis = { EVEN_ODD: '🎰', OVER_UNDER: '📊', MATCH: '💎', DIFFER: '🔪' };
-    const names = { EVEN_ODD: 'PAR/IMPAR', OVER_UNDER: 'OVER/UNDER', MATCH: 'MATCH', DIFFER: 'DIFFER' };
+    const emojis = { EVEN_ODD: '🎰', OVER_UNDER: '📊' };
+    const names = { EVEN_ODD: 'PAR/IMPAR', OVER_UNDER: 'OVER/UNDER' };
     
     console.log(`${emojis[signal.engine] || '🎲'} DISPARO REAL [${activeSymbol} - ${names[signal.engine]}] | ${signal.contractType} B:${signal.barrier || 'N/A'} | Stake: $${finalStake.toFixed(2)} | ${signal.reason}`);
     
@@ -733,7 +669,7 @@ function finalizeTrade(c) {
     const engine = botState.currentEngine || 'EVEN_ODD';
     const cType = botState.currentContractType || 'DIGITEVEN';
     const barrier = botState.currentBarrier;
-    const name = { EVEN_ODD: 'PAR/IMPAR', OVER_UNDER: 'OVER/UNDER', MATCH: 'MATCH', DIFFER: 'DIFFER' }[engine] || engine;
+    const name = { EVEN_ODD: 'PAR/IMPAR', OVER_UNDER: 'OVER/UNDER' }[engine] || engine;
     
     if (isWin) {
         botState.winsSession++;
@@ -805,7 +741,6 @@ function finalizeTrade(c) {
         if (totalTrades >= 10 && !stats.autoDisabled) {
             const wr = (stats.wins / totalTrades) * 100;
             let breakEven = 52.5;
-            if (engine === 'MATCH') breakEven = 14.0;
             
             if (wr < breakEven) {
                 stats.autoDisabled = true;
@@ -966,9 +901,7 @@ app.post('/api/control', (req, res) => {
         
         botState.engineStats = {
             EVEN_ODD: { wins: 0, losses: 0, pnl: 0, autoDisabled: false },
-            OVER_UNDER: { wins: 0, losses: 0, pnl: 0, autoDisabled: false },
-            MATCH: { wins: 0, losses: 0, pnl: 0, autoDisabled: false },
-            DIFFER: { wins: 0, losses: 0, pnl: 0, autoDisabled: false }
+            OVER_UNDER: { wins: 0, losses: 0, pnl: 0, autoDisabled: false }
         };
         saveState();
         console.log('🔄 REGISTROS DE REINICIO DIARIO: Métricas restablecidas en KRAKEN.');
@@ -986,9 +919,7 @@ app.post('/api/engine-toggle', (req, res) => {
     const { engine, enabled } = req.body;
     const engineMap = {
         'EVEN_ODD': 'engineEvenOdd',
-        'OVER_UNDER': 'engineOverUnder',
-        'MATCH': 'engineMatch',
-        'DIFFER': 'engineDiffer'
+        'OVER_UNDER': 'engineOverUnder'
     };
     
     if (!engineMap[engine]) {
@@ -1244,8 +1175,6 @@ function connectDeriv() {
                     else if (pt.contractType === 'DIGITODD') won = digit % 2 !== 0;
                     else if (pt.contractType === 'DIGITOVER') won = digit > parseInt(pt.barrier);
                     else if (pt.contractType === 'DIGITUNDER') won = digit < parseInt(pt.barrier);
-                    else if (pt.contractType === 'DIGITMATCH') won = digit === parseInt(pt.barrier);
-                    else if (pt.contractType === 'DIGITDIFF') won = digit !== parseInt(pt.barrier);
                     
                     console.log(`👻 GHOST RESULT [${sym}]: ${pt.engine} [${pt.contractType}] -> Result digit: ${digit} -> ${won ? 'WIN ✅' : 'LOSS ❌'}`);
                     
@@ -1360,7 +1289,6 @@ app.listen(PORT, '0.0.0.0', () => {
     console.log(`  🌐 Port: ${PORT} | Active Symbol: ${SYMBOL}`);
     console.log('  🔪 Motor 1: PAR/IMPAR       (Consensus Reversion)');
     console.log('  📊 Motor 2: OVER/UNDER      (Markov Transition Matrix)');
-    console.log('  💎 Motor 3: MATCH           (Exponential Hot Digit)');
     console.log('  🛡️  Protection: Martingala Segura + Momentum Shield');
     console.log('═'.repeat(75));
     connectDeriv();

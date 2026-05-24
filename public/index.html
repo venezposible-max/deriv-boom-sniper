@@ -1391,49 +1391,7 @@ body::before {
       </div>
     </div>
 
-    <!-- MATCH -->
-    <div class="engine-card glass engine-match" id="engineCardMatch" style="display: none !important;">
-      <div class="engine-header">
-        <div class="engine-info">
-          <div class="engine-icon">💎</div>
-          <div>
-            <div class="engine-name">MATCH</div>
-            <div class="engine-subtitle">Multiplicador</div>
-          </div>
-        </div>
-        <label class="toggle">
-          <input type="checkbox" id="toggleMatch" checked>
-          <div class="toggle-track"></div>
-          <div class="toggle-thumb"></div>
-        </label>
-      </div>
-      <div class="engine-status">
-        <span class="engine-status-text disabled" id="statusMatch">
-          <span>●</span> Desactivado
-        </span>
-      </div>
-      <div class="darwin-badge" id="darwinBadgeMatch">
-        🦎 Auto-desactivado por Darwin
-      </div>
-      <div class="engine-stats">
-        <div class="engine-stat">
-          <span class="es-label">Ganadas</span>
-          <span class="es-value positive" id="maWins">0</span>
-        </div>
-        <div class="engine-stat">
-          <span class="es-label">Perdidas</span>
-          <span class="es-value negative" id="maLosses">0</span>
-        </div>
-        <div class="engine-stat">
-          <span class="es-label">PnL</span>
-          <span class="es-value neutral" id="maPnl">$0.00</span>
-        </div>
-        <div class="engine-stat">
-          <span class="es-label">Win Rate</span>
-          <span class="es-value neutral" id="maWinRate">0.0%</span>
-        </div>
-      </div>
-    </div>
+
 
 
   </div>
@@ -1740,7 +1698,6 @@ function updateUI(data) {
   // Engine toggles sync
   $('toggleEvenOdd').checked = data.engineEvenOdd;
   $('toggleOverUnder').checked = data.engineOverUnder;
-  $('toggleMatch').checked = data.engineMatch;
 
   // Martingale sync
   const toggleCob = $('toggleCobertura');
@@ -1755,20 +1712,17 @@ function updateUI(data) {
   // Engine cards active state
   updateEngineCard('engineCardEvenOdd', 'statusEvenOdd', data.engineEvenOdd, data.isRunning, data.currentEngine === 'EVEN_ODD');
   updateEngineCard('engineCardOverUnder', 'statusOverUnder', data.engineOverUnder, data.isRunning, data.currentEngine === 'OVER_UNDER');
-  updateEngineCard('engineCardMatch', 'statusMatch', data.engineMatch, data.isRunning, data.currentEngine === 'MATCH');
 
   // Engine stats
   updateEngineStats('eo', data.engineStats.EVEN_ODD);
   updateEngineStats('ou', data.engineStats.OVER_UNDER);
-  updateEngineStats('ma', data.engineStats.MATCH);
 
   // Darwin mode badges toggling
-  ['EVEN_ODD', 'OVER_UNDER', 'MATCH'].forEach(eng => {
+  ['EVEN_ODD', 'OVER_UNDER'].forEach(eng => {
     const stats = data.engineStats[eng];
     const badgeId = {
       'EVEN_ODD': 'darwinBadgeEvenOdd',
-      'OVER_UNDER': 'darwinBadgeOverUnder',
-      'MATCH': 'darwinBadgeMatch'
+      'OVER_UNDER': 'darwinBadgeOverUnder'
     }[eng];
     const badge = $(badgeId);
     if (badge) {
@@ -1891,9 +1845,7 @@ function updateEngineStats(prefix, stats) {
 function pulseEngine(engineKey) {
   const map = {
     'EVEN_ODD': 'engineCardEvenOdd',
-    'OVER_UNDER': 'engineCardOverUnder',
-    'MATCH': 'engineCardMatch',
-    'DIFFER': 'engineCardDiffer'
+    'OVER_UNDER': 'engineCardOverUnder'
   };
   const card = $(map[engineKey]);
   if (!card) return;
@@ -2255,9 +2207,7 @@ $('toggleEvenOdd').addEventListener('change', function() {
 $('toggleOverUnder').addEventListener('change', function() {
   handleEngineToggle('OVER_UNDER', this.checked);
 });
-$('toggleMatch').addEventListener('change', function() {
-  handleEngineToggle('MATCH', this.checked);
-});
+
 
 async function handleCoberturaToggle(checked) {
   try {
