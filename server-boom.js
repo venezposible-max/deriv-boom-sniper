@@ -204,6 +204,20 @@ function calcEntropy(hist, range) {
 }
 
 /**
+ * Extrae de forma precisa el último dígito de una cotización
+ */
+function getDigitFromQuote(quote) {
+    const quoteStr = String(quote);
+    const parts = quoteStr.split('.');
+    if (parts[1] && parts[1].length > symbolDecimals && parts[1].length <= 4) {
+        symbolDecimals = parts[1].length;
+    }
+    const price = quote.toFixed(symbolDecimals);
+    return parseInt(price[price.length - 1]);
+}
+
+
+/**
  * Prueba de Chi-Cuadrado de Bondad de Ajuste
  * Evalúa si la distribución de los últimos 'range' dígitos tiene desviaciones significativas de la uniformidad.
  * df = 9, valor crítico para p=0.05 es 16.92
@@ -985,9 +999,23 @@ app.post('/api/switch-market', (req, res) => {
         ws.send(JSON.stringify({ forget_all: 'ticks' }));
         setTimeout(() => {
             if (ws && ws.readyState === WebSocket.OPEN) {
-                ws.send(JSON.stringify({ subscribe: 1, ticks: SYMBOL }));
+                console.log(`📥 Descargando historial de 300 ticks para el nuevo mercado ${SYMBOL}...`);
+                ws.send(JSON.stringify({
+                    ticks_history: SYMBOL,
+                    count: 300,
+                    end: 'latest',
+                    style: 'ticks',
+                    adjust_start_time: 1
+                }));
             }
         }, 1000);
+        
+        setTimeout(() => {
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                ws.send(JSON.stringify({ subscribe: 1, ticks: SYMBOL }));
+                console.log(`📡 Suscripción ticks en vivo activada para ${SYMBOL}`);
+            }
+        }, 3000);
     }
     
     saveState();
@@ -1036,19 +1064,33 @@ function connectDeriv() {
             ws.send(JSON.stringify({ forget_all: 'ticks' }));
             ws.send(JSON.stringify({ forget_all: 'proposal_open_contract' }));
             
+            // Descargar historial de 300 ticks inmediatamente
+            setTimeout(() => {
+                if (ws && ws.readyState === WebSocket.OPEN) {
+                    console.log(`📥 Descargando historial de 300 ticks para ${SYMBOL}...`);
+                    ws.send(JSON.stringify({
+                        ticks_history: SYMBOL,
+                        count: 300,
+                        end: 'latest',
+                        style: 'ticks',
+                        adjust_start_time: 1
+                    }));
+                }
+            }, 1000);
+            
             setTimeout(() => {
                 if (ws && ws.readyState === WebSocket.OPEN) {
                     ws.send(JSON.stringify({ subscribe: 1, ticks: SYMBOL }));
-                    console.log(`📡 Suscripción ticks activada para ${SYMBOL}`);
+                    console.log(`📡 Suscripción ticks en vivo activada para ${SYMBOL}`);
                 }
-            }, 2000);
+            }, 3000); // Demorado a 3s para permitir que el historial se reciba primero
             
             setTimeout(() => {
                 if (ws && ws.readyState === WebSocket.OPEN) {
                     ws.send(JSON.stringify({ balance: 1, subscribe: 1 }));
                     console.log(`💰 Suscripción balance activada.`);
                 }
-            }, 4000);
+            }, 4500);
         }
         
         if (msg.error) {
@@ -1067,6 +1109,36 @@ function connectDeriv() {
         
         if (msg.msg_type === 'balance' && msg.balance) {
             botState.balance = msg.balance.balance;
+        }
+
+        if (msg.msg_type === 'history' && msg.history) {
+            const prices = msg.history.prices;
+            if (Array.isArray(prices) && prices.length > 0) {
+                console.log(`⚡ Historial de ${prices.length} ticks recibido correctamente.`);
+                botState.digitHistory = [];
+                botState.digitFrequency = {};
+                for (let d = 0; d <= 9; d++) botState.digitFrequency[d] = 0;
+                
+                prices.forEach(price => {
+                    const digit = getDigitFromQuote(price);
+                    botState.digitHistory.push(digit);
+                    botState.digitFrequency[digit] = (botState.digitFrequency[digit] || 0) + 1;
+                });
+                
+                if (botState.digitHistory.length > 300) {
+                    botState.digitHistory = botState.digitHistory.slice(-300);
+                }
+                
+                botState.totalTicksProcessed = botState.digitHistory.length;
+                
+                if (botState.digitHistory.length >= 50) {
+                    botState.shannonEntropy = calcEntropy(botState.digitHistory, 100).toFixed(3);
+                }
+                
+                console.log(`🔥 KRAKEN CARGADO: Historial inicializado con ${botState.totalTicksProcessed} ticks históricos.`);
+                saveState();
+            }
+            return;
         }
         
         if (msg.msg_type === 'tick' && msg.tick) {
