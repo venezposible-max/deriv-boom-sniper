@@ -480,9 +480,12 @@ function evaluateOverUnder(mState) {
     if (chiTest.chi2 < requiredChi) return null;
     
     const markovHist = hist.slice(-100);
-    const matrix = buildMarkovMatrix(markovHist);
     const lastDigit = hist[hist.length - 1];
-    const transitions = matrix[lastDigit];
+    const penultDigit = hist[hist.length - 2];
+    const state = (penultDigit * 10) + lastDigit; // Estado compuesto por los 2 últimos dígitos (00-99)
+    
+    const matrix = build2ndOrderMarkovMatrix(markovHist);
+    const transitions = matrix[state];
     
     let probOver = 0;
     for (let d = 5; d <= 9; d++) probOver += transitions[d] || 0;
@@ -497,7 +500,7 @@ function evaluateOverUnder(mState) {
             contractType: 'DIGITOVER',
             barrier: '4',
             stakeMultiplier: 1.0,
-            reason: `Markov P(>4)=${(probOver * 100).toFixed(1)}%`,
+            reason: `Markov2da P(>4)=${(probOver * 100).toFixed(1)}% (Estado: ${state})`,
             entropy: parseFloat(mState.shannonEntropy)
         };
     }
@@ -508,7 +511,7 @@ function evaluateOverUnder(mState) {
             contractType: 'DIGITUNDER',
             barrier: '5',
             stakeMultiplier: 1.0,
-            reason: `Markov P(<5)=${(probUnder * 100).toFixed(1)}%`,
+            reason: `Markov2da P(<5)=${(probUnder * 100).toFixed(1)}% (Estado: ${state})`,
             entropy: parseFloat(mState.shannonEntropy)
         };
     }
@@ -1062,6 +1065,7 @@ app.post('/api/switch-market', (req, res) => {
 // ════════════════════════════════════════════════════════════════
 let ws = null;
 let reconnectTimeout = null;
+let heartbeatInterval = null;
 
 function connectDeriv() {
     if (ws && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING)) return;
@@ -1075,6 +1079,25 @@ function connectDeriv() {
     
     ws.on('open', () => {
         console.log('🔌 Conexión establecida con WebSocket de Deriv. Autenticando...');
+        
+        // OPTIMIZACIÓN DE LATENCIA HFT: Habilitar TCP Low-Latency Flags en caliente
+        if (ws._socket) {
+            try {
+                ws._socket.setNoDelay(true); // Desactivar algoritmo de Nagle (0 buffer)
+                ws._socket.setKeepAlive(true, 5000); // Mantener caliente la sesión TCP a nivel de socket
+            } catch (e) {
+                // Failsafe en caso de retraso en la asignación del socket
+            }
+        }
+        
+        // CANAL DE DATOS ULTRA-CALIENTE: Enviar Pings de calentamiento cada 10s para mantener la ventana TCP al máximo
+        if (heartbeatInterval) clearInterval(heartbeatInterval);
+        heartbeatInterval = setInterval(() => {
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                ws.send(JSON.stringify({ ping: 1 }));
+            }
+        }, 10000);
+        
         setTimeout(() => {
             if (ws && ws.readyState === WebSocket.OPEN) {
                 ws.send(JSON.stringify({ authorize: DERIV_TOKEN }));
@@ -1306,6 +1329,10 @@ function connectDeriv() {
     });
     
     ws.on('close', (code) => {
+        if (heartbeatInterval) {
+            clearInterval(heartbeatInterval);
+            heartbeatInterval = null;
+        }
         const wait = code === 1008 ? 15000 : 5000;
         console.log(`⚠️ Conexión de red cerrada. Reestableciendo conexión en ${wait/1000}s...`);
         botState.isConnectedToDeriv = false;
