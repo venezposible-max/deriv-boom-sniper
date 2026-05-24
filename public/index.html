@@ -7,39 +7,47 @@
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🐙</text></svg>">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
 <style>
 /* ═══════════════════════════════════════════════════════════
    CSS CUSTOM PROPERTIES
    ═══════════════════════════════════════════════════════════ */
 :root {
-  --bg-primary: #0a0a0f;
-  --bg-secondary: #0e0e15;
-  --bg-card: rgba(255,255,255,0.03);
-  --bg-card-hover: rgba(255,255,255,0.05);
-  --border-card: rgba(255,255,255,0.06);
-  --border-card-hover: rgba(255,255,255,0.12);
-  --text-primary: #f0f0f5;
-  --text-secondary: #8a8a9a;
-  --text-muted: #55556a;
-  --accent-green: #10b981;
-  --accent-green-dim: rgba(16,185,129,0.15);
-  --accent-green-glow: rgba(16,185,129,0.4);
-  --accent-blue: #3b82f6;
-  --accent-blue-dim: rgba(59,130,246,0.15);
-  --accent-blue-glow: rgba(59,130,246,0.4);
-  --accent-purple: #a855f7;
-  --accent-purple-dim: rgba(168,85,247,0.15);
-  --accent-purple-glow: rgba(168,85,247,0.4);
-  --accent-red: #ef4444;
-  --accent-red-dim: rgba(239,68,68,0.15);
-  --accent-yellow: #f59e0b;
-  --radius-card: 16px;
-  --radius-btn: 12px;
-  --radius-input: 8px;
-  --transition: 0.3s ease;
-  --blur: blur(20px);
-  --font: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  --bg-primary: #050508;
+  --bg-secondary: #0a0a10;
+  --bg-card: rgba(20, 20, 30, 0.4);
+  --bg-card-hover: rgba(30, 30, 45, 0.6);
+  --border-card: rgba(255,255,255,0.04);
+  --border-card-hover: rgba(255,255,255,0.1);
+  
+  --text-primary: #ffffff;
+  --text-secondary: #9ca3af;
+  --text-muted: #4b5563;
+  
+  --accent-green: #00ffa3;
+  --accent-green-dim: rgba(0,255,163,0.1);
+  --accent-green-glow: rgba(0,255,163,0.5);
+  
+  --accent-blue: #00d2ff;
+  --accent-blue-dim: rgba(0,210,255,0.1);
+  --accent-blue-glow: rgba(0,210,255,0.5);
+  
+  --accent-purple: #b026ff;
+  --accent-purple-dim: rgba(176,38,255,0.1);
+  --accent-purple-glow: rgba(176,38,255,0.5);
+  
+  --accent-red: #ff3366;
+  --accent-red-dim: rgba(255,51,102,0.1);
+  --accent-red-glow: rgba(255,51,102,0.5);
+  
+  --accent-yellow: #ffcc00;
+  
+  --radius-card: 20px;
+  --radius-btn: 14px;
+  --radius-input: 10px;
+  --transition: 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+  --blur: blur(24px);
+  --font: 'Outfit', sans-serif;
 }
 
 /* ═══════════════════════════════════════════════════════════
@@ -62,14 +70,15 @@ body {
   line-height: 1.5;
 }
 
-/* Background grain/noise texture */
+/* Background grain/noise texture and glowing orbs */
 body::before {
   content: '';
   position: fixed;
   inset: 0;
-  background: radial-gradient(ellipse at 20% 0%, rgba(16,185,129,0.04) 0%, transparent 60%),
-              radial-gradient(ellipse at 80% 0%, rgba(59,130,246,0.04) 0%, transparent 60%),
-              radial-gradient(ellipse at 50% 100%, rgba(168,85,247,0.03) 0%, transparent 60%);
+  background: 
+    radial-gradient(circle at 15% 10%, rgba(0,210,255,0.05) 0%, transparent 40%),
+    radial-gradient(circle at 85% 20%, rgba(176,38,255,0.05) 0%, transparent 40%),
+    radial-gradient(circle at 50% 90%, rgba(0,255,163,0.04) 0%, transparent 50%);
   pointer-events: none;
   z-index: 0;
 }
@@ -795,16 +804,19 @@ body::before {
 }
 
 .btn-start {
-  background: var(--accent-green);
-  color: #fff;
-  box-shadow: 0 4px 16px rgba(16,185,129,0.3);
+  background: linear-gradient(135deg, var(--accent-green), #00b377);
+  color: #000;
+  box-shadow: 0 4px 20px rgba(0, 255, 163, 0.3), inset 0 1px 0 rgba(255,255,255,0.4);
   min-width: 140px;
   justify-content: center;
+  border: 1px solid rgba(0, 255, 163, 0.5);
+  text-shadow: 0 1px 2px rgba(255,255,255,0.3);
 }
 
 .btn-start:hover {
-  box-shadow: 0 6px 24px rgba(16,185,129,0.4);
-  transform: translateY(-1px);
+  box-shadow: 0 6px 30px rgba(0, 255, 163, 0.5), inset 0 1px 0 rgba(255,255,255,0.6);
+  transform: translateY(-2px);
+  filter: brightness(1.1);
 }
 
 .btn-start.running {
@@ -812,21 +824,23 @@ body::before {
 }
 
 @keyframes btn-breathe {
-  0%, 100% { box-shadow: 0 4px 16px rgba(16,185,129,0.3); }
-  50% { box-shadow: 0 4px 32px rgba(16,185,129,0.6), 0 0 48px rgba(16,185,129,0.2); }
+  0%, 100% { box-shadow: 0 4px 20px rgba(0, 255, 163, 0.3); }
+  50% { box-shadow: 0 4px 40px rgba(0, 255, 163, 0.7), 0 0 60px rgba(0, 255, 163, 0.3); }
 }
 
 .btn-stop {
-  background: var(--accent-red);
+  background: linear-gradient(135deg, var(--accent-red), #cc0033);
   color: #fff;
-  box-shadow: 0 4px 16px rgba(239,68,68,0.2);
+  box-shadow: 0 4px 20px rgba(255, 51, 102, 0.3), inset 0 1px 0 rgba(255,255,255,0.2);
   min-width: 120px;
   justify-content: center;
+  border: 1px solid rgba(255, 51, 102, 0.5);
 }
 
 .btn-stop:hover {
-  box-shadow: 0 6px 24px rgba(239,68,68,0.35);
-  transform: translateY(-1px);
+  box-shadow: 0 6px 30px rgba(255, 51, 102, 0.5), inset 0 1px 0 rgba(255,255,255,0.3);
+  transform: translateY(-2px);
+  filter: brightness(1.1);
 }
 
 .btn-reset {
@@ -966,20 +980,20 @@ body::before {
 }
 
 .history-table tr.win td {
-  background: rgba(16,185,129,0.03);
+  background: rgba(0, 255, 163, 0.05);
 }
 
 .history-table tr.loss td {
-  background: rgba(239,68,68,0.03);
+  background: rgba(255, 51, 102, 0.05);
 }
 
 .history-table tr {
-  animation: row-slide-in 0.35s ease;
+  animation: row-slide-in 0.4s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 @keyframes row-slide-in {
-  from { opacity: 0; transform: translateY(-8px); }
-  to { opacity: 1; transform: translateY(0); }
+  from { opacity: 0; transform: translateY(-12px); filter: blur(4px); }
+  to { opacity: 1; transform: translateY(0); filter: blur(0); }
 }
 
 .history-table .result-badge {
@@ -995,11 +1009,15 @@ body::before {
 .result-badge.win {
   background: var(--accent-green-dim);
   color: var(--accent-green);
+  box-shadow: 0 0 10px var(--accent-green-glow);
+  border: 1px solid rgba(0, 255, 163, 0.3);
 }
 
 .result-badge.loss {
   background: var(--accent-red-dim);
   color: var(--accent-red);
+  box-shadow: 0 0 10px var(--accent-red-glow);
+  border: 1px solid rgba(255, 51, 102, 0.3);
 }
 
 .empty-history {
