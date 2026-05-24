@@ -620,6 +620,15 @@ function tryFireTrade() {
             const mState = botState.markets[sym];
             if (!mState || mState.digitHistory.length < 50) continue;
             
+            // Cortafuegos de Cobertura: Evitar mercados en cuarentena por pérdidas recientes
+            if (mState.lockedUntil && now < mState.lockedUntil) {
+                if (now % 30000 < 1500) {
+                    const left = Math.ceil((mState.lockedUntil - now) / 1000);
+                    console.log(`🛡️ CORTAFUEGOS: ${sym} está en cuarentena de racha (${left}s restantes). Saltando...`);
+                }
+                continue;
+            }
+            
             const nextPriority = botState.lastEngineFired === 'OVER_UNDER' ? 'EVEN_ODD' : 'OVER_UNDER';
             
             if (nextPriority === 'EVEN_ODD') {
@@ -746,6 +755,12 @@ function finalizeTrade(c) {
         
         botState.consecutiveWins = 0;
         botState.consecutiveLosses++;
+        
+        // Cortafuegos de Cobertura: Aplicar cuarentena de 5 minutos al símbolo perdedor
+        if (mState) {
+            mState.lockedUntil = Date.now() + 300000; // 5 minutos (300,000 ms)
+            console.log(`🚨 CORTAFUEGOS ACTIVO: Cuarentena de 5 minutos aplicada a ${tradeSymbol} para evitar persistencia de racha. Escaneando los otros 7 mercados...`);
+        }
         
         // Registrar pausa de seguridad de 1 minuto y resetear ticks de re-evaluación
         botState.lossPauseUntil = Date.now() + 60000;
