@@ -348,8 +348,8 @@ function getAdjustedStake(baseStake, engineMultiplier) {
  * Motor 1: EVEN/ODD — "El Pan de Cada Día"
  * Consenso multi-ventana (10, 20, 40 ticks) y Chi-Cuadrado
  */
-function evaluateEvenOdd() {
-    const hist = botState.digitHistory;
+function evaluateEvenOdd(mState) {
+    const hist = mState.digitHistory;
     if (hist.length < 50) return null;
     
     // Chi-Cuadrado de última ventana (Estricto)
@@ -365,7 +365,7 @@ function evaluateEvenOdd() {
     let ev20 = 0, od20 = 0;
     sub20.forEach(d => { if (d % 2 === 0) ev20++; else od20++; });
     
-    // Señales por ventana (60% de consenso en M10 y 60% en M20) - Relajado gracias al Ghost Shield
+    // Señales por ventana (60% de consenso en M10 y 60% en M20)
     const sigOdd10 = od10 >= 6;
     const sigEven10 = ev10 >= 6;
     
@@ -379,7 +379,7 @@ function evaluateEvenOdd() {
             barrier: null,
             stakeMultiplier: 1.0,
             reason: `Consenso IMPAR [10:${od10}/10, 20:${od20}/20]`,
-            entropy: parseFloat(botState.shannonEntropy)
+            entropy: parseFloat(mState.shannonEntropy)
         };
     }
     
@@ -390,7 +390,7 @@ function evaluateEvenOdd() {
             barrier: null,
             stakeMultiplier: 1.0,
             reason: `Consenso PAR [10:${ev10}/10, 20:${ev20}/20]`,
-            entropy: parseFloat(botState.shannonEntropy)
+            entropy: parseFloat(mState.shannonEntropy)
         };
     }
     
@@ -401,8 +401,8 @@ function evaluateEvenOdd() {
  * Motor 2: OVER/UNDER — "El Potenciador"
  * Markov de corto alcance (100 ticks), Chi-Cuadrado estricto y Validación Cruzada
  */
-function evaluateOverUnder() {
-    const hist = botState.digitHistory;
+function evaluateOverUnder(mState) {
+    const hist = mState.digitHistory;
     if (hist.length < 100) return null;
     
     const chiTest = calcChiSquared(hist, 100);
@@ -426,7 +426,7 @@ function evaluateOverUnder() {
             barrier: '4',
             stakeMultiplier: 1.0,
             reason: `Markov P(>4)=${(probOver * 100).toFixed(1)}%`,
-            entropy: parseFloat(botState.shannonEntropy)
+            entropy: parseFloat(mState.shannonEntropy)
         };
     }
     
@@ -437,7 +437,7 @@ function evaluateOverUnder() {
             barrier: '5',
             stakeMultiplier: 1.0,
             reason: `Markov P(<5)=${(probUnder * 100).toFixed(1)}%`,
-            entropy: parseFloat(botState.shannonEntropy)
+            entropy: parseFloat(mState.shannonEntropy)
         };
     }
     
@@ -448,8 +448,8 @@ function evaluateOverUnder() {
  * Motor 3: MATCH — "El Multiplicador"
  * Dígito caliente, momentum severo en 5 ticks y EWM Confirmation
  */
-function evaluateMatch() {
-    const hist = botState.digitHistory;
+function evaluateMatch(mState) {
+    const hist = mState.digitHistory;
     if (hist.length < 50) return null;
     
     const chiTest = calcChiSquared(hist, 50);
@@ -470,8 +470,8 @@ function evaluateMatch() {
     }
     
     const hotDigitFreqPercent = (maxFreq / 50) * 100;
-    botState.hotDigit = hotDigit;
-    botState.hotDigitFreq = hotDigitFreqPercent.toFixed(1);
+    mState.hotDigit = hotDigit;
+    mState.hotDigitFreq = hotDigitFreqPercent.toFixed(1);
     
     // Umbral subido de 16% a 20%
     if (hotDigitFreqPercent < 20) return null;
@@ -499,7 +499,7 @@ function evaluateMatch() {
         barrier: String(hotDigit),
         stakeMultiplier: 0.5,
         reason: `Dígito caliente ${hotDigit}: ${maxFreq}/50 (${hotDigitFreqPercent.toFixed(1)}%) | Last5: ${momentumCount}x | EWM OK`,
-        entropy: parseFloat(botState.shannonEntropy)
+        entropy: parseFloat(mState.shannonEntropy)
     };
 }
 
@@ -570,49 +570,63 @@ function tryFireTrade() {
         return;
     }
     
-    // Pausa por Circuit Breaker (Desactivado por premisa de flujo continuo de operaciones)
-    
     // Control de Cooldown Dinámico
     const currentCooldown = botState.cooldownMode === 'auto' ? getDynamicCooldown() : botState.cooldownMs;
     if ((now - botState.lastTradeTime) < currentCooldown) return;
     
     let signal = null;
+    let signalSymbol = null;
     
     // Si tenemos una señal forzada (como la venganza inmediata de un Ghost Trade perdido), la usamos y saltamos los filtros
     if (botState.forcedSignal) {
         signal = botState.forcedSignal;
+        signalSymbol = botState.forcedSignal.symbol;
         botState.forcedSignal = null;
     } else {
-        // Evaluación con Rotación (Alternancia de prioridad)
-        const nextPriority = botState.lastEngineFired === 'OVER_UNDER' ? 'EVEN_ODD' : 'OVER_UNDER';
-
-        if (nextPriority === 'EVEN_ODD') {
-            if (botState.engineEvenOdd && !signal) signal = evaluateEvenOdd();
-            if (botState.engineOverUnder && !signal) signal = evaluateOverUnder();
-        } else {
-            if (botState.engineOverUnder && !signal) signal = evaluateOverUnder();
-            if (botState.engineEvenOdd && !signal) signal = evaluateEvenOdd();
-        }
-
-        // El motor Match siempre se evalúa al final si está activo
-        if (botState.engineMatch && !signal) {
-            signal = evaluateMatch();
+        const SCAN_SYMBOLS = ['R_10', 'R_25', 'R_50', 'R_100'];
+        // Escanear los 4 mercados en paralelo en busca de oportunidades estadísticas
+        for (const sym of SCAN_SYMBOLS) {
+            const mState = botState.markets[sym];
+            if (!mState || mState.digitHistory.length < 50) continue;
+            
+            const nextPriority = botState.lastEngineFired === 'OVER_UNDER' ? 'EVEN_ODD' : 'OVER_UNDER';
+            
+            if (nextPriority === 'EVEN_ODD') {
+                if (botState.engineEvenOdd && !signal) signal = evaluateEvenOdd(mState);
+                if (botState.engineOverUnder && !signal) signal = evaluateOverUnder(mState);
+            } else {
+                if (botState.engineOverUnder && !signal) signal = evaluateOverUnder(mState);
+                if (botState.engineEvenOdd && !signal) signal = evaluateEvenOdd(mState);
+            }
+            
+            if (botState.engineMatch && !signal) {
+                signal = evaluateMatch(mState);
+            }
+            
+            if (signal) {
+                signalSymbol = sym;
+                break; // Detener escaneo al encontrar la primera señal válida
+            }
         }
     }
     
-    if (!signal) return;
-
+    if (!signal || !signalSymbol) return;
+    
+    const activeSymbol = signalSymbol;
+    const mState = botState.markets[activeSymbol];
+    
     botState.lastEngineFired = signal.engine;
     
     // ─── GHOST TRADING LOGIC ───
     if (!botState.ghostNextTradeReal) {
         if (!botState.ghostPendingTrade && botState.isRunning) {
-            console.log(`👻 GHOST TRADE: Señal de ${signal.engine} [${signal.contractType} B:${signal.barrier || '-'}]. Simulando entrada virtual...`);
+            console.log(`👻 GHOST TRADE [${activeSymbol}]: Señal de ${signal.engine} [${signal.contractType} B:${signal.barrier || '-'}]. Simulando entrada virtual...`);
             botState.ghostPendingTrade = {
+                symbol: activeSymbol,
                 engine: signal.engine,
                 contractType: signal.contractType,
                 barrier: signal.barrier,
-                entryTickPrice: botState.lastTickPrice
+                entryTickPrice: mState ? mState.lastTickPrice : botState.lastTickPrice
             };
             botState.lastTradeTime = Date.now();
         }
@@ -638,7 +652,7 @@ function tryFireTrade() {
             basis: 'stake',
             contract_type: signal.contractType,
             currency: 'USD',
-            symbol: SYMBOL,
+            symbol: activeSymbol,
             duration: 1,
             duration_unit: 't'
         }
@@ -652,9 +666,9 @@ function tryFireTrade() {
     botState.lastTradeTime = now;
     
     const emojis = { EVEN_ODD: '🎰', OVER_UNDER: '📊', MATCH: '💎', DIFFER: '🔪' };
-    const names = { EVEN_ODD: 'PAR/IMPAR', OVER_UNDER: 'OVER/UNDER', MATCH: 'MATCH', DIFFER: 'DIFFER (Cirujano)' };
+    const names = { EVEN_ODD: 'PAR/IMPAR', OVER_UNDER: 'OVER/UNDER', MATCH: 'MATCH', DIFFER: 'DIFFER' };
     
-    console.log(`${emojis[signal.engine] || '🎲'} DISPARO [${names[signal.engine]}] | ${signal.contractType} B:${signal.barrier || 'N/A'} | Stake: $${finalStake.toFixed(2)} | ${signal.reason}`);
+    console.log(`${emojis[signal.engine] || '🎲'} DISPARO REAL [${activeSymbol} - ${names[signal.engine]}] | ${signal.contractType} B:${signal.barrier || 'N/A'} | Stake: $${finalStake.toFixed(2)} | ${signal.reason}`);
     
     ws.send(JSON.stringify(buyRequest));
 }
@@ -663,7 +677,10 @@ function finalizeTrade(c) {
     const profit = parseFloat(c.profit);
     const isWin = profit > 0;
     
-    let exitDigit = botState.lastDigit;
+    const tradeSymbol = c.underlying || c.symbol || SYMBOL;
+    const mState = botState.markets[tradeSymbol];
+    
+    let exitDigit = mState ? mState.lastDigit : botState.lastDigit;
     if (c.exit_tick_display_value) {
         const val = String(c.exit_tick_display_value);
         exitDigit = parseInt(val.charAt(val.length - 1));
@@ -695,7 +712,7 @@ function finalizeTrade(c) {
             botState.consecutiveLosses = 0;
         }
         
-        console.log(`✅ WIN +$${profit.toFixed(2)} [${name}] | ${cType}${barrier ? ` B:${barrier}` : ''} | PnL: $${botState.pnlSession.toFixed(2)}`);
+        console.log(`✅ WIN +$${profit.toFixed(2)} [${tradeSymbol} - ${name}] | ${cType}${barrier ? ` B:${barrier}` : ''} | PnL: $${botState.pnlSession.toFixed(2)}`);
     } else {
         botState.lossesSession++;
         botState.dailyLoss += Math.abs(profit);
@@ -717,7 +734,7 @@ function finalizeTrade(c) {
             }
         }
         
-        console.log(`❌ LOSS -$${Math.abs(profit).toFixed(2)} [${name}] | ${cType}${barrier ? ` B:${barrier}` : ''} | Racha: ${botState.consecutiveLosses} | PnL: $${botState.pnlSession.toFixed(2)}`);
+        console.log(`❌ LOSS -$${Math.abs(profit).toFixed(2)} [${tradeSymbol} - ${name}] | ${cType}${barrier ? ` B:${barrier}` : ''} | Racha: ${botState.consecutiveLosses} | PnL: $${botState.pnlSession.toFixed(2)}`);
     }
     
     // ─── ACTUALIZACIÓN DE ESTADO DE MARTINGALA ───
@@ -761,6 +778,7 @@ function finalizeTrade(c) {
     
     // Guardar en Historial de Trades
     botState.tradeHistory.unshift({
+        symbol: tradeSymbol,
         engine: name,
         engineKey: engine,
         contractType: cType,
@@ -770,12 +788,10 @@ function finalizeTrade(c) {
         result: isWin ? 'WIN ✅' : 'LOSS ❌',
         time: new Date().toISOString(),
         stake: botState.currentStake,
-        entropy: botState.shannonEntropy,
+        entropy: mState ? mState.shannonEntropy : botState.shannonEntropy,
         balanceAfter: botState.balance
     });
     if (botState.tradeHistory.length > 100) botState.tradeHistory.pop();
-    
-    // Spike Protection (Bypass para conservar stake intacto y fluidez total)
     
     // Trailing Take-Profit & Profit Lock
     if (botState.pnlSession > botState.profitPeak) {
@@ -979,48 +995,28 @@ app.post('/api/config', (req, res) => {
 app.post('/api/switch-market', (req, res) => {
     const { symbol } = req.body;
     
-    if (botState.isRunning) {
-        return res.status(400).json({ success: false, error: 'Pausa el bot antes de migrar de mercado.' });
-    }
-    
     const validSymbols = ['R_10', 'R_25', 'R_50', 'R_100'];
     if (!validSymbols.includes(symbol)) {
         return res.status(400).json({ success: false, error: 'Símbolo inválido.' });
     }
     
     SYMBOL = symbol;
-    symbolDecimals = 2; // Reiniciar seguimiento de decimales para el nuevo mercado
-    botState.digitHistory = [];
-    botState.digitFrequency = {};
-    botState.hotDigit = null;
-    botState.hotDigitFreq = 0;
     
-    if (ws && ws.readyState === WebSocket.OPEN) {
-        ws.send(JSON.stringify({ forget_all: 'ticks' }));
-        setTimeout(() => {
-            if (ws && ws.readyState === WebSocket.OPEN) {
-                console.log(`📥 Descargando historial de 300 ticks para el nuevo mercado ${SYMBOL}...`);
-                ws.send(JSON.stringify({
-                    ticks_history: SYMBOL,
-                    count: 300,
-                    end: 'latest',
-                    style: 'ticks',
-                    adjust_start_time: 1
-                }));
-            }
-        }, 1000);
-        
-        setTimeout(() => {
-            if (ws && ws.readyState === WebSocket.OPEN) {
-                ws.send(JSON.stringify({ subscribe: 1, ticks: SYMBOL }));
-                console.log(`📡 Suscripción ticks en vivo activada para ${SYMBOL}`);
-            }
-        }, 3000);
+    // Sincronizar campos principales para la visualización del frontend
+    const mState = botState.markets[SYMBOL];
+    if (mState) {
+        botState.digitHistory = mState.digitHistory;
+        botState.digitFrequency = mState.digitFrequency;
+        botState.lastTickPrice = mState.lastTickPrice;
+        botState.lastDigit = mState.lastDigit;
+        botState.shannonEntropy = mState.shannonEntropy;
+        botState.hotDigit = mState.hotDigit;
+        botState.hotDigitFreq = mState.hotDigitFreq;
     }
     
     saveState();
-    console.log(`🔄 MERCADO KRAKEN MIGRADOS A: ${SYMBOL}`);
-    return res.json({ success: true, symbol: SYMBOL, message: `Mercado migrado a ${SYMBOL} con éxito.` });
+    console.log(`👁️ VISTA DEL DASHBOARD ENFOCADA EN: ${SYMBOL}`);
+    return res.json({ success: true, symbol: SYMBOL, message: `Vista del dashboard enfocada en ${SYMBOL} con éxito.` });
 });
 
 // ════════════════════════════════════════════════════════════════
@@ -1064,33 +1060,39 @@ function connectDeriv() {
             ws.send(JSON.stringify({ forget_all: 'ticks' }));
             ws.send(JSON.stringify({ forget_all: 'proposal_open_contract' }));
             
-            // Descargar historial de 300 ticks inmediatamente
+            const SCAN_SYMBOLS = ['R_10', 'R_25', 'R_50', 'R_100'];
+            
+            // Descargar historial de 300 ticks en paralelo para todos los mercados
             setTimeout(() => {
                 if (ws && ws.readyState === WebSocket.OPEN) {
-                    console.log(`📥 Descargando historial de 300 ticks para ${SYMBOL}...`);
-                    ws.send(JSON.stringify({
-                        ticks_history: SYMBOL,
-                        count: 300,
-                        end: 'latest',
-                        style: 'ticks',
-                        adjust_start_time: 1
-                    }));
+                    SCAN_SYMBOLS.forEach(sym => {
+                        console.log(`📥 Descargando historial de 300 ticks para ${sym}...`);
+                        ws.send(JSON.stringify({
+                            ticks_history: sym,
+                            count: 300,
+                            end: 'latest',
+                            style: 'ticks',
+                            adjust_start_time: 1
+                        }));
+                    });
                 }
             }, 1000);
             
             setTimeout(() => {
                 if (ws && ws.readyState === WebSocket.OPEN) {
-                    ws.send(JSON.stringify({ subscribe: 1, ticks: SYMBOL }));
-                    console.log(`📡 Suscripción ticks en vivo activada para ${SYMBOL}`);
+                    SCAN_SYMBOLS.forEach(sym => {
+                        ws.send(JSON.stringify({ subscribe: 1, ticks: sym }));
+                        console.log(`📡 Suscripción ticks en vivo activada para ${sym}`);
+                    });
                 }
-            }, 3000); // Demorado a 3s para permitir que el historial se reciba primero
+            }, 3500); // Demorado a 3.5s para permitir que el historial se reciba primero
             
             setTimeout(() => {
                 if (ws && ws.readyState === WebSocket.OPEN) {
                     ws.send(JSON.stringify({ balance: 1, subscribe: 1 }));
                     console.log(`💰 Suscripción balance activada.`);
                 }
-            }, 4500);
+            }, 5000);
         }
         
         if (msg.error) {
@@ -1112,105 +1114,134 @@ function connectDeriv() {
         }
 
         if (msg.msg_type === 'history' && msg.history) {
+            const sym = msg.echo_req ? msg.echo_req.ticks_history : SYMBOL;
             const prices = msg.history.prices;
-            if (Array.isArray(prices) && prices.length > 0) {
-                console.log(`⚡ Historial de ${prices.length} ticks recibido correctamente.`);
-                botState.digitHistory = [];
-                botState.digitFrequency = {};
-                for (let d = 0; d <= 9; d++) botState.digitFrequency[d] = 0;
+            if (Array.isArray(prices) && prices.length > 0 && botState.markets[sym]) {
+                const mState = botState.markets[sym];
+                console.log(`⚡ Historial de ${prices.length} ticks recibido correctamente para ${sym}.`);
+                mState.digitHistory = [];
+                mState.digitFrequency = {};
+                for (let d = 0; d <= 9; d++) mState.digitFrequency[d] = 0;
                 
                 prices.forEach(price => {
-                    const digit = getDigitFromQuote(price);
-                    botState.digitHistory.push(digit);
-                    botState.digitFrequency[digit] = (botState.digitFrequency[digit] || 0) + 1;
+                    // Adaptar precisión
+                    const quoteStr = String(price);
+                    const parts = quoteStr.split('.');
+                    if (parts[1] && parts[1].length > mState.symbolDecimals && parts[1].length <= 4) {
+                        mState.symbolDecimals = parts[1].length;
+                    }
+                    const priceFixed = price.toFixed(mState.symbolDecimals);
+                    const digit = parseInt(priceFixed[priceFixed.length - 1]);
+                    
+                    mState.digitHistory.push(digit);
+                    mState.digitFrequency[digit] = (mState.digitFrequency[digit] || 0) + 1;
                 });
                 
-                if (botState.digitHistory.length > 300) {
-                    botState.digitHistory = botState.digitHistory.slice(-300);
+                if (mState.digitHistory.length > 300) {
+                    mState.digitHistory = mState.digitHistory.slice(-300);
                 }
                 
-                botState.totalTicksProcessed = botState.digitHistory.length;
+                mState.totalTicksProcessed = mState.digitHistory.length;
                 
-                if (botState.digitHistory.length >= 50) {
-                    botState.shannonEntropy = calcEntropy(botState.digitHistory, 100).toFixed(3);
+                if (mState.digitHistory.length >= 50) {
+                    mState.shannonEntropy = calcEntropy(mState.digitHistory, 100).toFixed(3);
                 }
                 
-                console.log(`🔥 KRAKEN CARGADO: Historial inicializado con ${botState.totalTicksProcessed} ticks históricos.`);
+                // Sincronizar foco principal si coincide con la selección visual activa
+                if (sym === SYMBOL) {
+                    botState.digitHistory = mState.digitHistory;
+                    botState.digitFrequency = mState.digitFrequency;
+                    botState.lastTickPrice = mState.lastTickPrice;
+                    botState.lastDigit = mState.lastDigit;
+                    botState.shannonEntropy = mState.shannonEntropy;
+                    botState.hotDigit = mState.hotDigit;
+                    botState.hotDigitFreq = mState.hotDigitFreq;
+                }
+                
+                console.log(`🔥 KRAKEN CARGADO [${sym}]: Historial inicializado con ${mState.totalTicksProcessed} ticks históricos.`);
                 saveState();
             }
             return;
         }
         
         if (msg.msg_type === 'tick' && msg.tick) {
-            // Obtener el dígito final de manera precisa, adaptándonos dinámicamente a la precisión real del activo
-            const quoteStr = String(msg.tick.quote);
-            const parts = quoteStr.split('.');
-            if (parts[1] && parts[1].length > symbolDecimals && parts[1].length <= 4) {
-                symbolDecimals = parts[1].length;
-            }
-            const price = msg.tick.quote.toFixed(symbolDecimals);
-            const digit = parseInt(price[price.length - 1]);
-            
-            botState.lastTickPrice = parseFloat(msg.tick.quote);
-            botState.lastDigit = digit;
-            
-            botState.digitHistory.push(digit);
-            if (botState.digitHistory.length > 300) botState.digitHistory.shift();
-            
-            botState.digitFrequency[digit] = (botState.digitFrequency[digit] || 0) + 1;
-            
-            // --- LOGGING VISUAL PARA EL USUARIO ---
-            botState.totalTicksProcessed = (botState.totalTicksProcessed || 0) + 1;
-            const ticks = botState.totalTicksProcessed;
-            if (ticks < 100 && ticks % 20 === 0) {
-                console.log(`⏳ Analizando mercado... recopilados [${ticks}/100] ticks para matriz predictiva.`);
-            } else if (ticks === 100) {
-                console.log(`✅ Matrices y Filtros cargados (100 ticks). ¡Iniciando búsqueda de oportunidades virtuales!`);
-            } else if (ticks > 100 && ticks % 100 === 0 && !botState.ghostNextTradeReal && !botState.ghostPendingTrade) {
-                console.log(`👁️ KRAKEN VIGILANDO: ${ticks} ticks procesados en esta sesión. Esperando borde estadístico > 60%...`);
-            }
-            
-            if (botState.digitHistory.length >= 50) {
-                botState.shannonEntropy = calcEntropy(botState.digitHistory, 100).toFixed(3);
-            }
-            
-            // Incrementar conteo de ticks capturados en la pausa
-            if (botState.lossPauseUntil && Date.now() < botState.lossPauseUntil) {
-                botState.lossPauseTicksProcessed = (botState.lossPauseTicksProcessed || 0) + 1;
-            }
-            
-            // Evaluar resultado del Ghost Trade (1 tick de duración)
-            if (botState.ghostPendingTrade) {
-                const pt = botState.ghostPendingTrade;
-                let won = false;
+            const sym = msg.tick.symbol;
+            if (botState.markets[sym]) {
+                const mState = botState.markets[sym];
                 
-                if (pt.contractType === 'DIGITEVEN') won = digit % 2 === 0;
-                else if (pt.contractType === 'DIGITODD') won = digit % 2 !== 0;
-                else if (pt.contractType === 'DIGITOVER') won = digit > parseInt(pt.barrier);
-                else if (pt.contractType === 'DIGITUNDER') won = digit < parseInt(pt.barrier);
-                else if (pt.contractType === 'DIGITMATCH') won = digit === parseInt(pt.barrier);
-                else if (pt.contractType === 'DIGITDIFF') won = digit !== parseInt(pt.barrier);
-                
-                console.log(`👻 GHOST RESULT: ${pt.engine} [${pt.contractType}] -> Result digit: ${digit} -> ${won ? 'WIN ✅' : 'LOSS ❌'}`);
-                
-                botState.ghostPendingTrade = null; // Limpiar para el siguiente
-                
-                if (won) {
-                    botState.ghostNextTradeReal = false;
-                } else {
-                    botState.ghostNextTradeReal = true;
-                    botState.forcedSignal = {
-                        engine: pt.engine,
-                        contractType: pt.contractType,
-                        barrier: pt.barrier,
-                        stakeMultiplier: 1.0,
-                        reason: 'Ghost Shield (Entrada INMEDIATA)'
-                    };
-                    console.log(`🔥 GHOST SHIELD: ¡Pérdida virtual detectada! El bot está ARMADO para entrar con dinero REAL en el PRÓXIMO TICK.`);
+                // Obtener el dígito final de manera precisa, adaptándonos dinámicamente a la precisión real del activo
+                const quoteStr = String(msg.tick.quote);
+                const parts = quoteStr.split('.');
+                if (parts[1] && parts[1].length > mState.symbolDecimals && parts[1].length <= 4) {
+                    mState.symbolDecimals = parts[1].length;
                 }
+                const price = msg.tick.quote.toFixed(mState.symbolDecimals);
+                const digit = parseInt(price[price.length - 1]);
+                
+                mState.lastTickPrice = parseFloat(msg.tick.quote);
+                mState.lastDigit = digit;
+                
+                mState.digitHistory.push(digit);
+                if (mState.digitHistory.length > 300) mState.digitHistory.shift();
+                
+                mState.digitFrequency[digit] = (mState.digitFrequency[digit] || 0) + 1;
+                
+                mState.totalTicksProcessed = (mState.totalTicksProcessed || 0) + 1;
+                
+                if (mState.digitHistory.length >= 50) {
+                    mState.shannonEntropy = calcEntropy(mState.digitHistory, 100).toFixed(3);
+                }
+                
+                // Incrementar conteo de ticks capturados en la pausa (solo si es el mercado que disparó la pausa)
+                if (botState.lossPauseUntil && Date.now() < botState.lossPauseUntil) {
+                    botState.lossPauseTicksProcessed = (botState.lossPauseTicksProcessed || 0) + 1;
+                }
+                
+                // Evaluar resultado del Ghost Trade (1 tick de duración) - Verificando que pertenezca a este símbolo
+                if (botState.ghostPendingTrade && botState.ghostPendingTrade.symbol === sym) {
+                    const pt = botState.ghostPendingTrade;
+                    let won = false;
+                    
+                    if (pt.contractType === 'DIGITEVEN') won = digit % 2 === 0;
+                    else if (pt.contractType === 'DIGITODD') won = digit % 2 !== 0;
+                    else if (pt.contractType === 'DIGITOVER') won = digit > parseInt(pt.barrier);
+                    else if (pt.contractType === 'DIGITUNDER') won = digit < parseInt(pt.barrier);
+                    else if (pt.contractType === 'DIGITMATCH') won = digit === parseInt(pt.barrier);
+                    else if (pt.contractType === 'DIGITDIFF') won = digit !== parseInt(pt.barrier);
+                    
+                    console.log(`👻 GHOST RESULT [${sym}]: ${pt.engine} [${pt.contractType}] -> Result digit: ${digit} -> ${won ? 'WIN ✅' : 'LOSS ❌'}`);
+                    
+                    botState.ghostPendingTrade = null; // Limpiar para el siguiente
+                    
+                    if (won) {
+                        botState.ghostNextTradeReal = false;
+                    } else {
+                        botState.ghostNextTradeReal = true;
+                        botState.forcedSignal = {
+                            symbol: sym,
+                            engine: pt.engine,
+                            contractType: pt.contractType,
+                            barrier: pt.barrier,
+                            stakeMultiplier: 1.0,
+                            reason: 'Ghost Shield (Entrada INMEDIATA)'
+                        };
+                        console.log(`🔥 GHOST SHIELD: ¡Pérdida virtual detectada en ${sym}! Sniper ARMADO para entrar en dinero REAL en el PRÓXIMO TICK.`);
+                    }
+                }
+                
+                // Sincronizar campos principales para la vista de la interfaz (foco activo)
+                if (sym === SYMBOL) {
+                    botState.digitHistory = mState.digitHistory;
+                    botState.digitFrequency = mState.digitFrequency;
+                    botState.lastTickPrice = mState.lastTickPrice;
+                    botState.lastDigit = mState.lastDigit;
+                    botState.shannonEntropy = mState.shannonEntropy;
+                    botState.hotDigit = mState.hotDigit;
+                    botState.hotDigitFreq = mState.hotDigitFreq;
+                }
+                
+                tryFireTrade();
             }
-            
-            tryFireTrade();
         }
         
         if (msg.msg_type === 'buy' && msg.buy) {
