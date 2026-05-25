@@ -1356,6 +1356,12 @@ function connectDeriv() {
         }
         
         if (msg.error) {
+            // Silenciar errores no críticos de suscripción duplicada
+            if (msg.error.code === 'AlreadySubscribed') {
+                console.log(`ℹ️ Suscripción duplicada ignorada (no crítico): ${msg.error.message}`);
+                return;
+            }
+            
             console.error(`⚠️ Deriv API Error [${msg.error.code}]: ${msg.error.message}`);
             if (msg.error.code === 'WrongResponse' || msg.error.code === 'AuthorizationRequired') {
                 console.log('🔄 Sesión inválida, reiniciando conexión...');
@@ -1374,7 +1380,14 @@ function connectDeriv() {
             }
             if (msg.msg_type === 'sell') {
                 botState.isSellingAccumulator = null;
-                console.error(`❌ Error en venta: ${msg.error.message}`);
+                // BetExpired significa que el contrato ya crasheó/expiró.
+                // La pérdida se registrará cuando llegue el proposal_open_contract con is_sold:true.
+                // No aplicar cooldown extra aquí.
+                if (msg.error.code === 'BetExpired') {
+                    console.log(`ℹ️ Contrato ya expiró antes de completar la venta. La pérdida se contabilizará automáticamente.`);
+                } else {
+                    console.error(`❌ Error en venta: ${msg.error.message}`);
+                }
             }
             return;
         }
@@ -1383,26 +1396,41 @@ function connectDeriv() {
             const contracts = msg.portfolio.contracts || [];
             const accuContract = contracts.find(c => c.contract_type === 'ACCU');
             if (accuContract) {
-                console.log(`🛡️ [KRAKEN] RECUPERACIÓN: Encontrado contrato ACCU activo en Deriv [ID: ${accuContract.contract_id}] para ${accuContract.symbol}. Adoptándolo...`);
+                // Verificar si ya estamos rastreando este contrato O si acabamos de finalizarlo
+                const alreadyTracking = botState.activeContractId === accuContract.contract_id;
+                const justFinalized = botState.activeContractId === null && botState.currentEngine === null;
                 
-                const alreadySubscribed = botState.activeContractId === accuContract.contract_id;
-                
-                botState.activeContractId = accuContract.contract_id;
-                botState.currentContractId = accuContract.contract_id;
-                botState.currentContractType = 'ACCU';
-                botState.currentEngine = 'ACCUMULATOR';
-                botState.isBuying = false;
-                
-                if (!alreadySubscribed) {
+                if (alreadyTracking) {
+                    console.log(`🛡️ [KRAKEN] Contrato ACCU ${accuContract.contract_id} ya está siendo rastreado. Omitiendo adopción duplicada.`);
+                } else if (justFinalized) {
+                    // El contrato pudo haberse vendido entre el envío del portfolio request y la respuesta
+                    console.log(`📡 [KRAKEN] Contrato ACCU ${accuContract.contract_id} detectado pero bot está libre (posible venta reciente). Verificando con suscripción...`);
+                    botState.activeContractId = accuContract.contract_id;
+                    botState.currentContractId = accuContract.contract_id;
+                    botState.currentContractType = 'ACCU';
+                    botState.currentEngine = 'ACCUMULATOR';
+                    botState.isBuying = false;
                     ws.send(JSON.stringify({
                         proposal_open_contract: 1,
                         contract_id: accuContract.contract_id,
                         subscribe: 1
                     }));
+                    saveState();
                 } else {
-                    console.log(`🛡️ [KRAKEN] Ya estamos suscritos al contrato ${accuContract.contract_id}. Omitiendo doble suscripción.`);
+                    // Adoptar contrato huérfano que no estamos rastreando
+                    console.log(`🛡️ [KRAKEN] RECUPERACIÓN: Encontrado contrato ACCU huérfano [ID: ${accuContract.contract_id}] para ${accuContract.symbol}. Adoptándolo...`);
+                    botState.activeContractId = accuContract.contract_id;
+                    botState.currentContractId = accuContract.contract_id;
+                    botState.currentContractType = 'ACCU';
+                    botState.currentEngine = 'ACCUMULATOR';
+                    botState.isBuying = false;
+                    ws.send(JSON.stringify({
+                        proposal_open_contract: 1,
+                        contract_id: accuContract.contract_id,
+                        subscribe: 1
+                    }));
+                    saveState();
                 }
-                saveState();
             } else {
                 console.log(`📡 [KRAKEN] No se encontraron contratos ACCU activos pendientes en Deriv.`);
             }
