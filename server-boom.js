@@ -711,7 +711,7 @@ function tryFireTrade() {
     botState.lastEngineFired = signal.engine;
     
     // ─── GHOST TRADING LOGIC ───
-    if (!botState.ghostNextTradeReal) {
+    if (signal.engine !== 'ACCUMULATOR' && !botState.ghostNextTradeReal) {
         if (!botState.ghostPendingTrade && botState.isRunning) {
             console.log(`👻 GHOST TRADE [${activeSymbol}]: Señal de ${signal.engine} [${signal.contractType} B:${signal.barrier || '-'}]. Simulando entrada virtual...`);
             botState.ghostPendingTrade = {
@@ -726,8 +726,10 @@ function tryFireTrade() {
         return;
     }
     
-    // Si llegamos aquí, ghostNextTradeReal es TRUE. ¡Disparamos REAL!
-    botState.ghostNextTradeReal = false; // Resetear el escudo
+    // Si llegamos aquí, ghostNextTradeReal es TRUE (o es ACCUMULATOR). ¡Disparamos REAL!
+    if (signal.engine !== 'ACCUMULATOR') {
+        botState.ghostNextTradeReal = false; // Resetear el escudo
+    }
     
     const finalStake = getAdjustedStake(botState.stake, signal.stakeMultiplier);
     if (finalStake <= 0) return;
@@ -1344,9 +1346,15 @@ function connectDeriv() {
                 botState.isConnectedToDeriv = false;
                 if (ws) ws.close();
             }
-            if (msg.msg_type === 'buy') {
+            if (msg.msg_type === 'buy' || botState.isBuying) {
                 botState.isBuying = false;
                 console.error(`❌ Error en compra: ${msg.error.message}`);
+                
+                // Si es por límite de posiciones, aplicar cooldown para evitar spam a la API
+                if (msg.error.code === 'OpenPositionLimitExceeded' || msg.error.code === 'RateLimit') {
+                    botState.lossPauseUntil = Date.now() + 60000;
+                    console.log(`⏳ Pausa de seguridad de 60s aplicada debido a límite de la API.`);
+                }
             }
             return;
         }
