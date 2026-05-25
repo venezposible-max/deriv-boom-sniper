@@ -1372,6 +1372,10 @@ function connectDeriv() {
                     console.log(`⏳ Pausa de seguridad de 60s aplicada debido a límite de la API.`);
                 }
             }
+            if (msg.msg_type === 'sell') {
+                botState.isSellingAccumulator = null;
+                console.error(`❌ Error en venta: ${msg.error.message}`);
+            }
             return;
         }
 
@@ -1553,7 +1557,7 @@ function connectDeriv() {
             // ACCUMULATOR automatic Take Profit sell logic
             if (botState.currentContractType === 'ACCU' && c.contract_id === botState.activeContractId && !c.is_sold && botState.isSellingAccumulator !== c.contract_id) {
                 const tickCount = c.tick_count || 0;
-                if (tickCount >= botState.accuTargetTicks) {
+                if (tickCount >= botState.accuTargetTicks && c.is_valid_to_sell) {
                     console.log(`🎯 ACCU alcanzó ${tickCount} ticks. Enviando orden de VENTA automática para asegurar ganancias.`);
                     botState.isSellingAccumulator = c.contract_id; // Flag para evitar llamadas repetidas
                     ws.send(JSON.stringify({ sell: c.contract_id, price: 0 }));
