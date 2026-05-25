@@ -121,7 +121,12 @@ let botState = {
     
     // ─── Enfriamiento inteligente y re-evaluación post-pérdida ───
     lossPauseUntil: null,
-    lossPauseTicksProcessed: 0
+    lossPauseTicksProcessed: 0,
+
+    // ─── Conmutación Simulado / Real ───
+    accountMode: 'demo', // 'demo' | 'real'
+    derivTokenDemo: process.env.DERIV_TOKEN || 'PMIt2RhEjEDbcLD',
+    derivTokenReal: process.env.DERIV_TOKEN_REAL || ''
 };
 
 // ════════════════════════════════════════════════════════════════
@@ -163,6 +168,11 @@ if (fs.existsSync(STATE_FILE)) {
             // Garantizar variables de enfriamiento
             if (botState.lossPauseUntil === undefined) botState.lossPauseUntil = null;
             if (botState.lossPauseTicksProcessed === undefined) botState.lossPauseTicksProcessed = 0;
+            
+            // Garantizar variables de cuenta
+            if (botState.accountMode === undefined) botState.accountMode = 'demo';
+            if (botState.derivTokenDemo === undefined) botState.derivTokenDemo = process.env.DERIV_TOKEN || 'PMIt2RhEjEDbcLD';
+            if (botState.derivTokenReal === undefined) botState.derivTokenReal = process.env.DERIV_TOKEN_REAL || '';
             
             // Forzar solo DIFFER activo para asegurar la premisa del usuario
             botState.engineEvenOdd = false;
@@ -1150,6 +1160,50 @@ app.post('/api/switch-market', (req, res) => {
     return res.json({ success: true, symbol: SYMBOL, message: `Mercado migrado a ${SYMBOL} con éxito.` });
 });
 
+app.post('/api/switch-account', (req, res) => {
+    const { accountMode, tokenDemo, tokenReal } = req.body;
+    
+    if (accountMode !== undefined) {
+        if (accountMode !== 'demo' && accountMode !== 'real') {
+            return res.status(400).json({ success: false, error: 'Modo de cuenta inválido. Debe ser "demo" o "real".' });
+        }
+        botState.accountMode = accountMode;
+    }
+    
+    if (tokenDemo !== undefined) botState.derivTokenDemo = tokenDemo;
+    if (tokenReal !== undefined) botState.derivTokenReal = tokenReal;
+    
+    saveState();
+    
+    // Forzar reconexión con el nuevo token/cuenta
+    botState.isConnectedToDeriv = false;
+    botState.isBuying = false;
+    
+    if (ws) {
+        ws.removeAllListeners();
+        try { ws.terminate(); } catch (e) {}
+        ws = null;
+    }
+    if (reconnectTimeout) {
+        clearTimeout(reconnectTimeout);
+        reconnectTimeout = null;
+    }
+    
+    console.log(`🔄 CAMBIO DE CUENTA: Conmutando a modo ${botState.accountMode.toUpperCase()}`);
+    // Conectar inmediatamente
+    setTimeout(connectDeriv, 1000);
+    
+    return res.json({ 
+        success: true, 
+        message: `Conmutado a cuenta ${botState.accountMode.toUpperCase()} con éxito. Reestableciendo conexión...`,
+        data: {
+            accountMode: botState.accountMode,
+            derivTokenDemo: botState.derivTokenDemo,
+            derivTokenReal: botState.derivTokenReal
+        }
+    });
+});
+
 // ════════════════════════════════════════════════════════════════
 //  COMUNICACIONES WEBSOCKET (CONECTIVIDAD A DERIV)
 // ════════════════════════════════════════════════════════════════
@@ -1176,7 +1230,11 @@ function connectDeriv() {
         console.log('🔌 Conexión establecida con WebSocket de Deriv. Autenticando...');
         setTimeout(() => {
             if (ws && ws.readyState === WebSocket.OPEN) {
-                ws.send(JSON.stringify({ authorize: DERIV_TOKEN }));
+                const activeToken = botState.accountMode === 'real'
+                    ? (botState.derivTokenReal || process.env.DERIV_TOKEN_REAL || '')
+                    : (botState.derivTokenDemo || process.env.DERIV_TOKEN || 'PMIt2RhEjEDbcLD');
+                console.log(`🔌 Enviando solicitud de autorización para cuenta ${botState.accountMode.toUpperCase()}...`);
+                ws.send(JSON.stringify({ authorize: activeToken }));
             }
         }, 3000);
     });

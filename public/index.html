@@ -1494,12 +1494,41 @@ body::before {
         </label>
         <div style="font-size: 11px; margin-top: 6px; font-weight: bold; color: var(--text-muted);" id="quirurgicoStatusDisplay">Modo: Normal</div>
       </div>
+      <div class="control-separator"></div>
+
+      <div class="control-group" style="display:flex; flex-direction:column; align-items:center; min-width: 100px;">
+        <label id="accountLabel" style="color: var(--accent-orange); font-weight: 700;">Cuenta: DEMO</label>
+        <label class="toggle" style="width: 40px; height: 22px; margin-top:4px;">
+          <input type="checkbox" id="toggleAccountMode" onchange="handleAccountModeToggle(this.checked)">
+          <div class="toggle-track" style="border-radius: 12px; background-color: var(--accent-orange);"></div>
+          <div class="toggle-thumb" style="width: 16px; height: 16px; top: 3px; left: 3px;"></div>
+        </label>
+        <div style="font-size: 11px; margin-top: 6px; font-weight: bold; color: var(--text-muted);" id="accountStatusDisplay">Virtual</div>
+      </div>
 
       <div class="control-separator"></div>
 
       <button class="btn btn-reset" onclick="handleResetDay()">
         🔄 Reset Día
       </button>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════ API TOKENS PANEL ═══════════════════════════ -->
+  <div class="section-title">🔑 Configuración de Tokens API (Opcional)</div>
+  <div class="control-card glass" style="margin-top: 10px; padding: 15px; margin-bottom: 20px;">
+    <div style="display: flex; gap: 20px; flex-wrap: wrap; width: 100%;">
+      <div class="control-group" style="flex: 1; min-width: 250px; display: flex; flex-direction: column;">
+        <label style="color: var(--accent-orange); font-weight: 600; margin-bottom: 6px;">Token Cuenta DEMO (Virtual)</label>
+        <input type="password" id="inputDemoToken" placeholder="Pegar Token Virtual (ej. PMIt2Rh...)" onchange="handleTokensChange()" style="width: 100%; padding: 8px 12px; border-radius: 8px; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08); color: #fff; outline: none; transition: border-color 0.2s;" onfocus="this.style.borderColor='var(--accent-orange)'" onblur="this.style.borderColor='rgba(255,255,255,0.08)'">
+      </div>
+      <div class="control-group" style="flex: 1; min-width: 250px; display: flex; flex-direction: column;">
+        <label style="color: var(--accent-green); font-weight: 600; margin-bottom: 6px;">Token Cuenta REAL (USDT)</label>
+        <input type="password" id="inputRealToken" placeholder="Pegar Token Real USDT (ej. CR...)" onchange="handleTokensChange()" style="width: 100%; padding: 8px 12px; border-radius: 8px; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08); color: #fff; outline: none; transition: border-color 0.2s;" onfocus="this.style.borderColor='var(--accent-green)'" onblur="this.style.borderColor='rgba(255,255,255,0.08)'">
+      </div>
+    </div>
+    <div style="font-size: 11px; color: var(--text-muted); margin-top: 10px; display: flex; align-items: center; gap: 5px;">
+      ℹ️ <em>Los tokens se guardan de forma segura en tu servidor persistente de Railway. Si no los configuras aquí, el bot intentará usar las variables de entorno de Railway por defecto.</em>
     </div>
   </div>
 
@@ -1650,18 +1679,21 @@ function animateBalance(target) {
     // Ease out cubic
     const ease = 1 - Math.pow(1 - progress, 3);
     displayedBalance = start + diff * ease;
-    $('balanceDisplay').textContent = '$' + displayedBalance.toLocaleString('en-US', {
+    const curr = state.currency || 'USD';
+    const formatted = displayedBalance.toLocaleString('en-US', {
       minimumFractionDigits: 2,
       maximumFractionDigits: 2
     });
+    $('balanceDisplay').textContent = curr === 'USD' ? '$' + formatted : formatted + ' ' + curr;
     if (progress < 1) {
       requestAnimationFrame(tick);
     } else {
       displayedBalance = target;
-      $('balanceDisplay').textContent = '$' + target.toLocaleString('en-US', {
+      const formattedFinal = target.toLocaleString('en-US', {
         minimumFractionDigits: 2,
         maximumFractionDigits: 2
       });
+      $('balanceDisplay').textContent = curr === 'USD' ? '$' + formattedFinal : formattedFinal + ' ' + curr;
     }
   }
   requestAnimationFrame(tick);
@@ -1669,8 +1701,13 @@ function animateBalance(target) {
 
 // ── Format helpers ─────────────────────────────────────────────────────────
 function formatMoney(val) {
-  const sign = val >= 0 ? '+' : '';
-  return sign + '$' + Math.abs(val).toFixed(2);
+  const sign = val >= 0 ? '+' : '-';
+  const curr = state.currency || 'USD';
+  const absVal = Math.abs(val).toFixed(2);
+  if (curr === 'USD') {
+    return (val >= 0 ? '+' : '') + '$' + absVal;
+  }
+  return sign + absVal + ' ' + curr;
 }
 
 function pnlClass(val) {
@@ -1735,6 +1772,26 @@ function updateUI(data) {
     quiDisplay.textContent = 'Modo: ' + (data.quirurgicoMode ? 'Quirúrgico' : 'Normal');
     quiDisplay.style.color = data.quirurgicoMode ? 'var(--accent-blue)' : 'var(--text-muted)';
   }
+
+  // Account Mode sync
+  const toggleAcc = $('toggleAccountMode');
+  if (toggleAcc) {
+    toggleAcc.checked = data.accountMode === 'real';
+  }
+  const accDisplay = $('accountStatusDisplay');
+  const accLabel = $('accountLabel');
+  if (accDisplay) {
+    accDisplay.textContent = data.accountMode === 'real' ? 'Real' : 'Virtual';
+    accDisplay.style.color = data.accountMode === 'real' ? 'var(--accent-green)' : 'var(--accent-orange)';
+  }
+  if (accLabel) {
+    accLabel.textContent = 'Cuenta: ' + (data.accountMode === 'real' ? 'REAL (' + (data.currency || 'USDT') + ')' : 'DEMO');
+    accLabel.style.color = data.accountMode === 'real' ? 'var(--accent-green)' : 'var(--accent-orange)';
+  }
+
+  // API Tokens sync (only update inputs if not currently focused to avoid blocking user typing)
+  if (document.activeElement !== $('inputDemoToken')) $('inputDemoToken').value = data.demoToken || '';
+  if (document.activeElement !== $('inputRealToken')) $('inputRealToken').value = data.realToken || '';
 
   // Engine cards active state
   updateEngineCard('engineCardEvenOdd', 'statusEvenOdd', data.engineEvenOdd, data.isRunning, data.currentEngine === 'EVEN_ODD');
@@ -1969,9 +2026,14 @@ function renderHistory(history) {
     const resultBadge = isWin
       ? '<span class="result-badge win">✓ Ganada</span>'
       : '<span class="result-badge loss">✗ Perdida</span>';
-    const profitStr = (t.profit >= 0 ? '+' : '') + '$' + Math.abs(t.profit || 0).toFixed(2);
+    const curr = state.currency || 'USD';
+    const absProfit = Math.abs(t.profit || 0).toFixed(2);
+    const sign = t.profit >= 0 ? '+' : '-';
+    const profitStr = curr === 'USD' ? (t.profit >= 0 ? '+' : '') + '$' + absProfit : (t.profit >= 0 ? '+' : '-') + absProfit + ' ' + curr;
     const profitClass = t.profit >= 0 ? 'positive' : 'negative';
-    const balStr = '$' + (t.balanceAfter || 0).toFixed(2);
+    
+    const formattedBal = (t.balanceAfter || 0).toFixed(2);
+    const balStr = curr === 'USD' ? '$' + formattedBal : formattedBal + ' ' + curr;
     const time = formatTimeVE(t.time);
     const num = history.length - idx;
 
@@ -2269,6 +2331,43 @@ async function handleQuirurgicoToggle(checked) {
     showToast(`Modo Quirúrgico ${checked ? 'ACTIVADO (Precisión Quirúrgica 🎯)' : 'desactivado (Modo Normal 🎰)'}`, checked ? 'success' : 'info');
   } catch (e) {
     showToast('Error al actualizar Modo Quirúrgico', 'error');
+  }
+  fetchStatus();
+}
+
+async function handleAccountModeToggle(checked) {
+  const mode = checked ? 'real' : 'demo';
+  try {
+    showToast(`Cambiando de cuenta... Espere por favor 🔄`, 'info');
+    const res = await fetch('/api/config', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ accountMode: mode })
+    });
+    const data = await res.json();
+    if (data.reconnectTriggered) {
+      showToast(`Cuenta cambiada a: ${mode.toUpperCase()}! Reconectando con Deriv... ⚡`, 'success');
+    } else {
+      showToast(`Cuenta cambiada a: ${mode.toUpperCase()}`, 'success');
+    }
+  } catch (e) {
+    showToast('Error al cambiar de cuenta', 'error');
+  }
+  fetchStatus();
+}
+
+async function handleTokensChange() {
+  const demoToken = $('inputDemoToken').value.trim();
+  const realToken = $('inputRealToken').value.trim();
+  try {
+    await fetch('/api/config', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ demoToken, realToken })
+    });
+    showToast('Tokens API actualizados correctamente 🔑', 'success');
+  } catch (e) {
+    showToast('Error al guardar Tokens API', 'error');
   }
   fetchStatus();
 }

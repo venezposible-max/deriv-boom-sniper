@@ -132,7 +132,17 @@ let botState = {
     
     // ─── Enfriamiento inteligente y re-evaluación post-pérdida ───
     lossPauseUntil: null,
-    lossPauseTicksProcessed: 0
+    lossPauseTicksProcessed: 0,
+    
+    // ─── Variables de Cuenta (Virtual vs Real) ───
+    accountMode: 'demo',       // 'demo' | 'real'
+    demoToken: '',             // Token virtual configurado
+    realToken: '',             // Token real de USDT
+    currency: 'USD',            // Divisa actual ('USD' | 'USDT' | etc.)
+    
+    // Alias para compatibilidad universal
+    derivTokenDemo: process.env.DERIV_TOKEN || 'PMIt2RhEjEDbcLD',
+    derivTokenReal: process.env.DERIV_TOKEN_REAL || ''
 };
 
 // ════════════════════════════════════════════════════════════════
@@ -198,6 +208,18 @@ if (fs.existsSync(STATE_FILE)) {
             if (botState.differPrecision98 === undefined) botState.differPrecision98 = false;
             if (botState.franklinPerezLogic === undefined) botState.franklinPerezLogic = true;
             if (botState.quirurgicoMode === undefined) botState.quirurgicoMode = false;
+            
+            // Garantizar variables de Cuenta (Virtual vs Real)
+            if (botState.accountMode === undefined) botState.accountMode = 'demo';
+            if (botState.demoToken === undefined) botState.demoToken = '';
+            if (botState.realToken === undefined) botState.realToken = '';
+            
+            // Garantizar alias
+            if (botState.derivTokenDemo === undefined) botState.derivTokenDemo = botState.demoToken || process.env.DERIV_TOKEN || 'PMIt2RhEjEDbcLD';
+            if (botState.derivTokenReal === undefined) botState.derivTokenReal = botState.realToken || process.env.DERIV_TOKEN_REAL || '';
+            if (botState.demoToken === undefined) botState.demoToken = '';
+            if (botState.realToken === undefined) botState.realToken = '';
+            if (botState.currency === undefined) botState.currency = 'USD';
             
             // Garantizar inicialización segura de variables de La Hidra
             if (botState.hidraLayer === undefined) botState.hidraLayer = 0;
@@ -1015,7 +1037,7 @@ app.post('/api/engine-toggle', (req, res) => {
 });
 
 app.post('/api/config', (req, res) => {
-    const { stake, maxDailyLoss, takeProfit, cooldownMs, maxTradesPerDay, cooldownMode, coberturaEnabled, differPrecision98, quirurgicoMode } = req.body;
+    const { stake, maxDailyLoss, takeProfit, cooldownMs, maxTradesPerDay, cooldownMode, coberturaEnabled, differPrecision98, quirurgicoMode, accountMode, demoToken, realToken } = req.body;
     
     if (stake !== undefined) botState.stake = Math.max(0.35, parseFloat(stake));
     if (maxDailyLoss !== undefined) botState.maxDailyLoss = parseFloat(maxDailyLoss);
@@ -1030,9 +1052,77 @@ app.post('/api/config', (req, res) => {
     if (differPrecision98 !== undefined) botState.differPrecision98 = !!differPrecision98;
     if (quirurgicoMode !== undefined) botState.quirurgicoMode = !!quirurgicoMode;
     
+    if (demoToken !== undefined) botState.demoToken = demoToken;
+    if (realToken !== undefined) botState.realToken = realToken;
+    
+    let reconnectNeeded = false;
+    if (accountMode !== undefined && accountMode !== botState.accountMode) {
+        botState.accountMode = accountMode;
+        reconnectNeeded = true;
+    }
+    
     saveState();
+    
+    if (reconnectNeeded) {
+        console.log(`🔄 CAMBIO DE MODO DE CUENTA DETECTADO (${accountMode.toUpperCase()}). Reconectando WebSocket de forma segura...`);
+        botState.isConnectedToDeriv = false;
+        if (ws) {
+            try { ws.close(); } catch (e) { /* ignored */ }
+        }
+    }
+    
     console.log(`⚙️ CONFIGURACIÓN KRAKEN MODIFICADA.`);
     return res.json({ success: true, message: 'Parámetros actualizados con éxito.' });
+});
+
+app.post('/api/switch-account', (req, res) => {
+    const { accountMode, tokenDemo, tokenReal } = req.body;
+    
+    if (accountMode !== undefined) {
+        if (accountMode !== 'demo' && accountMode !== 'real') {
+            return res.status(400).json({ success: false, error: 'Modo de cuenta inválido. Debe ser "demo" o "real".' });
+        }
+        botState.accountMode = accountMode;
+    }
+    
+    if (tokenDemo !== undefined) {
+        botState.derivTokenDemo = tokenDemo;
+        botState.demoToken = tokenDemo;
+    }
+    if (tokenReal !== undefined) {
+        botState.derivTokenReal = tokenReal;
+        botState.realToken = tokenReal;
+    }
+    
+    saveState();
+    
+    // Forzar reconexión con el nuevo token/cuenta
+    botState.isConnectedToDeriv = false;
+    botState.isBuying = false;
+    
+    if (ws) {
+        ws.removeAllListeners();
+        try { ws.terminate(); } catch (e) {}
+        ws = null;
+    }
+    if (reconnectTimeout) {
+        clearTimeout(reconnectTimeout);
+        reconnectTimeout = null;
+    }
+    
+    console.log(`🔄 CAMBIO DE CUENTA: Conmutando a modo ${botState.accountMode.toUpperCase()}`);
+    // Conectar inmediatamente
+    setTimeout(connectDeriv, 1000);
+    
+    return res.json({ 
+        success: true, 
+        message: `Conmutado a cuenta ${botState.accountMode.toUpperCase()} con éxito. Reestableciendo conexión...`,
+        data: {
+            accountMode: botState.accountMode,
+            derivTokenDemo: botState.derivTokenDemo,
+            derivTokenReal: botState.derivTokenReal
+        }
+    });
 });
 
 app.post('/api/switch-market', (req, res) => {
@@ -1139,7 +1229,12 @@ function connectDeriv() {
         
         setTimeout(() => {
             if (ws && ws.readyState === WebSocket.OPEN) {
-                ws.send(JSON.stringify({ authorize: DERIV_TOKEN }));
+                const tokenReal = botState.derivTokenReal || botState.realToken || process.env.DERIV_TOKEN_REAL || '';
+                const tokenDemo = botState.derivTokenDemo || botState.demoToken || process.env.DERIV_TOKEN_DEMO || process.env.DERIV_TOKEN || 'PMIt2RhEjEDbcLD';
+                const activeToken = botState.accountMode === 'real' ? tokenReal : tokenDemo;
+                
+                console.log(`🔌 [WEBSOCKET] Solicitando autorización para cuenta ${botState.accountMode.toUpperCase()}...`);
+                ws.send(JSON.stringify({ authorize: activeToken }));
             }
         }, 3000);
     });
@@ -1154,8 +1249,9 @@ function connectDeriv() {
         }
         
         if (msg.msg_type === 'authorize' && msg.authorize) {
-            console.log(`✅ Autenticación exitosa en KRAKEN: ${msg.authorize.email}`);
+            console.log(`✅ Autenticación exitosa en KRAKEN: ${msg.authorize.email} [Moneda: ${msg.authorize.currency || 'USD'}]`);
             botState.isConnectedToDeriv = true;
+            botState.currency = msg.authorize.currency || 'USD';
             
             ws.send(JSON.stringify({ forget_all: 'ticks' }));
             ws.send(JSON.stringify({ forget_all: 'proposal_open_contract' }));
