@@ -609,9 +609,10 @@ function tryFireTrade() {
         }
     }
     
-    // Failsafe de contrato colgado (15 segundos)
-    if (botState.activeContractId && (now - botState.lastTradeTime) > 15000) {
-        console.log(`⚠️ FAILSAFE: Contrato ${botState.activeContractId} colgado. Liberando bot.`);
+    // Failsafe de contrato colgado (15 segundos para normales, 120 segundos para ACCUMULATOR)
+    const failsafeTimeout = botState.currentContractType === 'ACCU' ? 120000 : 15000;
+    if (botState.activeContractId && (now - botState.lastTradeTime) > failsafeTimeout) {
+        console.log(`⚠️ FAILSAFE: Contrato ${botState.currentContractType || ''} ${botState.activeContractId} colgado. Liberando bot.`);
         botState.activeContractId = null;
         botState.currentContractId = null;
         botState.isBuying = false;
@@ -1297,6 +1298,21 @@ function connectDeriv() {
             
             ws.send(JSON.stringify({ forget_all: 'ticks' }));
             ws.send(JSON.stringify({ forget_all: 'proposal_open_contract' }));
+            
+            // Si hay un contrato activo en memoria, re-suscribirse tras limpiar
+            if (botState.activeContractId) {
+                console.log(`🔄 [RECONEXIÓN] Re-suscribiendo al contrato activo: ID ${botState.activeContractId}`);
+                ws.send(JSON.stringify({
+                    proposal_open_contract: 1,
+                    contract_id: botState.activeContractId,
+                    subscribe: 1
+                }));
+            }
+            
+            // Consultar portafolio para auditar si hay contratos ACCU colgados en Deriv
+            console.log(`📡 [KRAKEN] Auditando posiciones abiertas en Deriv...`);
+            ws.send(JSON.stringify({ portfolio: 1 }));
+            
             // Descargar historial de 300 ticks espaciado (Pacing de 250ms) para evitar tasa de límite (Rate Limit 80 req/min de Deriv)
             setTimeout(() => {
                 if (ws && ws.readyState === WebSocket.OPEN) {
@@ -1357,6 +1373,28 @@ function connectDeriv() {
                 }
             }
             return;
+        }
+
+        if (msg.msg_type === 'portfolio' && msg.portfolio) {
+            const contracts = msg.portfolio.contracts || [];
+            const accuContract = contracts.find(c => c.contract_type === 'ACCU');
+            if (accuContract) {
+                console.log(`🛡️ [KRAKEN] RECUPERACIÓN: Encontrado contrato ACCU activo en Deriv [ID: ${accuContract.contract_id}] para ${accuContract.symbol}. Adoptándolo...`);
+                botState.activeContractId = accuContract.contract_id;
+                botState.currentContractId = accuContract.contract_id;
+                botState.currentContractType = 'ACCU';
+                botState.currentEngine = 'ACCUMULATOR';
+                botState.isBuying = false;
+                
+                ws.send(JSON.stringify({
+                    proposal_open_contract: 1,
+                    contract_id: accuContract.contract_id,
+                    subscribe: 1
+                }));
+                saveState();
+            } else {
+                console.log(`📡 [KRAKEN] No se encontraron contratos ACCU activos pendientes en Deriv.`);
+            }
         }
         
         if (msg.msg_type === 'balance' && msg.balance) {

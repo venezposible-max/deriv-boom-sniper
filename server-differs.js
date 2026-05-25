@@ -129,7 +129,9 @@ let botState = {
     // ─── Conmutación Simulado / Real ───
     accountMode: 'demo', // 'demo' | 'real'
     derivTokenDemo: process.env.DERIV_TOKEN || 'PMIt2RhEjEDbcLD',
-    derivTokenReal: process.env.DERIV_TOKEN_REAL || ''
+    derivTokenReal: process.env.DERIV_TOKEN_REAL || '',
+    demoToken: '',
+    realToken: ''
 };
 
 // ════════════════════════════════════════════════════════════════
@@ -177,6 +179,8 @@ if (fs.existsSync(STATE_FILE)) {
             if (botState.accountMode === undefined) botState.accountMode = 'demo';
             if (botState.derivTokenDemo === undefined) botState.derivTokenDemo = process.env.DERIV_TOKEN || 'PMIt2RhEjEDbcLD';
             if (botState.derivTokenReal === undefined) botState.derivTokenReal = process.env.DERIV_TOKEN_REAL || '';
+            if (botState.demoToken === undefined) botState.demoToken = '';
+            if (botState.realToken === undefined) botState.realToken = '';
             
             // Forzar solo DIFFER activo para asegurar la premisa del usuario
             botState.engineEvenOdd = false;
@@ -1118,7 +1122,7 @@ app.post('/api/engine-toggle', (req, res) => {
 });
 
 app.post('/api/config', (req, res) => {
-    const { stake, maxDailyLoss, takeProfit, cooldownMs, maxTradesPerDay, cooldownMode, coberturaEnabled, differPrecision98 } = req.body;
+    const { stake, maxDailyLoss, takeProfit, cooldownMs, maxTradesPerDay, cooldownMode, coberturaEnabled, differPrecision98, accountMode, demoToken, realToken } = req.body;
     
     if (stake !== undefined) botState.stake = Math.max(0.35, parseFloat(stake));
     if (maxDailyLoss !== undefined) botState.maxDailyLoss = parseFloat(maxDailyLoss);
@@ -1132,9 +1136,41 @@ app.post('/api/config', (req, res) => {
     if (coberturaEnabled !== undefined) botState.coberturaEnabled = !!coberturaEnabled;
     if (differPrecision98 !== undefined) botState.differPrecision98 = !!differPrecision98;
     
+    if (demoToken !== undefined) {
+        botState.demoToken = demoToken;
+        botState.derivTokenDemo = demoToken || process.env.DERIV_TOKEN || 'PMIt2RhEjEDbcLD';
+    }
+    if (realToken !== undefined) {
+        botState.realToken = realToken;
+        botState.derivTokenReal = realToken || process.env.DERIV_TOKEN_REAL || '';
+    }
+    
+    let reconnectNeeded = false;
+    if (accountMode !== undefined && accountMode !== botState.accountMode) {
+        botState.accountMode = accountMode;
+        reconnectNeeded = true;
+    }
+    
     saveState();
+    
+    if (reconnectNeeded) {
+        console.log(`🔄 CAMBIO DE MODO DE CUENTA DETECTADO (${accountMode.toUpperCase()}). Reconectando WebSocket de forma segura...`);
+        botState.isConnectedToDeriv = false;
+        botState.isBuying = false;
+        if (ws) {
+            ws.removeAllListeners();
+            try { ws.terminate(); } catch (e) {}
+            ws = null;
+        }
+        if (reconnectTimeout) {
+            clearTimeout(reconnectTimeout);
+            reconnectTimeout = null;
+        }
+        setTimeout(connectDeriv, 1000);
+    }
+    
     console.log(`⚙️ CONFIGURACIÓN KRAKEN MODIFICADA.`);
-    return res.json({ success: true, message: 'Parámetros actualizados con éxito.' });
+    return res.json({ success: true, reconnectTriggered: reconnectNeeded, message: 'Parámetros actualizados con éxito.' });
 });
 
 app.post('/api/switch-market', (req, res) => {
