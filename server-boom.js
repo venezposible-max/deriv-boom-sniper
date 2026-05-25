@@ -1384,17 +1384,24 @@ function connectDeriv() {
             const accuContract = contracts.find(c => c.contract_type === 'ACCU');
             if (accuContract) {
                 console.log(`🛡️ [KRAKEN] RECUPERACIÓN: Encontrado contrato ACCU activo en Deriv [ID: ${accuContract.contract_id}] para ${accuContract.symbol}. Adoptándolo...`);
+                
+                const alreadySubscribed = botState.activeContractId === accuContract.contract_id;
+                
                 botState.activeContractId = accuContract.contract_id;
                 botState.currentContractId = accuContract.contract_id;
                 botState.currentContractType = 'ACCU';
                 botState.currentEngine = 'ACCUMULATOR';
                 botState.isBuying = false;
                 
-                ws.send(JSON.stringify({
-                    proposal_open_contract: 1,
-                    contract_id: accuContract.contract_id,
-                    subscribe: 1
-                }));
+                if (!alreadySubscribed) {
+                    ws.send(JSON.stringify({
+                        proposal_open_contract: 1,
+                        contract_id: accuContract.contract_id,
+                        subscribe: 1
+                    }));
+                } else {
+                    console.log(`🛡️ [KRAKEN] Ya estamos suscritos al contrato ${accuContract.contract_id}. Omitiendo doble suscripción.`);
+                }
                 saveState();
             } else {
                 console.log(`📡 [KRAKEN] No se encontraron contratos ACCU activos pendientes en Deriv.`);
@@ -1556,7 +1563,7 @@ function connectDeriv() {
             
             // ACCUMULATOR automatic Take Profit sell logic
             if (botState.currentContractType === 'ACCU' && c.contract_id === botState.activeContractId && !c.is_sold && botState.isSellingAccumulator !== c.contract_id) {
-                const tickCount = c.tick_count || 0;
+                const tickCount = c.tick_stream ? c.tick_stream.length : 0;
                 if (tickCount >= botState.accuTargetTicks && c.is_valid_to_sell) {
                     console.log(`🎯 ACCU alcanzó ${tickCount} ticks. Enviando orden de VENTA automática para asegurar ganancias.`);
                     botState.isSellingAccumulator = c.contract_id; // Flag para evitar llamadas repetidas
