@@ -102,6 +102,11 @@ let botState = {
     // ─── Interruptores de motores
     engineEvenOdd: true,
     engineOverUnder: true,
+    engineAccumulator: false,
+    
+    // ─── Configuraciones Acumulador
+    accuGrowthRate: 0.03,
+    accuTargetTicks: 3,
     
     // ─── Variables del Escudo de Trade Fantasma (Ghost Shield) ───
     ghostNextTradeReal: false,
@@ -116,7 +121,8 @@ let botState = {
     // ─── Métricas por motor ───
     engineStats: {
         EVEN_ODD: { wins: 0, losses: 0, pnl: 0, autoDisabled: false },
-        OVER_UNDER: { wins: 0, losses: 0, pnl: 0, autoDisabled: false }
+        OVER_UNDER: { wins: 0, losses: 0, pnl: 0, autoDisabled: false },
+        ACCUMULATOR: { wins: 0, losses: 0, pnl: 0, autoDisabled: false }
     },
     
     // ─── Analíticas ───
@@ -208,6 +214,10 @@ if (fs.existsSync(STATE_FILE)) {
             if (botState.differPrecision98 === undefined) botState.differPrecision98 = false;
             if (botState.franklinPerezLogic === undefined) botState.franklinPerezLogic = true;
             if (botState.quirurgicoMode === undefined) botState.quirurgicoMode = false;
+            
+            if (botState.engineAccumulator === undefined) botState.engineAccumulator = false;
+            if (botState.accuGrowthRate === undefined) botState.accuGrowthRate = 0.03;
+            if (botState.accuTargetTicks === undefined) botState.accuTargetTicks = 3;
             
             // Garantizar variables de Cuenta (Virtual vs Real)
             if (botState.accountMode === undefined) botState.accountMode = 'demo';
@@ -543,6 +553,24 @@ function evaluateOverUnder(mState) {
     return null;
 }
 
+/**
+ * Motor 5: ACUMULADORES
+ * Operación continua de acumulación con salida rápida
+ */
+function evaluateAccumulator(mState) {
+    const hist = mState.digitHistory;
+    if (hist.length < 10) return null;
+    
+    return {
+        engine: 'ACCUMULATOR',
+        contractType: 'ACCU',
+        barrier: null,
+        stakeMultiplier: 1.0,
+        reason: `Accumulator Growth ${botState.accuGrowthRate * 100}% | Ticks Objetivo: ${botState.accuTargetTicks}`,
+        entropy: parseFloat(mState.shannonEntropy)
+    };
+}
+
 
 
 
@@ -659,9 +687,11 @@ function tryFireTrade() {
             const nextPriority = botState.lastEngineFired === 'OVER_UNDER' ? 'EVEN_ODD' : 'OVER_UNDER';
             
             if (nextPriority === 'EVEN_ODD') {
+                if (botState.engineAccumulator && !signal) signal = evaluateAccumulator(mState);
                 if (botState.engineEvenOdd && !signal) signal = evaluateEvenOdd(mState);
                 if (botState.engineOverUnder && !signal) signal = evaluateOverUnder(mState);
             } else {
+                if (botState.engineAccumulator && !signal) signal = evaluateAccumulator(mState);
                 if (botState.engineOverUnder && !signal) signal = evaluateOverUnder(mState);
                 if (botState.engineEvenOdd && !signal) signal = evaluateEvenOdd(mState);
             }
@@ -715,11 +745,16 @@ function tryFireTrade() {
             basis: 'stake',
             contract_type: signal.contractType,
             currency: 'USD',
-            symbol: activeSymbol,
-            duration: 1,
-            duration_unit: 't'
+            symbol: activeSymbol
         }
     };
+    
+    if (signal.contractType === 'ACCU') {
+        buyRequest.parameters.growth_rate = botState.accuGrowthRate || 0.03;
+    } else {
+        buyRequest.parameters.duration = 1;
+        buyRequest.parameters.duration_unit = 't';
+    }
     
     if (signal.barrier !== null) {
         buyRequest.parameters.barrier = signal.barrier;
@@ -728,8 +763,8 @@ function tryFireTrade() {
     botState.isBuying = true;
     botState.lastTradeTime = now;
     
-    const emojis = { EVEN_ODD: '🎰', OVER_UNDER: '📊' };
-    const names = { EVEN_ODD: 'PAR/IMPAR', OVER_UNDER: 'OVER/UNDER' };
+    const emojis = { EVEN_ODD: '🎰', OVER_UNDER: '📊', ACCUMULATOR: '📈' };
+    const names = { EVEN_ODD: 'PAR/IMPAR', OVER_UNDER: 'OVER/UNDER', ACCUMULATOR: 'ACUMULADOR' };
     
     console.log(`${emojis[signal.engine] || '🎲'} DISPARO REAL [${activeSymbol} - ${names[signal.engine]}] | ${signal.contractType} B:${signal.barrier || 'N/A'} | Stake: $${finalStake.toFixed(2)} | ${signal.reason}`);
     
@@ -758,7 +793,7 @@ function finalizeTrade(c) {
     const engine = botState.currentEngine || 'EVEN_ODD';
     const cType = botState.currentContractType || 'DIGITEVEN';
     const barrier = botState.currentBarrier;
-    const name = { EVEN_ODD: 'PAR/IMPAR', OVER_UNDER: 'OVER/UNDER' }[engine] || engine;
+    const name = { EVEN_ODD: 'PAR/IMPAR', OVER_UNDER: 'OVER/UNDER', ACCUMULATOR: 'ACUMULADOR' }[engine] || engine;
     
     if (isWin) {
         botState.winsSession++;
@@ -996,7 +1031,8 @@ app.post('/api/control', (req, res) => {
         
         botState.engineStats = {
             EVEN_ODD: { wins: 0, losses: 0, pnl: 0, autoDisabled: false },
-            OVER_UNDER: { wins: 0, losses: 0, pnl: 0, autoDisabled: false }
+            OVER_UNDER: { wins: 0, losses: 0, pnl: 0, autoDisabled: false },
+            ACCUMULATOR: { wins: 0, losses: 0, pnl: 0, autoDisabled: false }
         };
         saveState();
         console.log('🔄 REGISTROS DE REINICIO DIARIO: Métricas restablecidas en KRAKEN.');
@@ -1014,7 +1050,8 @@ app.post('/api/engine-toggle', (req, res) => {
     const { engine, enabled } = req.body;
     const engineMap = {
         'EVEN_ODD': 'engineEvenOdd',
-        'OVER_UNDER': 'engineOverUnder'
+        'OVER_UNDER': 'engineOverUnder',
+        'ACCUMULATOR': 'engineAccumulator'
     };
     
     if (!engineMap[engine]) {
@@ -1037,7 +1074,7 @@ app.post('/api/engine-toggle', (req, res) => {
 });
 
 app.post('/api/config', (req, res) => {
-    const { stake, maxDailyLoss, takeProfit, cooldownMs, maxTradesPerDay, cooldownMode, coberturaEnabled, differPrecision98, quirurgicoMode, accountMode, demoToken, realToken } = req.body;
+    const { stake, maxDailyLoss, takeProfit, cooldownMs, maxTradesPerDay, cooldownMode, coberturaEnabled, differPrecision98, quirurgicoMode, accountMode, demoToken, realToken, accuGrowthRate, accuTargetTicks } = req.body;
     
     if (stake !== undefined) botState.stake = Math.max(0.35, parseFloat(stake));
     if (maxDailyLoss !== undefined) botState.maxDailyLoss = parseFloat(maxDailyLoss);
@@ -1051,6 +1088,9 @@ app.post('/api/config', (req, res) => {
     if (coberturaEnabled !== undefined) botState.coberturaEnabled = !!coberturaEnabled;
     if (differPrecision98 !== undefined) botState.differPrecision98 = !!differPrecision98;
     if (quirurgicoMode !== undefined) botState.quirurgicoMode = !!quirurgicoMode;
+    
+    if (accuGrowthRate !== undefined) botState.accuGrowthRate = parseFloat(accuGrowthRate);
+    if (accuTargetTicks !== undefined) botState.accuTargetTicks = parseInt(accuTargetTicks);
     
     if (demoToken !== undefined) botState.demoToken = demoToken;
     if (realToken !== undefined) botState.realToken = realToken;
@@ -1462,7 +1502,20 @@ function connectDeriv() {
         
         if (msg.msg_type === 'proposal_open_contract') {
             const c = msg.proposal_open_contract;
-            if (!c || !c.is_sold) return;
+            if (!c) return;
+            
+            // ACCUMULATOR automatic Take Profit sell logic
+            if (botState.currentContractType === 'ACCU' && c.contract_id === botState.activeContractId && !c.is_sold && botState.isSellingAccumulator !== c.contract_id) {
+                const tickCount = c.tick_count || 0;
+                if (tickCount >= botState.accuTargetTicks) {
+                    console.log(`🎯 ACCU alcanzó ${tickCount} ticks. Enviando orden de VENTA automática para asegurar ganancias.`);
+                    botState.isSellingAccumulator = c.contract_id; // Flag para evitar llamadas repetidas
+                    ws.send(JSON.stringify({ sell: c.contract_id, price: 0 }));
+                }
+            }
+            
+            if (!c.is_sold) return;
+            botState.isSellingAccumulator = null;
             finalizeTrade(c);
         }
     });

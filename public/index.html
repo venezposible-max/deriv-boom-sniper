@@ -1391,8 +1391,49 @@ body::before {
       </div>
     </div>
 
-
-
+    <!-- ACCUMULATOR -->
+    <div class="engine-card glass engine-accumulator" id="engineCardAccumulator">
+      <div class="engine-header">
+        <div class="engine-info">
+          <div class="engine-icon">📈</div>
+          <div>
+            <div class="engine-name">ACUMULADOR</div>
+            <div class="engine-subtitle">Crecimiento Constante</div>
+          </div>
+        </div>
+        <label class="toggle">
+          <input type="checkbox" id="toggleAccumulator">
+          <div class="toggle-track"></div>
+          <div class="toggle-thumb"></div>
+        </label>
+      </div>
+      <div class="engine-status">
+        <span class="engine-status-text disabled" id="statusAccumulator">
+          <span>●</span> Desactivado
+        </span>
+      </div>
+      <div class="darwin-badge" id="darwinBadgeAccumulator">
+        🦎 Auto-desactivado por Darwin
+      </div>
+      <div class="engine-stats">
+        <div class="engine-stat">
+          <span class="es-label">Ganadas</span>
+          <span class="es-value positive" id="accuWins">0</span>
+        </div>
+        <div class="engine-stat">
+          <span class="es-label">Perdidas</span>
+          <span class="es-value negative" id="accuLosses">0</span>
+        </div>
+        <div class="engine-stat">
+          <span class="es-label">PnL</span>
+          <span class="es-value neutral" id="accuPnl">$0.00</span>
+        </div>
+        <div class="engine-stat">
+          <span class="es-label">Win Rate</span>
+          <span class="es-value neutral" id="accuWinRate">0.0%</span>
+        </div>
+      </div>
+    </div>
 
   </div>
 
@@ -1469,6 +1510,18 @@ body::before {
       <div class="control-group">
         <label>Take Profit ($)</label>
         <input type="number" id="inputTakeProfit" value="15" min="1" max="1000" step="1" onchange="handleConfigChange()" onblur="handleConfigChange()">
+      </div>
+
+      <div class="control-separator"></div>
+
+      <div class="control-group">
+        <label>ACCU: Crecim. (%)</label>
+        <input type="number" id="inputAccuGrowthRate" value="3" min="1" max="5" step="1" onchange="handleConfigChange()" onblur="handleConfigChange()">
+      </div>
+
+      <div class="control-group">
+        <label>ACCU: Meta Ticks</label>
+        <input type="number" id="inputAccuTargetTicks" value="3" min="1" max="10" step="1" onchange="handleConfigChange()" onblur="handleConfigChange()">
       </div>
 
       <div class="control-separator"></div>
@@ -1599,6 +1652,7 @@ let state = {
   engineEvenOdd: true,
   engineOverUnder: true,
   engineMatch: true,
+  engineAccumulator: false,
   engineStats: {
     EVEN_ODD: { wins: 0, losses: 0, pnl: 0, autoDisabled: false },
     OVER_UNDER: { wins: 0, losses: 0, pnl: 0, autoDisabled: false },
@@ -1751,6 +1805,7 @@ function updateUI(data) {
   // Engine toggles sync
   $('toggleEvenOdd').checked = data.engineEvenOdd;
   $('toggleOverUnder').checked = data.engineOverUnder;
+  $('toggleAccumulator').checked = !!data.engineAccumulator;
 
   // Martingale sync
   const toggleCob = $('toggleCobertura');
@@ -1796,17 +1851,20 @@ function updateUI(data) {
   // Engine cards active state
   updateEngineCard('engineCardEvenOdd', 'statusEvenOdd', data.engineEvenOdd, data.isRunning, data.currentEngine === 'EVEN_ODD');
   updateEngineCard('engineCardOverUnder', 'statusOverUnder', data.engineOverUnder, data.isRunning, data.currentEngine === 'OVER_UNDER');
+  updateEngineCard('engineCardAccumulator', 'statusAccumulator', data.engineAccumulator, data.isRunning, data.currentEngine === 'ACCUMULATOR');
 
   // Engine stats
   updateEngineStats('eo', data.engineStats.EVEN_ODD);
   updateEngineStats('ou', data.engineStats.OVER_UNDER);
+  if (data.engineStats.ACCUMULATOR) updateEngineStats('accu', data.engineStats.ACCUMULATOR);
 
   // Darwin mode badges toggling
-  ['EVEN_ODD', 'OVER_UNDER'].forEach(eng => {
+  ['EVEN_ODD', 'OVER_UNDER', 'ACCUMULATOR'].forEach(eng => {
     const stats = data.engineStats[eng];
     const badgeId = {
       'EVEN_ODD': 'darwinBadgeEvenOdd',
-      'OVER_UNDER': 'darwinBadgeOverUnder'
+      'OVER_UNDER': 'darwinBadgeOverUnder',
+      'ACCUMULATOR': 'darwinBadgeAccumulator'
     }[eng];
     const badge = $(badgeId);
     if (badge) {
@@ -1866,6 +1924,8 @@ function updateUI(data) {
   if (document.activeElement !== $('inputStake')) $('inputStake').value = data.stake;
   if (document.activeElement !== $('inputMaxLoss')) $('inputMaxLoss').value = data.maxDailyLoss;
   if (document.activeElement !== $('inputTakeProfit')) $('inputTakeProfit').value = data.takeProfit;
+  if (document.activeElement !== $('inputAccuGrowthRate')) $('inputAccuGrowthRate').value = (data.accuGrowthRate || 0.03) * 100;
+  if (document.activeElement !== $('inputAccuTargetTicks')) $('inputAccuTargetTicks').value = data.accuTargetTicks || 3;
 
 
 
@@ -1929,7 +1989,8 @@ function updateEngineStats(prefix, stats) {
 function pulseEngine(engineKey) {
   const map = {
     'EVEN_ODD': 'engineCardEvenOdd',
-    'OVER_UNDER': 'engineCardOverUnder'
+    'OVER_UNDER': 'engineCardOverUnder',
+    'ACCUMULATOR': 'engineCardAccumulator'
   };
   const card = $(map[engineKey]);
   if (!card) return;
@@ -2284,11 +2345,13 @@ function handleConfigChange() {
     const stake = parseFloat($('inputStake').value) || 1;
     const maxDailyLoss = parseFloat($('inputMaxLoss').value) || 20;
     const takeProfit = parseFloat($('inputTakeProfit').value) || 15;
+    const accuGrowthRate = (parseFloat($('inputAccuGrowthRate').value) || 3) / 100;
+    const accuTargetTicks = parseInt($('inputAccuTargetTicks').value) || 3;
     try {
       await fetch('/api/config', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ stake, maxDailyLoss, takeProfit })
+        body: JSON.stringify({ stake, maxDailyLoss, takeProfit, accuGrowthRate, accuTargetTicks })
       });
       showToast('Configuración actualizada', 'success');
     } catch (e) {
@@ -2304,6 +2367,9 @@ $('toggleEvenOdd').addEventListener('change', function() {
 });
 $('toggleOverUnder').addEventListener('change', function() {
   handleEngineToggle('OVER_UNDER', this.checked);
+});
+$('toggleAccumulator').addEventListener('change', function() {
+  handleEngineToggle('ACCUMULATOR', this.checked);
 });
 
 
