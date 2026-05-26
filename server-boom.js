@@ -1534,13 +1534,16 @@ function connectDeriv() {
                     else if (pt.contractType === 'DIGITOVER') won = digit > parseInt(pt.barrier);
                     else if (pt.contractType === 'DIGITUNDER') won = digit < parseInt(pt.barrier);
                     else if (pt.contractType === 'ACCU') {
-                        // El Acumulador pierde si el salto de precio actual respecto a la entrada es mayor a la tasa de crecimiento
+                        // El Acumulador pierde si el salto de precio actual respecto a la entrada es mayor a la barrera.
+                        // La tasa de crecimiento (ej. 3%) NO es la barrera. En Deriv las barreras de ACCU son muy estrechas (aprox 0.01% - 0.02%).
+                        const simulatedBarrier = 0.00015; // 0.015% de salto permitido
                         const priceChangePct = Math.abs((mState.lastTickPrice - pt.entryTickPrice) / pt.entryTickPrice);
-                        won = priceChangePct <= (botState.accuGrowthRate || 0.03);
+                        won = priceChangePct <= simulatedBarrier;
                     }
                     
                     if (pt.contractType === 'ACCU') {
-                        console.log(`👻 GHOST RESULT [${sym}]: ${pt.engine} [${pt.contractType}] -> Salto de precio: ${(Math.abs((mState.lastTickPrice - pt.entryTickPrice) / pt.entryTickPrice) * 100).toFixed(4)}% -> ${won ? 'WIN ✅' : 'LOSS ❌ (SPIKE DETECTADO)'}`);
+                        const priceChangePct = Math.abs((mState.lastTickPrice - pt.entryTickPrice) / pt.entryTickPrice);
+                        console.log(`👻 GHOST RESULT [${sym}]: ${pt.engine} [${pt.contractType}] -> Salto de precio: ${(priceChangePct * 100).toFixed(4)}% -> ${won ? 'WIN ✅' : 'LOSS ❌ (SPIKE DETECTADO)'}`);
                     } else {
                         console.log(`👻 GHOST RESULT [${sym}]: ${pt.engine} [${pt.contractType}] -> Result digit: ${digit} -> ${won ? 'WIN ✅' : 'LOSS ❌'}`);
                     }
