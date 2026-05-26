@@ -106,7 +106,7 @@ let botState = {
     
     // ─── Configuraciones Acumulador
     accuGrowthRate: 0.03,
-    accuTargetTicks: 3,
+    accuTargetTicks: 1,
     
     // ─── Variables del Escudo de Trade Fantasma (Ghost Shield) ───
     ghostNextTradeReal: false,
@@ -217,7 +217,7 @@ if (fs.existsSync(STATE_FILE)) {
             
             if (botState.engineAccumulator === undefined) botState.engineAccumulator = false;
             if (botState.accuGrowthRate === undefined) botState.accuGrowthRate = 0.03;
-            if (botState.accuTargetTicks === undefined) botState.accuTargetTicks = 3;
+            if (botState.accuTargetTicks === undefined) botState.accuTargetTicks = 1;
             
             // Garantizar variables de Cuenta (Virtual vs Real)
             if (botState.accountMode === undefined) botState.accountMode = 'demo';
@@ -712,7 +712,7 @@ function tryFireTrade() {
     botState.lastEngineFired = signal.engine;
     
     // ─── GHOST TRADING LOGIC ───
-    if (signal.engine !== 'ACCUMULATOR' && !botState.ghostNextTradeReal) {
+    if (!botState.ghostNextTradeReal) {
         if (!botState.ghostPendingTrade && botState.isRunning) {
             console.log(`👻 GHOST TRADE [${activeSymbol}]: Señal de ${signal.engine} [${signal.contractType} B:${signal.barrier || '-'}]. Simulando entrada virtual...`);
             botState.ghostPendingTrade = {
@@ -727,10 +727,8 @@ function tryFireTrade() {
         return;
     }
     
-    // Si llegamos aquí, ghostNextTradeReal es TRUE (o es ACCUMULATOR). ¡Disparamos REAL!
-    if (signal.engine !== 'ACCUMULATOR') {
-        botState.ghostNextTradeReal = false; // Resetear el escudo
-    }
+    // Si llegamos aquí, ghostNextTradeReal es TRUE. ¡Disparamos REAL!
+    botState.ghostNextTradeReal = false; // Resetear el escudo
     
     const finalStake = getAdjustedStake(botState.stake, signal.stakeMultiplier);
     if (finalStake <= 0) return;
@@ -1535,8 +1533,17 @@ function connectDeriv() {
                     else if (pt.contractType === 'DIGITODD') won = digit % 2 !== 0;
                     else if (pt.contractType === 'DIGITOVER') won = digit > parseInt(pt.barrier);
                     else if (pt.contractType === 'DIGITUNDER') won = digit < parseInt(pt.barrier);
+                    else if (pt.contractType === 'ACCU') {
+                        // El Acumulador pierde si el salto de precio actual respecto a la entrada es mayor a la tasa de crecimiento
+                        const priceChangePct = Math.abs((digitPrice - pt.entryTickPrice) / pt.entryTickPrice);
+                        won = priceChangePct <= (botState.accuGrowthRate || 0.03);
+                    }
                     
-                    console.log(`👻 GHOST RESULT [${sym}]: ${pt.engine} [${pt.contractType}] -> Result digit: ${digit} -> ${won ? 'WIN ✅' : 'LOSS ❌'}`);
+                    if (pt.contractType === 'ACCU') {
+                        console.log(`👻 GHOST RESULT [${sym}]: ${pt.engine} [${pt.contractType}] -> Salto de precio: ${(Math.abs((digitPrice - pt.entryTickPrice) / pt.entryTickPrice) * 100).toFixed(4)}% -> ${won ? 'WIN ✅' : 'LOSS ❌ (SPIKE DETECTADO)'}`);
+                    } else {
+                        console.log(`👻 GHOST RESULT [${sym}]: ${pt.engine} [${pt.contractType}] -> Result digit: ${digit} -> ${won ? 'WIN ✅' : 'LOSS ❌'}`);
+                    }
                     
                     botState.ghostPendingTrade = null; // Limpiar para el siguiente
                     
