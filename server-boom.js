@@ -1535,12 +1535,12 @@ function connectDeriv() {
                     else if (pt.contractType === 'DIGITUNDER') won = digit < parseInt(pt.barrier);
                     else if (pt.contractType === 'ACCU') {
                         // El Acumulador pierde si el salto de precio actual respecto a la entrada es mayor a la tasa de crecimiento
-                        const priceChangePct = Math.abs((digitPrice - pt.entryTickPrice) / pt.entryTickPrice);
+                        const priceChangePct = Math.abs((mState.lastTickPrice - pt.entryTickPrice) / pt.entryTickPrice);
                         won = priceChangePct <= (botState.accuGrowthRate || 0.03);
                     }
                     
                     if (pt.contractType === 'ACCU') {
-                        console.log(`👻 GHOST RESULT [${sym}]: ${pt.engine} [${pt.contractType}] -> Salto de precio: ${(Math.abs((digitPrice - pt.entryTickPrice) / pt.entryTickPrice) * 100).toFixed(4)}% -> ${won ? 'WIN ✅' : 'LOSS ❌ (SPIKE DETECTADO)'}`);
+                        console.log(`👻 GHOST RESULT [${sym}]: ${pt.engine} [${pt.contractType}] -> Salto de precio: ${(Math.abs((mState.lastTickPrice - pt.entryTickPrice) / pt.entryTickPrice) * 100).toFixed(4)}% -> ${won ? 'WIN ✅' : 'LOSS ❌ (SPIKE DETECTADO)'}`);
                     } else {
                         console.log(`👻 GHOST RESULT [${sym}]: ${pt.engine} [${pt.contractType}] -> Result digit: ${digit} -> ${won ? 'WIN ✅' : 'LOSS ❌'}`);
                     }
