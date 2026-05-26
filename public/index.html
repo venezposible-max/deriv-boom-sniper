@@ -1515,13 +1515,13 @@ body::before {
       <div class="control-separator"></div>
 
       <div class="control-group">
-        <label>ACCU: Crecim. (%)</label>
-        <input type="number" id="inputAccuGrowthRate" value="3" min="1" max="5" step="1" onchange="handleConfigChange()" onblur="handleConfigChange()">
+        <label>ACCU: Crecim. (%) 🔒</label>
+        <input type="number" id="inputAccuGrowthRate" value="3" min="1" max="5" step="1" disabled title="Fijado al 3% para la estrategia Ghost Shield">
       </div>
 
       <div class="control-group">
-        <label>ACCU: Meta Ticks</label>
-        <input type="number" id="inputAccuTargetTicks" value="3" min="1" max="10" step="1" onchange="handleConfigChange()" onblur="handleConfigChange()">
+        <label>ACCU: Meta Ticks 🔒</label>
+        <input type="number" id="inputAccuTargetTicks" value="1" min="1" max="1" step="1" disabled title="Fijado en 1 (Micro-tick Sniper) para la estrategia Ghost Shield">
       </div>
 
       <div class="control-separator"></div>
@@ -2122,7 +2122,7 @@ function renderHistory(history) {
       <td>${engineLabel}</td>
       <td>${t.contractType || t.type || '—'}</td>
       <td>${t.barrier !== undefined && t.barrier !== null ? t.barrier : '—'}</td>
-      <td>${t.digit !== undefined && t.digit !== null ? t.digit : '—'}</td>
+      <td>${t.contractType === 'ACCU' ? '—' : (t.digit !== undefined && t.digit !== null ? t.digit : '—')}</td>
       <td>${resultBadge}</td>
       <td class="${profitClass}">${profitStr}</td>
       <td>${balStr}</td>
