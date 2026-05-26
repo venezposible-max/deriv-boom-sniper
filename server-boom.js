@@ -109,6 +109,7 @@ let botState = {
     accuTargetTicks: 1,
     
     // ─── Variables del Escudo de Trade Fantasma (Ghost Shield) ───
+    ghostActive: true,
     ghostNextTradeReal: false,
     ghostPendingTrade: null,
     
@@ -238,7 +239,7 @@ if (fs.existsSync(STATE_FILE)) {
             if (botState.hidraFrenoUntil === undefined) botState.hidraFrenoUntil = 0;
             if (botState.ghostNextTradeReal === undefined) botState.ghostNextTradeReal = false;
             if (botState.ghostPendingBarrier === undefined) botState.ghostPendingBarrier = null;
-            if (botState.ghostActive === undefined) botState.ghostActive = false;
+            if (botState.ghostActive === undefined) botState.ghostActive = true;
             if (botState.forcedSignal === undefined) botState.forcedSignal = null;
             
             // Garantizar variables de enfriamiento
@@ -712,7 +713,7 @@ function tryFireTrade() {
     botState.lastEngineFired = signal.engine;
     
     // ─── GHOST TRADING LOGIC ───
-    if (!botState.ghostNextTradeReal) {
+    if (botState.ghostActive && !botState.ghostNextTradeReal) {
         if (!botState.ghostPendingTrade && botState.isRunning) {
             console.log(`👻 GHOST TRADE [${activeSymbol}]: Señal de ${signal.engine} [${signal.contractType} B:${signal.barrier || '-'}]. Simulando entrada virtual...`);
             botState.ghostPendingTrade = {
@@ -1075,7 +1076,7 @@ app.post('/api/engine-toggle', (req, res) => {
 });
 
 app.post('/api/config', (req, res) => {
-    const { stake, maxDailyLoss, takeProfit, cooldownMs, maxTradesPerDay, cooldownMode, coberturaEnabled, differPrecision98, quirurgicoMode, accountMode, demoToken, realToken, accuGrowthRate, accuTargetTicks } = req.body;
+    const { stake, maxDailyLoss, takeProfit, cooldownMs, maxTradesPerDay, cooldownMode, coberturaEnabled, differPrecision98, quirurgicoMode, accountMode, demoToken, realToken, accuGrowthRate, accuTargetTicks, ghostActive } = req.body;
     
     if (stake !== undefined) botState.stake = Math.max(0.35, parseFloat(stake));
     if (maxDailyLoss !== undefined) botState.maxDailyLoss = parseFloat(maxDailyLoss);
@@ -1092,6 +1093,15 @@ app.post('/api/config', (req, res) => {
     
     if (accuGrowthRate !== undefined) botState.accuGrowthRate = parseFloat(accuGrowthRate);
     if (accuTargetTicks !== undefined) botState.accuTargetTicks = parseInt(accuTargetTicks);
+    
+    if (ghostActive !== undefined) {
+        botState.ghostActive = !!ghostActive;
+        if (!botState.ghostActive) {
+            botState.ghostPendingTrade = null;
+            botState.ghostNextTradeReal = false;
+            botState.forcedSignal = null;
+        }
+    }
     
     if (demoToken !== undefined) botState.demoToken = demoToken;
     if (realToken !== undefined) botState.realToken = realToken;

@@ -1539,6 +1539,18 @@ body::before {
       <div class="control-separator"></div>
 
       <div class="control-group" style="display:flex; flex-direction:column; align-items:center; min-width: 100px;">
+        <label style="color: #a78bfa; font-weight: 700;" title="Escudo Ghost (Simular pérdidas antes de entrar en real)">Ghost Shield</label>
+        <label class="toggle" style="width: 40px; height: 22px; margin-top:4px;">
+          <input type="checkbox" id="toggleGhostActive" onchange="handleGhostActiveToggle(this.checked)">
+          <div class="toggle-track" style="border-radius: 12px;"></div>
+          <div class="toggle-thumb" style="width: 16px; height: 16px; top: 3px; left: 3px;"></div>
+        </label>
+        <div style="font-size: 11px; margin-top: 6px; font-weight: bold; color: var(--text-muted);" id="ghostStatusDisplay">Estado: OFF</div>
+      </div>
+
+      <div class="control-separator"></div>
+
+      <div class="control-group" style="display:flex; flex-direction:column; align-items:center; min-width: 100px;">
         <label style="color: var(--accent-blue); font-weight: 700;">Quirúrgico</label>
         <label class="toggle" style="width: 40px; height: 22px; margin-top:4px;">
           <input type="checkbox" id="toggleQuirurgico" onchange="handleQuirurgicoToggle(this.checked)">
@@ -1635,6 +1647,7 @@ body::before {
 let state = {
   isRunning: false,
   isConnectedToDeriv: false,
+  ghostActive: true,
   balance: 0,
   prevBalance: 0,
   pnlSession: 0,
@@ -1815,6 +1828,17 @@ function updateUI(data) {
   const levelDisplay = $('martingaleLevelDisplay');
   if (levelDisplay) {
     levelDisplay.textContent = 'Paso: ' + (data.martingaleStep || 0);
+  }
+
+  // Ghost Shield sync
+  const toggleGhost = $('toggleGhostActive');
+  if (toggleGhost) {
+    toggleGhost.checked = !!data.ghostActive;
+  }
+  const ghostDisplay = $('ghostStatusDisplay');
+  if (ghostDisplay) {
+    ghostDisplay.textContent = 'Estado: ' + (data.ghostActive ? 'ON 👻' : 'OFF ⚡');
+    ghostDisplay.style.color = data.ghostActive ? '#a78bfa' : 'var(--text-muted)';
   }
 
   // Quirúrgico sync
@@ -2383,6 +2407,20 @@ async function handleCoberturaToggle(checked) {
     showToast(`Cobertura Cuántica ${checked ? 'ACTIVADA (Recuperación Segura 🛡️)' : 'desactivada (Sin Cobertura ⚠️)'}`, checked ? 'success' : 'info');
   } catch (e) {
     showToast('Error al actualizar Cobertura', 'error');
+  }
+  fetchStatus();
+}
+
+async function handleGhostActiveToggle(checked) {
+  try {
+    await fetch('/api/config', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ghostActive: checked })
+    });
+    showToast(`Ghost Shield ${checked ? 'ACTIVADO (Operaciones simuladas primero 👻)' : 'desactivado (Operaciones reales directas ⚡)'}`, checked ? 'success' : 'info');
+  } catch (e) {
+    showToast('Error al actualizar Ghost Shield', 'error');
   }
   fetchStatus();
 }
