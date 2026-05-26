@@ -688,14 +688,14 @@ function tryFireTrade() {
             const nextPriority = botState.lastEngineFired === 'OVER_UNDER' ? 'EVEN_ODD' : 'OVER_UNDER';
             
             if (nextPriority === 'EVEN_ODD') {
-                if (botState.engineAccumulator && !signal) signal = evaluateAccumulator(mState);
                 if (botState.engineEvenOdd && !signal) signal = evaluateEvenOdd(mState);
                 if (botState.engineOverUnder && !signal) signal = evaluateOverUnder(mState);
             } else {
-                if (botState.engineAccumulator && !signal) signal = evaluateAccumulator(mState);
                 if (botState.engineOverUnder && !signal) signal = evaluateOverUnder(mState);
                 if (botState.engineEvenOdd && !signal) signal = evaluateEvenOdd(mState);
             }
+            // ACCUMULATOR siempre va al final (es el "comodín" que siempre genera señal)
+            if (botState.engineAccumulator && !signal) signal = evaluateAccumulator(mState);
             
             if (signal) {
                 signalSymbol = sym;
