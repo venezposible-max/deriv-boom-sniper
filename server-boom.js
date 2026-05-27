@@ -1073,8 +1073,8 @@ function tryFireTrade() {
         };
         
         if (botState.codyPayoutFilterEnabled) {
-            const reqIdHigher = `prop_higher_${Date.now()}_${Math.floor(Math.random() * 1000)}`;
-            const reqIdLower = `prop_lower_${Date.now()}_${Math.floor(Math.random() * 1000)}`;
+            const reqIdHigher = Math.floor(Math.random() * 1000000) + 100000;
+            const reqIdLower = reqIdHigher + 1;
             
             botState.pendingPayoutCheck = {
                 timestamp: Date.now(),
