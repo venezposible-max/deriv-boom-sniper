@@ -676,6 +676,9 @@ function evaluateAccumulator(mState) {
     const slope = Math.abs(sma5 - sma15) / sma15;
     const maxSlope = 0.0001; // Pendiente máxima permitida (0.01%)
     if (slope > maxSlope) {
+        if (Date.now() % 15000 < 500) {
+            console.log(`🛡️ [FILTRO JARED LAOS] ${mState.symbol} bloqueado por tendencia activa: Slope ${(slope * 100).toFixed(4)}% > ${(maxSlope * 100).toFixed(2)}%`);
+        }
         return null; // ❌ Pendiente activa detectada — Evitamos operar tendencias expansivas
     }
     
