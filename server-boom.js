@@ -931,10 +931,13 @@ function tryFireTrade() {
         signalSymbol = botState.forcedSignal.symbol;
         botState.forcedSignal = null;
     } else {
-        // 🐍 HYDRA MODE: Solo ACCU, solo en símbolos estables
-        let scanList = (botState.hydraMode && botState.engineAccumulator && !botState.engineCodyBarrier)
-            ? (botState.hydraSoloSymbols || ['R_10', '1HZ10V'])
-            : SCAN_SYMBOLS;
+        // Si Cody Barrier está encendido, solo operamos el símbolo activo seleccionado.
+        // De lo contrario, si está en HYDRA, operamos los estables, y si no, la lista completa.
+        let scanList = botState.engineCodyBarrier
+            ? [SYMBOL]
+            : (botState.hydraMode && botState.engineAccumulator)
+                ? (botState.hydraSoloSymbols || ['R_10', '1HZ10V'])
+                : SCAN_SYMBOLS;
             
         // 🎲 ESCÁNER ALEATORIO: Barajar la lista para alternar entre mercados
         scanList = [...scanList];
@@ -1014,7 +1017,7 @@ function tryFireTrade() {
     botState.lastEngineFired = signal.engine;
     
     // ─── GHOST TRADING LOGIC ───
-    if (botState.ghostActive && !botState.ghostNextTradeReal) {
+    if (botState.ghostActive && !botState.ghostNextTradeReal && signal.engine !== 'CODY_BARRIER') {
         if (!botState.ghostPendingTrade && botState.isRunning) {
             if (signal.contractType === 'DUAL') {
                 console.log(`👻 GHOST TRADE DUAL [${activeSymbol}]: Simulación canal sniper B: ${signal.barrierHigher} / ${signal.barrierLower}...`);
@@ -1364,7 +1367,7 @@ function finalizeTrade(c) {
  * Finaliza la operación simultánea DUAL del Motor 6 (Cody Barrier).
  * Espera a que ambos contratos se liquiden, calcula el PnL neto y gestiona la Cobertura.
  */
-function finalizeDualTrade() {
+function finalizeDualTrade(tradeSymbol = SYMBOL) {
     const state = botState.dualContractsState;
     if (!state) return;
     
@@ -1373,7 +1376,6 @@ function finalizeDualTrade() {
     const netProfit = profitHigher + profitLower;
     const isWin = netProfit > 0;
     
-    const tradeSymbol = SYMBOL;
     const mState = botState.markets[tradeSymbol];
     
     botState.pnlSession += netProfit;
@@ -2418,7 +2420,7 @@ function connectDeriv() {
                         
                         const bothFinalized = botState.dualContractsState.higher.finalized && botState.dualContractsState.lower.finalized;
                         if (bothFinalized) {
-                            finalizeDualTrade();
+                            finalizeDualTrade(c.underlying || c.symbol || SYMBOL);
                         }
                     }
                 }
