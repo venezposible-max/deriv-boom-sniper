@@ -669,6 +669,16 @@ function evaluateAccumulator(mState) {
     });
     if (hasSpike) return null; // ❌ Spike reciente
     
+    // ── Filtro 5: Squeeze de Canal Horizontal (Evitar Tendencias Fuertes de Jared Laos) ──
+    const prices = mState.recentPrices;
+    const sma15 = prices.slice(-15).reduce((a, b) => a + b, 0) / 15;
+    const sma5 = prices.slice(-5).reduce((a, b) => a + b, 0) / 5;
+    const slope = Math.abs(sma5 - sma15) / sma15;
+    const maxSlope = 0.0001; // Pendiente máxima permitida (0.01%)
+    if (slope > maxSlope) {
+        return null; // ❌ Pendiente activa detectada — Evitamos operar tendencias expansivas
+    }
+    
     // Growth rate adaptivo según la volatilidad del símbolo
     const optimalGrowthRate = getAccuGrowthRateForSymbol(mState.symbol);
     
