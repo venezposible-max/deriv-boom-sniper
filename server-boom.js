@@ -699,6 +699,17 @@ function evaluateCodyBarrier(mState) {
     // En el canal de Cody, disparamos AMBOS lados simultáneamente (Hedged Double Sniper)
     // para cosechar doble ganancia si queda en el canal, o mitigar pérdida si rompe un lado.
     if (rsi >= 65 || rsi <= 35) {
+        // ─── FILTRO DE BARRERA MÁXIMA ────────────────────────────────────────────
+        // Deriv rechaza contratos con barrera tan amplia que el pago es ≈$0
+        // ("This contract offers no return"). Límite: 0.25% del precio actual.
+        // Si la señal supera este límite, el mercado está demasiado volátil y
+        // es mejor omitirla que desperdiciar la llamada a la API.
+        const maxBarrier = parseFloat((currentPrice * 0.0025).toFixed(decimals));
+        if (finalOffset > maxBarrier) {
+            console.log(`⏭️ [CODY] Señal omitida: barrera ±${finalOffset} excede límite ±${maxBarrier} (mercado volátil, Deriv rechazaría)`);
+            return null;
+        }
+        // ─────────────────────────────────────────────────────────────────────────
         return {
             engine: 'CODY_BARRIER',
             contractType: 'DUAL',
