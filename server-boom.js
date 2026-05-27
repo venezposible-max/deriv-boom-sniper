@@ -1960,7 +1960,7 @@ function connectDeriv() {
 
         if (msg.msg_type === 'portfolio' && msg.portfolio) {
             const contracts = msg.portfolio.contracts || [];
-            const accuContract = contracts.find(c => c.contract_type === 'ACCU' || c.contract_type === 'HIGHER' || c.contract_type === 'LOWER');
+            const accuContract = contracts.find(c => c.contract_type === 'ACCU' || c.contract_type === 'HIGHER' || c.contract_type === 'LOWER' || c.contract_type === 'CALL' || c.contract_type === 'PUT');
             if (accuContract) {
                 const cType = accuContract.contract_type;
                 const engine = cType === 'ACCU' ? 'ACCUMULATOR' : 'CODY_BARRIER';
