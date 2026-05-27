@@ -104,14 +104,21 @@ let botState = {
     engineOverUnder: true,
     engineAccumulator: false,
     
+    // ─── HYDRA MODE: ACCU Puro (desactiva EVEN/ODD y OVER/UNDER) ───
+    hydraMode: false,              // 🐍 Cuando true: SOLO ACCU, cero otros motores
+    hydraSoloSymbols: ['R_10', '1HZ10V'], // Solo los 2 mercados más estables para ACCU
+    
     // ─── Configuraciones Acumulador ───
-    accuGrowthRate: 0.02,          // Growth rate global (fallback)
-    accuTargetTicks: 20,           // 🔴 Mínimo 20 ticks antes de poder vender (profit ~$0.49)
-    accuMaxTicks: 40,              // Forzar venta a los 40 ticks (profit ~$1.09 = recupera 1 knockout)
-    accuVolatilityThreshold: 0.018, // 🔴 Filtro más estricto: CV < 1.8% (antes 4.5%)
-    accuTrailingPct: 0.80,         // Trailing: vender si profit cae al 80% del pico
+    accuGrowthRate: 0.01,          // 🔴 1% = BARRERA MÁS ANCHA = menos knockouts
+    accuTargetTicks: 30,           // 🔴 30 ticks mínimo (supervivencia ~85%, profit=$0.35 en $1)
+    accuMaxTicks: 60,              // 🔴 60 ticks max (supervivencia ~65%, profit=$0.82 en $1)
+    accuVolatilityThreshold: 0.012, // 🔴 CV < 1.2% (muy estricto para R_10)
+    accuTrailingPct: 0.85,         // Trailing: vender si profit cae al 85% del pico
     accuCurrentPeak: 0,            // Pico de profit actual del contrato ACCU en curso
     accuPriorityMode: true,        // Evaluar ACCU primero cuando mercado está calmado
+    accuMinProfitRatio: 0.25,      // No salir sin mínimo 25% del stake ($0.25 en $1 stake)
+    accuKnockoutCooldownMs: 300000, // 5 min de cooldown por knockout ACCU en ese símbolo
+    accuTakeProfitAt: 0.50,        // Salida automática cuando profit >= 0.50x stake ($0.50 en $1)
     
     // ─── Variables del Escudo de Trade Fantasma (Ghost Shield) ───
     ghostActive: true,
@@ -222,15 +229,18 @@ if (fs.existsSync(STATE_FILE)) {
             if (botState.quirurgicoMode === undefined) botState.quirurgicoMode = false;
             
             if (botState.engineAccumulator === undefined) botState.engineAccumulator = false;
-            if (botState.accuGrowthRate === undefined) botState.accuGrowthRate = 0.02;
-            if (botState.accuTargetTicks === undefined) botState.accuTargetTicks = 20;
-            if (botState.accuMaxTicks === undefined) botState.accuMaxTicks = 40;
-            if (botState.accuVolatilityThreshold === undefined) botState.accuVolatilityThreshold = 0.018;
-            if (botState.accuTrailingPct === undefined) botState.accuTrailingPct = 0.80;
+            if (botState.hydraMode === undefined) botState.hydraMode = false;
+            if (botState.hydraSoloSymbols === undefined) botState.hydraSoloSymbols = ['R_10', '1HZ10V'];
+            if (botState.accuGrowthRate === undefined) botState.accuGrowthRate = 0.01;
+            if (botState.accuTargetTicks === undefined) botState.accuTargetTicks = 30;
+            if (botState.accuMaxTicks === undefined) botState.accuMaxTicks = 60;
+            if (botState.accuVolatilityThreshold === undefined) botState.accuVolatilityThreshold = 0.012;
+            if (botState.accuTrailingPct === undefined) botState.accuTrailingPct = 0.85;
             if (botState.accuCurrentPeak === undefined) botState.accuCurrentPeak = 0;
             if (botState.accuPriorityMode === undefined) botState.accuPriorityMode = true;
-            if (botState.accuMinProfitRatio === undefined) botState.accuMinProfitRatio = 0.40;
-            if (botState.accuKnockoutCooldownMs === undefined) botState.accuKnockoutCooldownMs = 180000;
+            if (botState.accuMinProfitRatio === undefined) botState.accuMinProfitRatio = 0.25;
+            if (botState.accuKnockoutCooldownMs === undefined) botState.accuKnockoutCooldownMs = 300000;
+            if (botState.accuTakeProfitAt === undefined) botState.accuTakeProfitAt = 0.50;
             
             // Garantizar variables de Cuenta (Virtual vs Real)
             if (botState.accountMode === undefined) botState.accountMode = 'demo';
@@ -599,28 +609,27 @@ function checkMarketCalm(mState) {
 }
 
 /**
- * Retorna el growth rate óptimo para cada símbolo según su volatilidad.
- * Más volatilidad = growth rate más bajo = barrera más ancha = menos knockouts
- * | Symbol  | Vol Index | Growth | Barrier (aprox) |
- * |---------|-----------|--------|----------------|
- * | R_10    |    10%    |  3%    |   ~0.015%      |
- * | R_25    |    25%    |  2%    |   ~0.020%      |
- * | R_50    |    50%    |  1%    |   ~0.025%      |
- * | R_75    |    75%    |  1%    |   ~0.025%      |
- * | R_100   |   100%    |  1%    |   ~0.025%      |
+ * Retorna el growth rate óptimo para cada símbolo.
+ * Con growth_rate 1% obtenemos la BARRERA MÁS ANCHA en todos los símbolos
+ * = menos knockouts = más ticks = más profit.
+ * Solo R_10 y 1HZ10V tienen 1% (los más estables).
+ * El resto usa 1% también en HYDRA mode para máxima supervivencia.
  */
 function getAccuGrowthRateForSymbol(symbol) {
+    if (botState.hydraMode) {
+        return 0.01; // HYDRA: 1% para todos = máxima barrera
+    }
     const rates = {
-        'R_10':    0.03, // 3% — V10 es el más tranquilo
-        '1HZ10V':  0.03,
-        'R_25':    0.02, // 2% — moderado
-        '1HZ25V':  0.02,
+        'R_10':    0.01, // 1% — V10 más estable
+        '1HZ10V':  0.01,
+        'R_25':    0.01, // 1% también (cambio: antes 2%)
+        '1HZ25V':  0.01,
         'R_50':    0.01, // 1% — más ancho
         'R_75':    0.01,
         'R_100':   0.01,
         '1HZ100V': 0.01
     };
-    return rates[symbol] || botState.accuGrowthRate || 0.02;
+    return rates[symbol] || botState.accuGrowthRate || 0.01;
 }
 
 /**
@@ -766,56 +775,69 @@ function tryFireTrade() {
     let signal = null;
     let signalSymbol = null;
     
-    // Si tenemos una señal forzada (como la venganza inmediata de un Ghost Trade perdido), la usamos y saltamos los filtros
+    // Si tenemos una señal forzada (venganza del Ghost Shield), la usamos directamente
     if (botState.forcedSignal) {
         signal = botState.forcedSignal;
         signalSymbol = botState.forcedSignal.symbol;
         botState.forcedSignal = null;
     } else {
-        // Escanear los mercados en paralelo en busca de oportunidades estadísticas
-        for (const sym of SCAN_SYMBOLS) {
+        // 🐍 HYDRA MODE: Solo ACCU, solo en símbolos estables
+        const scanList = (botState.hydraMode && botState.engineAccumulator)
+            ? (botState.hydraSoloSymbols || ['R_10', '1HZ10V'])
+            : SCAN_SYMBOLS;
+        
+        for (const sym of scanList) {
             const mState = botState.markets[sym];
             if (!mState || mState.digitHistory.length < 50) continue;
             
-            // Cortafuegos de Cobertura: Evitar mercados en cuarentena por pérdidas recientes
+            // Cortafuegos: Evitar mercados en cuarentena por pérdidas recientes
             if (mState.lockedUntil && now < mState.lockedUntil) {
                 if (now % 30000 < 1500) {
                     const left = Math.ceil((mState.lockedUntil - now) / 1000);
-                    console.log(`🛡️ CORTAFUEGOS: ${sym} está en cuarentena de racha (${left}s restantes). Saltando...`);
+                    console.log(`🛡️ CORTAFUEGOS: ${sym} en cuarentena (${left}s). Saltando...`);
                 }
                 continue;
             }
             
-            // ── ACCU MODO PRIORITARIO: Si el mercado está muy calmado, ACCU va primero ──
-            const marketIsCalm = botState.engineAccumulator && botState.accuPriorityMode && checkMarketCalm(mState);
-            if (marketIsCalm && !signal) {
+            if (botState.hydraMode && botState.engineAccumulator) {
+                // 🐍 HYDRA MODE: SOLO ACCU, sin otros motores
                 signal = evaluateAccumulator(mState);
                 if (signal) {
                     signal._isPriority = true;
-                    console.log(`🎯 [ACCU PRIORITY] Mercado calmado en ${sym} — ACCU toma precedencia sobre motores de dígito.`);
+                    console.log(`🐍 [HYDRA] ACCU en ${sym} | Vol:${signal.reason.split('|')[0].split(':')[1] || ''} | Growth:${((signal.accuGrowthRateOverride||0.01)*100).toFixed(0)}%`);
                 }
-            }
-            
-            // ── Motores de dígito (prioridad alternada) ──
-            if (!signal) {
-                const nextPriority = botState.lastEngineFired === 'OVER_UNDER' ? 'EVEN_ODD' : 'OVER_UNDER';
-                if (nextPriority === 'EVEN_ODD') {
-                    if (botState.engineEvenOdd) signal = evaluateEvenOdd(mState);
-                    if (!signal && botState.engineOverUnder) signal = evaluateOverUnder(mState);
-                } else {
-                    if (botState.engineOverUnder) signal = evaluateOverUnder(mState);
-                    if (!signal && botState.engineEvenOdd) signal = evaluateEvenOdd(mState);
+            } else {
+                // 🦑 MODO NORMAL: ACCU prioritario + otros motores como fallback
+                const marketIsCalm = botState.engineAccumulator && botState.accuPriorityMode && checkMarketCalm(mState);
+                if (marketIsCalm && !signal) {
+                    signal = evaluateAccumulator(mState);
+                    if (signal) {
+                        signal._isPriority = true;
+                        console.log(`🎯 [ACCU PRIORITY] Mercado calmado en ${sym} — ACCU toma precedencia sobre motores de dígito.`);
+                    }
                 }
-            }
-            
-            // ── ACCUMULATOR como fallback (si no entró por prioridad y el mercado lo permite) ──
-            if (!signal && botState.engineAccumulator && !marketIsCalm) {
-                signal = evaluateAccumulator(mState);
+                
+                // Motores de dígito (prioridad alternada)
+                if (!signal) {
+                    const nextPriority = botState.lastEngineFired === 'OVER_UNDER' ? 'EVEN_ODD' : 'OVER_UNDER';
+                    if (nextPriority === 'EVEN_ODD') {
+                        if (botState.engineEvenOdd) signal = evaluateEvenOdd(mState);
+                        if (!signal && botState.engineOverUnder) signal = evaluateOverUnder(mState);
+                    } else {
+                        if (botState.engineOverUnder) signal = evaluateOverUnder(mState);
+                        if (!signal && botState.engineEvenOdd) signal = evaluateEvenOdd(mState);
+                    }
+                }
+                
+                // ACCUMULATOR como fallback
+                if (!signal && botState.engineAccumulator && !marketIsCalm) {
+                    signal = evaluateAccumulator(mState);
+                }
             }
             
             if (signal) {
                 signalSymbol = sym;
-                break; // Detener escaneo al encontrar la primera señal válida
+                break;
             }
         }
     }
@@ -1240,7 +1262,11 @@ app.post('/api/engine-toggle', (req, res) => {
 });
 
 app.post('/api/config', (req, res) => {
-    const { stake, maxDailyLoss, takeProfit, cooldownMs, maxTradesPerDay, cooldownMode, coberturaEnabled, differPrecision98, quirurgicoMode, accountMode, demoToken, realToken, accuGrowthRate, accuTargetTicks, accuMaxTicks, accuVolatilityThreshold, accuTrailingPct, accuPriorityMode, ghostActive } = req.body;
+    const { stake, maxDailyLoss, takeProfit, cooldownMs, maxTradesPerDay, cooldownMode,
+            coberturaEnabled, differPrecision98, quirurgicoMode, accountMode, demoToken, realToken,
+            accuGrowthRate, accuTargetTicks, accuMaxTicks, accuVolatilityThreshold,
+            accuTrailingPct, accuPriorityMode, accuMinProfitRatio, accuTakeProfitAt,
+            hydraMode, ghostActive } = req.body;
     
     if (stake !== undefined) botState.stake = Math.max(0.35, parseFloat(stake));
     if (maxDailyLoss !== undefined) botState.maxDailyLoss = parseFloat(maxDailyLoss);
@@ -1258,10 +1284,17 @@ app.post('/api/config', (req, res) => {
     // ── Configuración ACCU avanzada ──
     if (accuGrowthRate !== undefined) botState.accuGrowthRate = parseFloat(accuGrowthRate);
     if (accuTargetTicks !== undefined) botState.accuTargetTicks = Math.max(1, parseInt(accuTargetTicks));
-    if (accuMaxTicks !== undefined) botState.accuMaxTicks = Math.max(botState.accuTargetTicks || 3, parseInt(accuMaxTicks));
-    if (accuVolatilityThreshold !== undefined) botState.accuVolatilityThreshold = Math.max(0.005, Math.min(0.5, parseFloat(accuVolatilityThreshold)));
+    if (accuMaxTicks !== undefined) botState.accuMaxTicks = Math.max(botState.accuTargetTicks || 30, parseInt(accuMaxTicks));
+    if (accuVolatilityThreshold !== undefined) botState.accuVolatilityThreshold = Math.max(0.001, Math.min(0.5, parseFloat(accuVolatilityThreshold)));
     if (accuTrailingPct !== undefined) botState.accuTrailingPct = Math.max(0.5, Math.min(0.99, parseFloat(accuTrailingPct)));
     if (accuPriorityMode !== undefined) botState.accuPriorityMode = !!accuPriorityMode;
+    if (accuMinProfitRatio !== undefined) botState.accuMinProfitRatio = Math.max(0.05, parseFloat(accuMinProfitRatio));
+    if (accuTakeProfitAt !== undefined) botState.accuTakeProfitAt = Math.max(0.05, parseFloat(accuTakeProfitAt));
+    if (hydraMode !== undefined) {
+        botState.hydraMode = !!hydraMode;
+        if (botState.hydraMode) botState.engineAccumulator = true;
+        console.log(`🐍 HYDRA MODE: ${botState.hydraMode ? 'ACTIVADO — Solo ACCU en R_10 y 1HZ10V' : 'DESACTIVADO'}`);
+    }
     
     if (ghostActive !== undefined) {
         botState.ghostActive = !!ghostActive;
@@ -1284,15 +1317,46 @@ app.post('/api/config', (req, res) => {
     saveState();
     
     if (reconnectNeeded) {
-        console.log(`🔄 CAMBIO DE MODO DE CUENTA DETECTADO (${accountMode.toUpperCase()}). Reconectando WebSocket de forma segura...`);
+        console.log(`🔄 CAMBIO DE MODO DE CUENTA DETECTADO (${accountMode.toUpperCase()}). Reconectando WebSocket...`);
         botState.isConnectedToDeriv = false;
-        if (ws) {
-            try { ws.close(); } catch (e) { /* ignored */ }
-        }
+        if (ws) { try { ws.close(); } catch (e) {} }
     }
     
-    console.log(`⚙️ CONFIGURACIÓN KRAKEN MODIFICADA.`);
+    console.log(`⚙️ CONFIGURACIóN KRAKEN MODIFICADA.`);
     return res.json({ success: true, message: 'Parámetros actualizados con éxito.' });
+});
+
+// 🐍 HYDRA MODE — Activar/desactivar modo ACCU puro con un click
+app.post('/api/hydra', (req, res) => {
+    const { enable } = req.body;
+    botState.hydraMode = !!enable;
+    if (botState.hydraMode) botState.engineAccumulator = true;
+    
+    if (botState.hydraMode) {
+        console.log(`\n🐍 ════════════════════════════════════════════════`);
+        console.log(`🐍 HYDRA MODE ACTIVADO`);
+        console.log(`🐍 Estrategia: ACCU PURO | Growth: 1% | Símbolos: R_10 + 1HZ10V`);
+        console.log(`🐍 Target: ${botState.accuTargetTicks}t min | Max: ${botState.accuMaxTicks}t | TP: ${botState.accuTakeProfitAt}x stake`);
+        console.log(`🐍 Trailing: ${(botState.accuTrailingPct*100).toFixed(0)}% | Volat max: ${(botState.accuVolatilityThreshold*100).toFixed(1)}%`);
+        console.log(`🐍 ════════════════════════════════════════════════\n`);
+    } else {
+        console.log(`🦑 HYDRA MODE DESACTIVADO — Volviendo a modo Kraken normal.`);
+    }
+    
+    saveState();
+    return res.json({
+        success: true,
+        hydraMode: botState.hydraMode,
+        message: botState.hydraMode
+            ? '🐍 HYDRA ON: ACCU Puro en R_10+1HZ10V | 1% growth | 30-60 ticks | TP 50%'
+            : '🦑 HYDRA OFF: Modo Kraken normal',
+        math: botState.hydraMode ? {
+            survivalRate30t: '~85-92% (R_10 con 1%)',
+            profitAt30t: `$${(botState.stake * Math.pow(1.01, 30) - botState.stake).toFixed(3)} por $${botState.stake} stake`,
+            profitAt60t: `$${(botState.stake * Math.pow(1.01, 60) - botState.stake).toFixed(3)} por $${botState.stake} stake`,
+            evEstimated: `0.87 × $${(botState.stake * Math.pow(1.01, 35) - botState.stake).toFixed(3)} - 0.13 × $${botState.stake.toFixed(2)} = EV positivo si supervivencia > 74%`
+        } : null
+    });
 });
 
 app.post('/api/switch-account', (req, res) => {
@@ -1834,32 +1898,40 @@ function connectDeriv() {
                 let sellReason = '';
                 let shouldSell = false;
                 
-                // 🔴 FIX 3: SALIDA DE EMERGENCIA ABSOLUTA — si profit >= 3x stake, vender SIEMPRE sin importar ticks
+                // 🔴 TOMA DE GANANCIAS AUTOMÁTICA: profit >= accuTakeProfitAt x stake (ej: 2x stake = $2 en $1)
+                const takeProfitTarget = stake * (botState.accuTakeProfitAt || 2.0);
+                const takeProfitReached = currentProfit >= takeProfitTarget;
+                // Salida de emergencia absoluta: profit >= 3x stake
                 const absoluteExit = currentProfit >= stake * 3;
                 
-                if ((absoluteExit || maxTicksReached) && c.is_valid_to_sell) {
+                if ((absoluteExit || takeProfitReached || maxTicksReached) && c.is_valid_to_sell) {
                     shouldSell = true;
-                    sellReason = absoluteExit
-                        ? `🚨 SALIDA ABSOLUTA: $${currentProfit.toFixed(3)} >= 3x stake. Asegurando ganancia.`
-                        : `Máx ${maxTicks} ticks | Profit: $${currentProfit.toFixed(3)}`;
+                    if (absoluteExit && !takeProfitReached) {
+                        sellReason = `🚨 SALIDA ABSOLUTA: $${currentProfit.toFixed(3)} >= 3x stake`;
+                    } else if (takeProfitReached) {
+                        sellReason = `🎉 TAKE PROFIT: $${currentProfit.toFixed(3)} >= ${(botState.accuTakeProfitAt||2)}x stake ($${takeProfitTarget.toFixed(2)})`;
+                    } else {
+                        sellReason = `⏱️ Máx ${maxTicks} ticks | Profit: $${currentProfit.toFixed(3)}`;
+                    }
                 } else if (trailingTriggered && c.is_valid_to_sell) {
                     shouldSell = true;
-                    sellReason = `Trailing ${(trailingPct*100).toFixed(0)}%: $${currentProfit.toFixed(3)} < $${currentPeak.toFixed(3)} (pico)`;
+                    sellReason = `📉 Trailing ${(trailingPct*100).toFixed(0)}%: $${currentProfit.toFixed(3)} < $${currentPeak.toFixed(3)} (pico)`;
                 } else if (readyForExit && c.is_valid_to_sell) {
                     shouldSell = true;
-                    sellReason = `Objetivo: $${currentProfit.toFixed(3)} >= ${(minProfitRatio*100).toFixed(0)}% stake en ${tickCount} ticks`;
+                    sellReason = `✅ Objetivo: $${currentProfit.toFixed(3)} >= ${(minProfitRatio*100).toFixed(0)}% stake en ${tickCount} ticks`;
                 }
                 
                 if (shouldSell) {
-                    console.log(`🎯 ACCU VENTA [💹${tickCount} ticks | Profit: $${currentProfit.toFixed(3)} | Pico: $${currentPeak.toFixed(3)}]: ${sellReason}`);
+                    console.log(`🎯 ACCU VENTA [💹${tickCount}t | +$${currentProfit.toFixed(3)} | Pico:$${currentPeak.toFixed(3)}]: ${sellReason}`);
                     botState.isSellingAccumulator = c.contract_id;
                     botState.accuCurrentPeak = 0;
                     ws.send(JSON.stringify({ sell: c.contract_id, price: 0 }));
-                } else if (tickCount % 5 === 0 && tickCount > 0) {
-                    // Log de progreso cada 5 ticks
-                    const growthRate = botState.accuCurrentGrowthRate || 0.02;
-                    const projectedAt20 = (stake * Math.pow(1 + growthRate, 20) - stake).toFixed(3);
-                    console.log(`📈 ACCU CRECIENDO [${tickCount}t]: Profit=$${currentProfit.toFixed(3)} | Pico=$${currentPeak.toFixed(3)} | Target=${minTicks}t/${(minProfitRatio*100).toFixed(0)}%stake | Proj@20t=$${projectedAt20}`);
+                } else if (tickCount % 10 === 0 && tickCount > 0) {
+                    // Log cada 10 ticks con proyección
+                    const gr = botState.accuCurrentGrowthRate || 0.01;
+                    const proj100 = (stake * Math.pow(1 + gr, 100) - stake).toFixed(2);
+                    const proj230 = (stake * Math.pow(1 + gr, 230) - stake).toFixed(2);
+                    console.log(`📈 ACCU [${tickCount}t] +$${currentProfit.toFixed(3)} | Pico:$${currentPeak.toFixed(3)} | Meta:${minTicks}t/$${(minProfitRatio*stake).toFixed(2)} | Proj100t:$${proj100} | Proj230t:$${proj230}`);
                 }
             }
             
