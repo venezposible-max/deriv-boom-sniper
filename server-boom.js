@@ -932,9 +932,16 @@ function tryFireTrade() {
         botState.forcedSignal = null;
     } else {
         // 🐍 HYDRA MODE: Solo ACCU, solo en símbolos estables
-        const scanList = (botState.hydraMode && botState.engineAccumulator && !botState.engineCodyBarrier)
+        let scanList = (botState.hydraMode && botState.engineAccumulator && !botState.engineCodyBarrier)
             ? (botState.hydraSoloSymbols || ['R_10', '1HZ10V'])
             : SCAN_SYMBOLS;
+            
+        // 🎲 ESCÁNER ALEATORIO: Barajar la lista para alternar entre mercados
+        scanList = [...scanList];
+        for (let i = scanList.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [scanList[i], scanList[j]] = [scanList[j], scanList[i]];
+        }
         
         for (const sym of scanList) {
             const mState = botState.markets[sym];
