@@ -2009,15 +2009,23 @@ function connectDeriv() {
         if (msg.error) {
             // Cancelar verificación de payout si falla la propuesta
             if (botState.pendingPayoutCheck && (msg.req_id === botState.pendingPayoutCheck.reqIdHigher || msg.req_id === botState.pendingPayoutCheck.reqIdLower)) {
-                console.error(`❌ [CODY FILTER] Error en consulta de proposal: ${msg.error.message}. Compra abortada.`);
+                if (msg.error.code === 'ContractBuyValidationError') {
+                    console.log(`⏭️ [CODY FILTER] Señal omitida de forma segura: la barrera es muy ancha para este símbolo ("no return"). Buscando otro mercado...`);
+                } else {
+                    console.log(`⏭️ [CODY FILTER] Omitido: ${msg.error.message}. Compra cancelada.`);
+                }
                 botState.isBuying = false;
                 botState.pendingPayoutCheck = null;
                 return;
             }
             
-            // Silenciar errores no críticos de suscripción duplicada
+            // Silenciar errores no críticos de suscripción duplicada y de validación de compra
             if (msg.error.code === 'AlreadySubscribed') {
                 console.log(`ℹ️ Suscripción duplicada ignorada (no crítico): ${msg.error.message}`);
+                return;
+            }
+            if (msg.error.code === 'ContractBuyValidationError') {
+                // Ya se manejó de forma amigable arriba, evitar duplicar el log
                 return;
             }
             
