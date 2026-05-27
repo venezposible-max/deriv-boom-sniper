@@ -103,6 +103,7 @@ let botState = {
     engineEvenOdd: false,
     engineOverUnder: false,
     engineAccumulator: true,
+    engineCodyBarrier: true,
     
     // ─── HYDRA MODE: ACCU Puro (desactiva EVEN/ODD y OVER/UNDER) ───
     hydraMode: true,              // 🐍 Cuando true: SOLO ACCU, cero otros motores
@@ -135,7 +136,8 @@ let botState = {
     engineStats: {
         EVEN_ODD: { wins: 0, losses: 0, pnl: 0, autoDisabled: false },
         OVER_UNDER: { wins: 0, losses: 0, pnl: 0, autoDisabled: false },
-        ACCUMULATOR: { wins: 0, losses: 0, pnl: 0, autoDisabled: false }
+        ACCUMULATOR: { wins: 0, losses: 0, pnl: 0, autoDisabled: false },
+        CODY_BARRIER: { wins: 0, losses: 0, pnl: 0, autoDisabled: false }
     },
     
     // ─── Analíticas ───
@@ -229,6 +231,7 @@ if (fs.existsSync(STATE_FILE)) {
             if (botState.quirurgicoMode === undefined) botState.quirurgicoMode = false;
             
             botState.engineAccumulator = true;
+            botState.engineCodyBarrier = true;
             botState.hydraMode = true;
             botState.engineEvenOdd = false;
             botState.engineOverUnder = false;
@@ -611,6 +614,106 @@ function checkMarketCalm(mState) {
 }
 
 /**
+ * Calcula el RSI(14) sobre un arreglo de precios históricos.
+ * Utiliza suavizado de Wilder para precisión cuantitativa.
+ */
+function calculateRSI(prices, period = 14) {
+    if (!prices || prices.length < period + 1) return 50;
+    
+    let gains = [];
+    let losses = [];
+    
+    for (let i = 1; i < prices.length; i++) {
+        const diff = prices[i] - prices[i - 1];
+        if (diff > 0) {
+            gains.push(diff);
+            losses.push(0);
+        } else {
+            gains.push(0);
+            losses.push(-diff);
+        }
+    }
+    
+    let avgGain = gains.slice(0, period).reduce((a, b) => a + b, 0) / period;
+    let avgLoss = losses.slice(0, period).reduce((a, b) => a + b, 0) / period;
+    
+    for (let i = period; i < gains.length; i++) {
+        avgGain = (avgGain * (period - 1) + gains[i]) / period;
+        avgLoss = (avgLoss * (period - 1) + losses[i]) / period;
+    }
+    
+    if (avgLoss === 0) return 100;
+    const rs = avgGain / avgLoss;
+    return 100 - (100 / (1 + rs));
+}
+
+/**
+ * Calcula la desviación estándar de un arreglo de precios sobre un período dado.
+ */
+function calculateStdDev(prices, period = 30) {
+    const len = prices.length;
+    if (len < 2) return 0;
+    const n = Math.min(len, period);
+    const slice = prices.slice(-n);
+    const mean = slice.reduce((a, b) => a + b, 0) / n;
+    const variance = slice.reduce((sum, p) => sum + Math.pow(p - mean, 2), 0) / n;
+    return Math.sqrt(variance);
+}
+
+/**
+ * MOTOR 6: Francotirador de Barreras Cody Trader (Higher/Lower)
+ * Calcula dinámicamente un offset a 3.5 desviaciones estándar para disparar con 98%+ supervivencia.
+ */
+function evaluateCodyBarrier(mState) {
+    if (!botState.engineCodyBarrier) return null;
+    
+    const prices = mState.recentPrices;
+    if (!prices || prices.length < 30) return null;
+    
+    const stdDev = calculateStdDev(prices, 30);
+    const rsi = calculateRSI(prices, 14);
+    const currentPrice = mState.lastTickPrice || prices[prices.length - 1];
+    
+    // B = 3.5 * StdDev
+    let offset = 3.5 * stdDev;
+    
+    // Margen de seguridad mínimo
+    const minOffset = currentPrice * 0.00005;
+    if (offset < minOffset) {
+        offset = minOffset;
+    }
+    
+    const decimals = mState.symbolDecimals || 2;
+    const formattedOffset = parseFloat(offset.toFixed(decimals));
+    const finalOffset = formattedOffset > 0 ? formattedOffset : Math.pow(10, -decimals);
+    
+    // Triggers en extremos RSI
+    if (rsi >= 65) {
+        return {
+            engine: 'CODY_BARRIER',
+            contractType: 'LOWER',
+            barrier: `+${finalOffset}`,
+            stakeMultiplier: 1.0,
+            reason: `RSI Sobrecompra: ${rsi.toFixed(1)} >= 65 | StdDev: ${stdDev.toFixed(decimals)} | Barrera: +${finalOffset}`,
+            entropy: parseFloat(mState.shannonEntropy)
+        };
+    }
+    
+    if (rsi <= 35) {
+        return {
+            engine: 'CODY_BARRIER',
+            contractType: 'HIGHER',
+            barrier: `-${finalOffset}`,
+            stakeMultiplier: 1.0,
+            reason: `RSI Sobreventa: ${rsi.toFixed(1)} <= 35 | StdDev: ${stdDev.toFixed(decimals)} | Barrera: -${finalOffset}`,
+            entropy: parseFloat(mState.shannonEntropy)
+        };
+    }
+    
+    return null;
+}
+
+/**
  * Retorna el growth rate óptimo para cada símbolo.
  * Con growth_rate 1% obtenemos la BARRERA MÁS ANCHA en todos los símbolos
  * = menos knockouts = más ticks = más profit.
@@ -797,7 +900,7 @@ function tryFireTrade() {
         botState.forcedSignal = null;
     } else {
         // 🐍 HYDRA MODE: Solo ACCU, solo en símbolos estables
-        const scanList = (botState.hydraMode && botState.engineAccumulator)
+        const scanList = (botState.hydraMode && botState.engineAccumulator && !botState.engineCodyBarrier)
             ? (botState.hydraSoloSymbols || ['R_10', '1HZ10V'])
             : SCAN_SYMBOLS;
         
@@ -814,39 +917,46 @@ function tryFireTrade() {
                 continue;
             }
             
-            if (botState.hydraMode && botState.engineAccumulator) {
-                // 🐍 HYDRA MODE: SOLO ACCU, sin otros motores
-                signal = evaluateAccumulator(mState);
-                if (signal) {
-                    signal._isPriority = true;
-                    console.log(`🐍 [HYDRA] ACCU en ${sym} | Vol:${signal.reason.split('|')[0].split(':')[1] || ''} | Growth:${((signal.accuGrowthRateOverride||0.01)*100).toFixed(0)}%`);
-                }
-            } else {
-                // 🦑 MODO NORMAL: ACCU prioritario + otros motores como fallback
-                const marketIsCalm = botState.engineAccumulator && botState.accuPriorityMode && checkMarketCalm(mState);
-                if (marketIsCalm && !signal) {
+            // 🎯 MOTOR 6: CODY BARRIER SNIPER (Prioridad Absoluta si está encendido)
+            if (botState.engineCodyBarrier) {
+                signal = evaluateCodyBarrier(mState);
+            }
+            
+            if (!signal) {
+                if (botState.hydraMode && botState.engineAccumulator) {
+                    // 🐍 HYDRA MODE: SOLO ACCU, sin otros motores
                     signal = evaluateAccumulator(mState);
                     if (signal) {
                         signal._isPriority = true;
-                        console.log(`🎯 [ACCU PRIORITY] Mercado calmado en ${sym} — ACCU toma precedencia sobre motores de dígito.`);
+                        console.log(`🐍 [HYDRA] ACCU en ${sym} | Vol:${signal.reason.split('|')[0].split(':')[1] || ''} | Growth:${((signal.accuGrowthRateOverride||0.01)*100).toFixed(0)}%`);
                     }
-                }
-                
-                // Motores de dígito (prioridad alternada)
-                if (!signal) {
-                    const nextPriority = botState.lastEngineFired === 'OVER_UNDER' ? 'EVEN_ODD' : 'OVER_UNDER';
-                    if (nextPriority === 'EVEN_ODD') {
-                        if (botState.engineEvenOdd) signal = evaluateEvenOdd(mState);
-                        if (!signal && botState.engineOverUnder) signal = evaluateOverUnder(mState);
-                    } else {
-                        if (botState.engineOverUnder) signal = evaluateOverUnder(mState);
-                        if (!signal && botState.engineEvenOdd) signal = evaluateEvenOdd(mState);
+                } else {
+                    // 🦑 MODO NORMAL: ACCU prioritario + otros motores como fallback
+                    const marketIsCalm = botState.engineAccumulator && botState.accuPriorityMode && checkMarketCalm(mState);
+                    if (marketIsCalm && !signal) {
+                        signal = evaluateAccumulator(mState);
+                        if (signal) {
+                            signal._isPriority = true;
+                            console.log(`🎯 [ACCU PRIORITY] Mercado calmado en ${sym} — ACCU toma precedencia sobre motores de dígito.`);
+                        }
                     }
-                }
-                
-                // ACCUMULATOR como fallback
-                if (!signal && botState.engineAccumulator && !marketIsCalm) {
-                    signal = evaluateAccumulator(mState);
+                    
+                    // Motores de dígito (prioridad alternada)
+                    if (!signal) {
+                        const nextPriority = botState.lastEngineFired === 'OVER_UNDER' ? 'EVEN_ODD' : 'OVER_UNDER';
+                        if (nextPriority === 'EVEN_ODD') {
+                            if (botState.engineEvenOdd) signal = evaluateEvenOdd(mState);
+                            if (!signal && botState.engineOverUnder) signal = evaluateOverUnder(mState);
+                        } else {
+                            if (botState.engineOverUnder) signal = evaluateOverUnder(mState);
+                            if (!signal && botState.engineEvenOdd) signal = evaluateEvenOdd(mState);
+                        }
+                    }
+                    
+                    // ACCUMULATOR como fallback
+                    if (!signal && botState.engineAccumulator && !marketIsCalm) {
+                        signal = evaluateAccumulator(mState);
+                    }
                 }
             }
             
@@ -873,7 +983,8 @@ function tryFireTrade() {
                 engine: signal.engine,
                 contractType: signal.contractType,
                 barrier: signal.barrier,
-                entryTickPrice: mState ? mState.lastTickPrice : botState.lastTickPrice
+                entryTickPrice: mState ? mState.lastTickPrice : botState.lastTickPrice,
+                ticksRemaining: signal.engine === 'CODY_BARRIER' ? 5 : 1
             };
             botState.lastTradeTime = Date.now();
         }
@@ -910,6 +1021,9 @@ function tryFireTrade() {
         buyRequest.parameters.growth_rate = growthRate;
         botState.accuCurrentGrowthRate = growthRate; // Guardar para cálculos de salida
         console.log(`💰 ACCU Config: growth_rate=${(growthRate*100).toFixed(0)}% | MinTicks=${botState.accuTargetTicks} | MaxTicks=${botState.accuMaxTicks} | MinProfit=${((botState.accuMinProfitRatio||0.4)*100).toFixed(0)}% del stake`);
+    } else if (signal.engine === 'CODY_BARRIER') {
+        buyRequest.parameters.duration = 5;
+        buyRequest.parameters.duration_unit = 't';
     } else {
         buyRequest.parameters.duration = 1;
         buyRequest.parameters.duration_unit = 't';
@@ -922,8 +1036,8 @@ function tryFireTrade() {
     botState.isBuying = true;
     botState.lastTradeTime = now;
     
-    const emojis = { EVEN_ODD: '🎰', OVER_UNDER: '📊', ACCUMULATOR: '📈' };
-    const names = { EVEN_ODD: 'PAR/IMPAR', OVER_UNDER: 'OVER/UNDER', ACCUMULATOR: 'ACUMULADOR' };
+    const emojis = { EVEN_ODD: '🎰', OVER_UNDER: '📊', ACCUMULATOR: '📈', CODY_BARRIER: '🎯' };
+    const names = { EVEN_ODD: 'PAR/IMPAR', OVER_UNDER: 'OVER/UNDER', ACCUMULATOR: 'ACUMULADOR', CODY_BARRIER: 'BARRERAS CODY' };
     
     console.log(`${emojis[signal.engine] || '🎲'} DISPARO REAL [${activeSymbol} - ${names[signal.engine]}] | ${signal.contractType} B:${signal.barrier || 'N/A'} | Stake: $${finalStake.toFixed(2)} | ${signal.reason}`);
     
@@ -952,7 +1066,7 @@ function finalizeTrade(c) {
     const engine = botState.currentEngine || 'EVEN_ODD';
     const cType = botState.currentContractType || 'DIGITEVEN';
     const barrier = botState.currentBarrier;
-    const name = { EVEN_ODD: 'PAR/IMPAR', OVER_UNDER: 'OVER/UNDER', ACCUMULATOR: 'ACUMULADOR' }[engine] || engine;
+    const name = { EVEN_ODD: 'PAR/IMPAR', OVER_UNDER: 'OVER/UNDER', ACCUMULATOR: 'ACUMULADOR', CODY_BARRIER: 'BARRERAS CODY' }[engine] || engine;
     
     if (isWin) {
         botState.winsSession++;
@@ -1235,7 +1349,8 @@ app.post('/api/control', (req, res) => {
         botState.engineStats = {
             EVEN_ODD: { wins: 0, losses: 0, pnl: 0, autoDisabled: false },
             OVER_UNDER: { wins: 0, losses: 0, pnl: 0, autoDisabled: false },
-            ACCUMULATOR: { wins: 0, losses: 0, pnl: 0, autoDisabled: false }
+            ACCUMULATOR: { wins: 0, losses: 0, pnl: 0, autoDisabled: false },
+            CODY_BARRIER: { wins: 0, losses: 0, pnl: 0, autoDisabled: false }
         };
         saveState();
         console.log('🔄 REGISTROS DE REINICIO DIARIO: Métricas restablecidas en KRAKEN.');
@@ -1254,7 +1369,8 @@ app.post('/api/engine-toggle', (req, res) => {
     const engineMap = {
         'EVEN_ODD': 'engineEvenOdd',
         'OVER_UNDER': 'engineOverUnder',
-        'ACCUMULATOR': 'engineAccumulator'
+        'ACCUMULATOR': 'engineAccumulator',
+        'CODY_BARRIER': 'engineCodyBarrier'
     };
     
     if (!engineMap[engine]) {
@@ -1661,21 +1777,24 @@ function connectDeriv() {
 
         if (msg.msg_type === 'portfolio' && msg.portfolio) {
             const contracts = msg.portfolio.contracts || [];
-            const accuContract = contracts.find(c => c.contract_type === 'ACCU');
+            const accuContract = contracts.find(c => c.contract_type === 'ACCU' || c.contract_type === 'HIGHER' || c.contract_type === 'LOWER');
             if (accuContract) {
+                const cType = accuContract.contract_type;
+                const engine = cType === 'ACCU' ? 'ACCUMULATOR' : 'CODY_BARRIER';
+                
                 // Verificar si ya estamos rastreando este contrato O si acabamos de finalizarlo
                 const alreadyTracking = botState.activeContractId === accuContract.contract_id;
                 const justFinalized = botState.activeContractId === null && botState.currentEngine === null;
                 
                 if (alreadyTracking) {
-                    console.log(`🛡️ [KRAKEN] Contrato ACCU ${accuContract.contract_id} ya está siendo rastreado. Omitiendo adopción duplicada.`);
+                    console.log(`🛡️ [KRAKEN] Contrato ${cType} ${accuContract.contract_id} ya está siendo rastreado. Omitiendo adopción duplicada.`);
                 } else if (justFinalized) {
                     // El contrato pudo haberse vendido entre el envío del portfolio request y la respuesta
-                    console.log(`📡 [KRAKEN] Contrato ACCU ${accuContract.contract_id} detectado pero bot está libre (posible venta reciente). Verificando con suscripción...`);
+                    console.log(`📡 [KRAKEN] Contrato ${cType} ${accuContract.contract_id} detectado pero bot está libre (posible venta reciente). Verificando con suscripción...`);
                     botState.activeContractId = accuContract.contract_id;
                     botState.currentContractId = accuContract.contract_id;
-                    botState.currentContractType = 'ACCU';
-                    botState.currentEngine = 'ACCUMULATOR';
+                    botState.currentContractType = cType;
+                    botState.currentEngine = engine;
                     botState.isBuying = false;
                     ws.send(JSON.stringify({
                         proposal_open_contract: 1,
@@ -1685,11 +1804,11 @@ function connectDeriv() {
                     saveState();
                 } else {
                     // Adoptar contrato huérfano que no estamos rastreando
-                    console.log(`🛡️ [KRAKEN] RECUPERACIÓN: Encontrado contrato ACCU huérfano [ID: ${accuContract.contract_id}] para ${accuContract.symbol}. Adoptándolo...`);
+                    console.log(`🛡️ [KRAKEN] RECUPERACIÓN: Encontrado contrato ${cType} huérfano [ID: ${accuContract.contract_id}] para ${accuContract.symbol}. Adoptándolo...`);
                     botState.activeContractId = accuContract.contract_id;
                     botState.currentContractId = accuContract.contract_id;
-                    botState.currentContractType = 'ACCU';
-                    botState.currentEngine = 'ACCUMULATOR';
+                    botState.currentContractType = cType;
+                    botState.currentEngine = engine;
                     botState.isBuying = false;
                     ws.send(JSON.stringify({
                         proposal_open_contract: 1,
@@ -1805,9 +1924,17 @@ function connectDeriv() {
                     botState.lossPauseTicksProcessed = (botState.lossPauseTicksProcessed || 0) + 1;
                 }
                 
-                // Evaluar resultado del Ghost Trade (1 tick de duración) - Verificando que pertenezca a este símbolo
+                // Evaluar resultado del Ghost Trade - Verificando que pertenezca a este símbolo
                 if (botState.ghostPendingTrade && botState.ghostPendingTrade.symbol === sym) {
                     const pt = botState.ghostPendingTrade;
+                    
+                    if (pt.engine === 'CODY_BARRIER') {
+                        pt.ticksRemaining = (pt.ticksRemaining || 5) - 1;
+                        if (pt.ticksRemaining > 0) {
+                            return; // Esperar ticks restantes
+                        }
+                    }
+                    
                     let won = false;
                     
                     if (pt.contractType === 'DIGITEVEN') won = digit % 2 === 0;
@@ -1823,11 +1950,23 @@ function connectDeriv() {
                         const dynamicBarrier = Math.max(0.0001, Math.min(0.0003, recentVol * 0.5));
                         const priceChangePct = Math.abs((mState.lastTickPrice - pt.entryTickPrice) / pt.entryTickPrice);
                         won = priceChangePct <= dynamicBarrier;
+                    } else if (pt.engine === 'CODY_BARRIER') {
+                        const exitPrice = mState.lastTickPrice;
+                        const entryPrice = pt.entryTickPrice;
+                        const barrierOffset = parseFloat(pt.barrier); // ej. +0.15 o -0.15
+                        
+                        if (pt.contractType === 'LOWER') {
+                            won = exitPrice < (entryPrice + barrierOffset);
+                        } else if (pt.contractType === 'HIGHER') {
+                            won = exitPrice > (entryPrice + barrierOffset);
+                        }
                     }
                     
                     if (pt.contractType === 'ACCU') {
                         const priceChangePct = Math.abs((mState.lastTickPrice - pt.entryTickPrice) / pt.entryTickPrice);
                         console.log(`👻 GHOST RESULT [${sym}]: ${pt.engine} [${pt.contractType}] -> Salto de precio: ${(priceChangePct * 100).toFixed(4)}% -> ${won ? 'WIN ✅' : 'LOSS ❌ (SPIKE DETECTADO)'}`);
+                    } else if (pt.engine === 'CODY_BARRIER') {
+                        console.log(`👻 GHOST RESULT [${sym}]: ${pt.engine} [${pt.contractType} B:${pt.barrier}] -> Entrada:${pt.entryTickPrice} Salida:${mState.lastTickPrice} -> ${won ? 'WIN ✅' : 'LOSS ❌'}`);
                     } else {
                         console.log(`👻 GHOST RESULT [${sym}]: ${pt.engine} [${pt.contractType}] -> Result digit: ${digit} -> ${won ? 'WIN ✅' : 'LOSS ❌'}`);
                     }

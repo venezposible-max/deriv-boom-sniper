@@ -1255,6 +1255,13 @@ body::before {
   .shield-grid { flex-wrap: wrap; }
   .shield-level { flex: 1 1 45%; font-size: 10px; padding: 6px; }
 }
+
+.engine-card.engine-accumulator::before {
+  box-shadow: inset 0 0 40px rgba(236,72,153,0.06), 0 0 30px rgba(236,72,153,0.08);
+}
+.engine-card.engine-codybarrier::before {
+  box-shadow: inset 0 0 40px rgba(239,68,68,0.06), 0 0 30px rgba(239,68,68,0.08);
+}
 </style>
 </head>
 <body>
@@ -1431,6 +1438,50 @@ body::before {
         <div class="engine-stat">
           <span class="es-label">Win Rate</span>
           <span class="es-value neutral" id="accuWinRate">0.0%</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- CODY BARRIER (MOTOR 6) -->
+    <div class="engine-card glass engine-codybarrier" id="engineCardCodyBarrier">
+      <div class="engine-header">
+        <div class="engine-info">
+          <div class="engine-icon">🎯</div>
+          <div>
+            <div class="engine-name">BARRERAS CODY</div>
+            <div class="engine-subtitle">RSI & StdDev Sniper</div>
+          </div>
+        </div>
+        <label class="toggle">
+          <input type="checkbox" id="toggleCodyBarrier" checked>
+          <div class="toggle-track"></div>
+          <div class="toggle-thumb"></div>
+        </label>
+      </div>
+      <div class="engine-status">
+        <span class="engine-status-text disabled" id="statusCodyBarrier">
+          <span>●</span> Desactivado
+        </span>
+      </div>
+      <div class="darwin-badge" id="darwinBadgeCodyBarrier">
+        🦎 Auto-desactivado por Darwin
+      </div>
+      <div class="engine-stats">
+        <div class="engine-stat">
+          <span class="es-label">Ganadas</span>
+          <span class="es-value positive" id="codyWins">0</span>
+        </div>
+        <div class="engine-stat">
+          <span class="es-label">Perdidas</span>
+          <span class="es-value negative" id="codyLosses">0</span>
+        </div>
+        <div class="engine-stat">
+          <span class="es-label">PnL</span>
+          <span class="es-value neutral" id="codyPnl">$0.00</span>
+        </div>
+        <div class="engine-stat">
+          <span class="es-label">Win Rate</span>
+          <span class="es-value neutral" id="codyWinRate">0.0%</span>
         </div>
       </div>
     </div>
@@ -1819,6 +1870,7 @@ function updateUI(data) {
   $('toggleEvenOdd').checked = data.engineEvenOdd;
   $('toggleOverUnder').checked = data.engineOverUnder;
   $('toggleAccumulator').checked = !!data.engineAccumulator;
+  $('toggleCodyBarrier').checked = !!data.engineCodyBarrier;
 
   // Martingale sync
   const toggleCob = $('toggleCobertura');
@@ -1876,19 +1928,22 @@ function updateUI(data) {
   updateEngineCard('engineCardEvenOdd', 'statusEvenOdd', data.engineEvenOdd, data.isRunning, data.currentEngine === 'EVEN_ODD');
   updateEngineCard('engineCardOverUnder', 'statusOverUnder', data.engineOverUnder, data.isRunning, data.currentEngine === 'OVER_UNDER');
   updateEngineCard('engineCardAccumulator', 'statusAccumulator', data.engineAccumulator, data.isRunning, data.currentEngine === 'ACCUMULATOR');
+  updateEngineCard('engineCardCodyBarrier', 'statusCodyBarrier', data.engineCodyBarrier, data.isRunning, data.currentEngine === 'CODY_BARRIER');
 
   // Engine stats
   updateEngineStats('eo', data.engineStats.EVEN_ODD);
   updateEngineStats('ou', data.engineStats.OVER_UNDER);
   if (data.engineStats.ACCUMULATOR) updateEngineStats('accu', data.engineStats.ACCUMULATOR);
+  if (data.engineStats.CODY_BARRIER) updateEngineStats('cody', data.engineStats.CODY_BARRIER);
 
   // Darwin mode badges toggling
-  ['EVEN_ODD', 'OVER_UNDER', 'ACCUMULATOR'].forEach(eng => {
+  ['EVEN_ODD', 'OVER_UNDER', 'ACCUMULATOR', 'CODY_BARRIER'].forEach(eng => {
     const stats = data.engineStats[eng];
     const badgeId = {
       'EVEN_ODD': 'darwinBadgeEvenOdd',
       'OVER_UNDER': 'darwinBadgeOverUnder',
-      'ACCUMULATOR': 'darwinBadgeAccumulator'
+      'ACCUMULATOR': 'darwinBadgeAccumulator',
+      'CODY_BARRIER': 'darwinBadgeCodyBarrier'
     }[eng];
     const badge = $(badgeId);
     if (badge) {
@@ -2014,7 +2069,8 @@ function pulseEngine(engineKey) {
   const map = {
     'EVEN_ODD': 'engineCardEvenOdd',
     'OVER_UNDER': 'engineCardOverUnder',
-    'ACCUMULATOR': 'engineCardAccumulator'
+    'ACCUMULATOR': 'engineCardAccumulator',
+    'CODY_BARRIER': 'engineCardCodyBarrier'
   };
   const card = $(map[engineKey]);
   if (!card) return;
@@ -2394,6 +2450,9 @@ $('toggleOverUnder').addEventListener('change', function() {
 });
 $('toggleAccumulator').addEventListener('change', function() {
   handleEngineToggle('ACCUMULATOR', this.checked);
+});
+$('toggleCodyBarrier').addEventListener('change', function() {
+  handleEngineToggle('CODY_BARRIER', this.checked);
 });
 
 
