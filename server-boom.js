@@ -1489,15 +1489,16 @@ function connectDeriv() {
     }
     
     ws = new WebSocket(`wss://ws.derivws.com/websockets/v3?app_id=${APP_ID}`, options);
+    const socketInstance = ws;
     
-    ws.on('open', () => {
+    socketInstance.on('open', () => {
         console.log('🔌 Conexión establecida con WebSocket de Deriv. Autenticando...');
         
         // OPTIMIZACIÓN DE LATENCIA HFT: Habilitar TCP Low-Latency Flags en caliente
-        if (ws._socket) {
+        if (socketInstance._socket) {
             try {
-                ws._socket.setNoDelay(true); // Desactivar algoritmo de Nagle (0 buffer)
-                ws._socket.setKeepAlive(true, 5000); // Mantener caliente la sesión TCP a nivel de socket
+                socketInstance._socket.setNoDelay(true); // Desactivar algoritmo de Nagle (0 buffer)
+                socketInstance._socket.setKeepAlive(true, 5000); // Mantener caliente la sesión TCP a nivel de socket
             } catch (e) {
                 // Failsafe en caso de retraso en la asignación del socket
             }
@@ -1506,24 +1507,24 @@ function connectDeriv() {
         // CANAL DE DATOS ULTRA-CALIENTE: Enviar Pings de calentamiento cada 30s (óptimo para mantener caliente la conexión sin saturar el límite de tasa de Deriv)
         if (heartbeatInterval) clearInterval(heartbeatInterval);
         heartbeatInterval = setInterval(() => {
-            if (ws && ws.readyState === WebSocket.OPEN) {
-                ws.send(JSON.stringify({ ping: 1 }));
+            if (ws === socketInstance && socketInstance.readyState === WebSocket.OPEN) {
+                socketInstance.send(JSON.stringify({ ping: 1 }));
             }
         }, 30000);
         
         setTimeout(() => {
-            if (ws && ws.readyState === WebSocket.OPEN) {
+            if (ws === socketInstance && socketInstance.readyState === WebSocket.OPEN) {
                 const tokenReal = botState.derivTokenReal || botState.realToken || process.env.DERIV_TOKEN_REAL || '';
                 const tokenDemo = botState.derivTokenDemo || botState.demoToken || process.env.DERIV_TOKEN_DEMO || process.env.DERIV_TOKEN || 'PMIt2RhEjEDbcLD';
                 const activeToken = botState.accountMode === 'real' ? tokenReal : tokenDemo;
                 
                 console.log(`🔌 [WEBSOCKET] Solicitando autorización para cuenta ${botState.accountMode.toUpperCase()}...`);
-                ws.send(JSON.stringify({ authorize: activeToken }));
+                socketInstance.send(JSON.stringify({ authorize: activeToken }));
             }
         }, 3000);
     });
     
-    ws.on('message', (raw) => {
+    socketInstance.on('message', (raw) => {
         let msg;
         try { msg = JSON.parse(raw); } catch (e) { return; }
         
@@ -1941,12 +1942,12 @@ function connectDeriv() {
         }
     });
     
-    ws.on('error', (err) => {
+    socketInstance.on('error', (err) => {
         console.error('❌ WebSocket Error:', err.message);
         botState.isConnectedToDeriv = false;
     });
     
-    ws.on('close', (code) => {
+    socketInstance.on('close', (code) => {
         if (heartbeatInterval) {
             clearInterval(heartbeatInterval);
             heartbeatInterval = null;
@@ -1956,11 +1957,13 @@ function connectDeriv() {
         botState.isConnectedToDeriv = false;
         botState.isBuying = false;
         
-        if (ws) {
-            ws.removeAllListeners();
-            try { ws.terminate(); } catch (e) { /* ignored */ }
+        socketInstance.removeAllListeners();
+        try { socketInstance.terminate(); } catch (e) { /* ignored */ }
+        
+        if (ws === socketInstance) {
             ws = null;
         }
+        
         if (!reconnectTimeout) {
             reconnectTimeout = setTimeout(connectDeriv, wait);
         }
