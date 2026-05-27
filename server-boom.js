@@ -53,6 +53,8 @@ let botState = {
     tradeHistory: [],
     currentContractId: null,
     activeContractId: null,
+    activeContractIds: [],
+    dualContractsState: null,
     
     // Soporte para Multi-Mercados escaneados en paralelo
     markets: {
@@ -279,6 +281,8 @@ if (fs.existsSync(STATE_FILE)) {
             botState.isBuying = false;
             botState.activeContractId = null;
             botState.currentContractId = null;
+            botState.activeContractIds = [];
+            botState.dualContractsState = null;
         }
         console.log(`📂 Estado KRAKEN cargado correctamente. Historial: ${botState.tradeHistory.length} trades.`);
     } catch (e) {
@@ -687,25 +691,16 @@ function evaluateCodyBarrier(mState) {
     const formattedOffset = parseFloat(offset.toFixed(decimals));
     const finalOffset = formattedOffset > 0 ? formattedOffset : Math.pow(10, -decimals);
     
-    // Triggers en extremos RSI
-    if (rsi >= 65) {
+    // En el canal de Cody, disparamos AMBOS lados simultáneamente (Hedged Double Sniper)
+    // para cosechar doble ganancia si queda en el canal, o mitigar pérdida si rompe un lado.
+    if (rsi >= 65 || rsi <= 35) {
         return {
             engine: 'CODY_BARRIER',
-            contractType: 'LOWER',
-            barrier: `+${finalOffset}`,
+            contractType: 'DUAL',
+            barrierHigher: `-${finalOffset}`,
+            barrierLower: `+${finalOffset}`,
             stakeMultiplier: 1.0,
-            reason: `RSI Sobrecompra: ${rsi.toFixed(1)} >= 65 | StdDev: ${stdDev.toFixed(decimals)} | Barrera: +${finalOffset}`,
-            entropy: parseFloat(mState.shannonEntropy)
-        };
-    }
-    
-    if (rsi <= 35) {
-        return {
-            engine: 'CODY_BARRIER',
-            contractType: 'HIGHER',
-            barrier: `-${finalOffset}`,
-            stakeMultiplier: 1.0,
-            reason: `RSI Sobreventa: ${rsi.toFixed(1)} <= 35 | StdDev: ${stdDev.toFixed(decimals)} | Barrera: -${finalOffset}`,
+            reason: `Dual Sniper por Extremo RSI:${rsi.toFixed(1)} | StdDev:${stdDev.toFixed(decimals)} | Barrera: ±${finalOffset}`,
             entropy: parseFloat(mState.shannonEntropy)
         };
     }
@@ -846,8 +841,17 @@ function tryFireTrade() {
         botState.isBuying = false;
         saveState();
     }
+    if (botState.currentContractType === 'DUAL' && botState.activeContractIds && botState.activeContractIds.length > 0 && (now - botState.lastTradeTime) > failsafeTimeout) {
+        console.log(`⚠️ FAILSAFE DUAL: Liberando bot por contrato dual colgado.`);
+        botState.activeContractIds = [];
+        botState.activeContractId = null;
+        botState.currentContractId = null;
+        botState.isBuying = false;
+        botState.currentEngine = null;
+        saveState();
+    }
     
-    if (botState.isBuying || botState.activeContractId) return;
+    if (botState.isBuying || botState.activeContractId || (botState.activeContractIds && botState.activeContractIds.length > 0)) return;
     
     // Control de límite de pérdidas diarias estricto basado en el PnL de la sesión
     if (botState.pnlSession <= -botState.maxDailyLoss) {
@@ -977,12 +981,18 @@ function tryFireTrade() {
     // ─── GHOST TRADING LOGIC ───
     if (botState.ghostActive && !botState.ghostNextTradeReal) {
         if (!botState.ghostPendingTrade && botState.isRunning) {
-            console.log(`👻 GHOST TRADE [${activeSymbol}]: Señal de ${signal.engine} [${signal.contractType} B:${signal.barrier || '-'}]. Simulando entrada virtual...`);
+            if (signal.contractType === 'DUAL') {
+                console.log(`👻 GHOST TRADE DUAL [${activeSymbol}]: Simulación canal sniper B: ${signal.barrierHigher} / ${signal.barrierLower}...`);
+            } else {
+                console.log(`👻 GHOST TRADE [${activeSymbol}]: Señal de ${signal.engine} [${signal.contractType} B:${signal.barrier || '-'}]. Simulando entrada virtual...`);
+            }
             botState.ghostPendingTrade = {
                 symbol: activeSymbol,
                 engine: signal.engine,
                 contractType: signal.contractType,
-                barrier: signal.barrier,
+                barrier: signal.barrier || null,
+                barrierHigher: signal.barrierHigher || null,
+                barrierLower: signal.barrierLower || null,
                 entryTickPrice: mState ? mState.lastTickPrice : botState.lastTickPrice,
                 ticksRemaining: signal.engine === 'CODY_BARRIER' ? 5 : 1
             };
@@ -999,8 +1009,58 @@ function tryFireTrade() {
     
     botState.currentEngine = signal.engine;
     botState.currentContractType = signal.contractType;
-    botState.currentBarrier = signal.barrier;
+    botState.currentBarrier = signal.contractType === 'DUAL' ? `${signal.barrierHigher}/${signal.barrierLower}` : signal.barrier;
     botState.currentStake = finalStake;
+    
+    // 🎯 MANEJO DISPARO SIMULTÁNEO DUAL (MOTOR 6)
+    if (signal.contractType === 'DUAL') {
+        botState.activeContractIds = [];
+        botState.dualContractsState = {
+            higher: { id: null, finalized: false, profit: 0, won: false },
+            lower: { id: null, finalized: false, profit: 0, won: false }
+        };
+        
+        const buyRequestHigher = {
+            buy: 1,
+            price: finalStake,
+            parameters: {
+                amount: finalStake,
+                basis: 'stake',
+                contract_type: 'HIGHER',
+                currency: 'USD',
+                symbol: activeSymbol,
+                duration: 5,
+                duration_unit: 't',
+                barrier: signal.barrierHigher
+            }
+        };
+        
+        const buyRequestLower = {
+            buy: 1,
+            price: finalStake,
+            parameters: {
+                amount: finalStake,
+                basis: 'stake',
+                contract_type: 'LOWER',
+                currency: 'USD',
+                symbol: activeSymbol,
+                duration: 5,
+                duration_unit: 't',
+                barrier: signal.barrierLower
+            }
+        };
+        
+        botState.isBuying = true;
+        botState.lastTradeTime = now;
+        
+        console.log(`🎯 [DUAL SNIPER] DISPARANDO AMBOS LADOS SIMULTÁNEAMENTE [${activeSymbol}] | Stake: $${finalStake.toFixed(2)} c/u | 5 Ticks`);
+        console.log(`   ⬆️ HIGHER con barrera ${signal.barrierHigher}`);
+        console.log(`   ⬇️ LOWER con barrera ${signal.barrierLower}`);
+        
+        ws.send(JSON.stringify(buyRequestHigher));
+        ws.send(JSON.stringify(buyRequestLower));
+        return;
+    }
     
     const buyRequest = {
         buy: 1,
@@ -1205,6 +1265,129 @@ function finalizeTrade(c) {
     botState.currentContractId = null;
     botState.isBuying = false;
     botState.currentEngine = null;
+    
+    saveState();
+}
+
+/**
+ * Finaliza la operación simultánea DUAL del Motor 6 (Cody Barrier).
+ * Espera a que ambos contratos se liquiden, calcula el PnL neto y gestiona la Cobertura.
+ */
+function finalizeDualTrade() {
+    const state = botState.dualContractsState;
+    if (!state) return;
+    
+    const profitHigher = state.higher.profit || 0;
+    const profitLower = state.lower.profit || 0;
+    const netProfit = profitHigher + profitLower;
+    const isWin = netProfit > 0;
+    
+    const tradeSymbol = SYMBOL;
+    const mState = botState.markets[tradeSymbol];
+    
+    botState.pnlSession += netProfit;
+    botState.totalTradesSession++;
+    
+    const engine = 'CODY_BARRIER';
+    const cType = 'DUAL';
+    const name = 'BARRERAS CODY';
+    
+    if (isWin) {
+        botState.winsSession++;
+        botState.dailyProfit += netProfit;
+        botState.consecutiveWins++;
+        
+        if (botState.consecutiveWins >= 2) {
+            botState.momentumShieldLevel = 0;
+            botState.consecutiveLosses = 0;
+        }
+        
+        console.log(`✅ DUAL WIN +$${netProfit.toFixed(2)} [${tradeSymbol} - ${name}] | PnL: $${botState.pnlSession.toFixed(2)}`);
+        console.log(`   📈 Higher: ${profitHigher > 0 ? 'WIN ✅' : 'LOSS ❌'} ($${profitHigher.toFixed(2)})`);
+        console.log(`   📉 Lower: ${profitLower > 0 ? 'WIN ✅' : 'LOSS ❌'} ($${profitLower.toFixed(2)})`);
+    } else {
+        botState.lossesSession++;
+        botState.dailyLoss += Math.abs(netProfit);
+        
+        botState.consecutiveWins = 0;
+        botState.consecutiveLosses++;
+        
+        if (mState) {
+            mState.lockedUntil = Date.now() + 300000; // 5 min de cuarentena
+            console.log(`🚨 CORTAFUEGOS ACTIVO: Cuarentena de 5 minutos aplicada a ${tradeSymbol} por pérdida en Dual Cody.`);
+        }
+        
+        botState.lossPauseUntil = Date.now() + 60000;
+        botState.lossPauseTicksProcessed = 0;
+        console.log(`🚨 PÉRDIDA DUAL DETECTADA: Iniciando pausa de enfriamiento de 60 segundos.`);
+        
+        console.log(`❌ DUAL LOSS -$${Math.abs(netProfit).toFixed(2)} [${tradeSymbol} - ${name}] | PnL: $${botState.pnlSession.toFixed(2)}`);
+        console.log(`   📈 Higher: ${profitHigher > 0 ? 'WIN ✅' : 'LOSS ❌'} ($${profitHigher.toFixed(2)})`);
+        console.log(`   📉 Lower: ${profitLower > 0 ? 'WIN ✅' : 'LOSS ❌'} ($${profitLower.toFixed(2)})`);
+    }
+    
+    // Cobertura Cuántica (D'Alembert step)
+    if (isWin) {
+        botState.martingaleStep = 0;
+    } else {
+        if (botState.coberturaEnabled) {
+            botState.martingaleStep++;
+            if (botState.martingaleStep > botState.maxMartingaleSteps) {
+                botState.martingaleStep = 0;
+            } else {
+                console.log(`📈 COBERTURA CUÁNTICA: Pérdida real en Dual. Escalando Cobertura (Progresión Lineal D'Alembert) a Nivel ${botState.martingaleStep} (Multiplicador: x${1 + botState.martingaleStep})`);
+            }
+        }
+    }
+    
+    // Registrar estadísticas del motor
+    if (botState.engineStats[engine]) {
+        if (isWin) botState.engineStats[engine].wins++;
+        else botState.engineStats[engine].losses++;
+        botState.engineStats[engine].pnl += netProfit;
+    }
+    
+    // Registrar en Historial
+    botState.tradeHistory.unshift({
+        symbol: tradeSymbol,
+        engine: name,
+        engineKey: engine,
+        contractType: cType,
+        barrier: `H:${state.higher.barrier || ''} L:${state.lower.barrier || ''}`,
+        digit: mState ? mState.lastDigit : botState.lastDigit,
+        profit: netProfit,
+        result: isWin ? 'WIN ✅' : 'LOSS ❌',
+        time: new Date().toISOString(),
+        stake: botState.currentStake,
+        entropy: mState ? mState.shannonEntropy : botState.shannonEntropy,
+        balanceAfter: botState.balance
+    });
+    if (botState.tradeHistory.length > 100) botState.tradeHistory.pop();
+    
+    // Trailing TP & SL
+    if (botState.pnlSession > botState.profitPeak) {
+        botState.profitPeak = botState.pnlSession;
+        if (botState.pnlSession > 5.0) {
+            botState.profitFloor = botState.profitPeak * 0.60;
+        }
+    }
+    
+    if (botState.pnlSession >= botState.takeProfit) {
+        botState.isRunning = false;
+        console.log(`🚀 META ALCANZADA: $${botState.pnlSession.toFixed(2)}. Bot detenido.`);
+    }
+    if (botState.pnlSession <= -botState.maxDailyLoss) {
+        botState.isRunning = false;
+        console.log(`⛔ LÍMITE DE PÉRDIDA ALCANZADO: $${botState.pnlSession.toFixed(2)}. Bot detenido.`);
+    }
+    
+    // Sanear estados activos
+    botState.activeContractId = null;
+    botState.currentContractId = null;
+    botState.isBuying = false;
+    botState.currentEngine = null;
+    botState.activeContractIds = [];
+    botState.dualContractsState = null;
     
     saveState();
 }
@@ -1950,6 +2133,15 @@ function connectDeriv() {
                         const dynamicBarrier = Math.max(0.0001, Math.min(0.0003, recentVol * 0.5));
                         const priceChangePct = Math.abs((mState.lastTickPrice - pt.entryTickPrice) / pt.entryTickPrice);
                         won = priceChangePct <= dynamicBarrier;
+                    } else if (pt.engine === 'CODY_BARRIER' && pt.contractType === 'DUAL') {
+                        const exitPrice = mState.lastTickPrice;
+                        const entryPrice = pt.entryTickPrice;
+                        const barHigher = parseFloat(pt.barrierHigher); // ej. -0.15
+                        const barLower = parseFloat(pt.barrierLower); // ej. +0.15
+                        
+                        const wonHigher = exitPrice > (entryPrice + barHigher);
+                        const wonLower = exitPrice < (entryPrice + barLower);
+                        won = wonHigher && wonLower; // Ganamos ambos si queda en el canal
                     } else if (pt.engine === 'CODY_BARRIER') {
                         const exitPrice = mState.lastTickPrice;
                         const entryPrice = pt.entryTickPrice;
@@ -2005,15 +2197,33 @@ function connectDeriv() {
         }
         
         if (msg.msg_type === 'buy' && msg.buy) {
-            botState.activeContractId = msg.buy.contract_id;
-            botState.currentContractId = msg.buy.contract_id;
-            botState.isBuying = false;
+            const cid = msg.buy.contract_id;
             
-            console.log(`🎯 CONTRATO COMPRADO [ID: ${msg.buy.contract_id}] | Engine: ${botState.currentEngine} | ${botState.currentContractType} B:${botState.currentBarrier || 'N/A'}`);
+            if (botState.currentContractType === 'DUAL') {
+                if (!botState.activeContractIds) botState.activeContractIds = [];
+                botState.activeContractIds.push(cid);
+                
+                // Asignar al lado correspondiente según el tipo en la solicitud original
+                const buyReqType = msg.echo_req && msg.echo_req.parameters && msg.echo_req.parameters.contract_type;
+                if (buyReqType === 'HIGHER') {
+                    botState.dualContractsState.higher.id = cid;
+                    botState.dualContractsState.higher.barrier = msg.echo_req.parameters.barrier;
+                } else if (buyReqType === 'LOWER') {
+                    botState.dualContractsState.lower.id = cid;
+                    botState.dualContractsState.lower.barrier = msg.echo_req.parameters.barrier;
+                }
+                
+                console.log(`🎯 [DUAL BUY] Contrato comprado [ID: ${cid}] de tipo ${buyReqType}`);
+            } else {
+                botState.activeContractId = cid;
+                botState.currentContractId = cid;
+            }
+            
+            botState.isBuying = false;
             
             ws.send(JSON.stringify({
                 proposal_open_contract: 1,
-                contract_id: msg.buy.contract_id,
+                contract_id: cid,
                 subscribe: 1
             }));
         }
@@ -2021,6 +2231,32 @@ function connectDeriv() {
         if (msg.msg_type === 'proposal_open_contract') {
             const c = msg.proposal_open_contract;
             if (!c) return;
+            
+            if (botState.currentContractType === 'DUAL') {
+                if (botState.dualContractsState) {
+                    if (botState.dualContractsState.higher.id === c.contract_id) {
+                        botState.dualContractsState.higher.finalized = c.is_sold === 1;
+                        botState.dualContractsState.higher.profit = parseFloat(c.profit || 0);
+                        botState.dualContractsState.higher.won = parseFloat(c.profit || 0) > 0;
+                    } else if (botState.dualContractsState.lower.id === c.contract_id) {
+                        botState.dualContractsState.lower.finalized = c.is_sold === 1;
+                        botState.dualContractsState.lower.profit = parseFloat(c.profit || 0);
+                        botState.dualContractsState.lower.won = parseFloat(c.profit || 0) > 0;
+                    }
+                    
+                    if (c.is_sold) {
+                        if (botState.activeContractIds) {
+                            botState.activeContractIds = botState.activeContractIds.filter(id => id !== c.contract_id);
+                        }
+                        
+                        const bothFinalized = botState.dualContractsState.higher.finalized && botState.dualContractsState.lower.finalized;
+                        if (bothFinalized) {
+                            finalizeDualTrade();
+                        }
+                    }
+                }
+                return;
+            }
             
             // ── ACCUMULATOR: Mantenimiento del contrato activo ──
             if (botState.currentContractType === 'ACCU' && c.contract_id === botState.activeContractId && !c.is_sold && botState.isSellingAccumulator !== c.contract_id) {
