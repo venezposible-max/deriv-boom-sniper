@@ -1560,13 +1560,20 @@ function connectDeriv() {
                 }
             }
             if (msg.msg_type === 'sell') {
-                botState.isSellingAccumulator = null;
-                // BetExpired significa que el contrato ya crasheó/expiró.
-                // La pérdida se registrará cuando llegue el proposal_open_contract con is_sold:true.
-                // No aplicar cooldown extra aquí.
                 if (msg.error.code === 'BetExpired') {
-                    console.log(`ℹ️ Contrato ya expiró antes de completar la venta. La pérdida se contabilizará automáticamente.`);
+                    // 🔴 FIX: NO limpiar isSellingAccumulator — si lo limpiamos,
+                    // el siguiente update del contrato intentará vender DE NUEVO → bucle infinito
+                    const knockedContractId = (msg.echo_req && msg.echo_req.sell) || botState.activeContractId;
+                    if (knockedContractId) {
+                        botState.isSellingAccumulator = knockedContractId; // Bloquear re-intentos
+                    }
+                    console.log(`💥 KNOCKOUT CONFIRMADO [ID: ${knockedContractId}]: Contrato expiró (barrera tocada). Consultando estado final...`);
+                    // Consulta one-shot para obtener el is_sold:true y activar finalizeTrade
+                    if (knockedContractId && ws && ws.readyState === WebSocket.OPEN) {
+                        ws.send(JSON.stringify({ proposal_open_contract: 1, contract_id: knockedContractId }));
+                    }
                 } else {
+                    botState.isSellingAccumulator = null;
                     console.error(`❌ Error en venta: ${msg.error.message}`);
                 }
             }
