@@ -1026,7 +1026,7 @@ function tryFireTrade() {
             parameters: {
                 amount: finalStake,
                 basis: 'stake',
-                contract_type: 'HIGHER',
+                contract_type: 'CALL',
                 currency: 'USD',
                 symbol: activeSymbol,
                 duration: 5,
@@ -1041,7 +1041,7 @@ function tryFireTrade() {
             parameters: {
                 amount: finalStake,
                 basis: 'stake',
-                contract_type: 'LOWER',
+                contract_type: 'PUT',
                 currency: 'USD',
                 symbol: activeSymbol,
                 duration: 5,
@@ -2147,9 +2147,9 @@ function connectDeriv() {
                         const entryPrice = pt.entryTickPrice;
                         const barrierOffset = parseFloat(pt.barrier); // ej. +0.15 o -0.15
                         
-                        if (pt.contractType === 'LOWER') {
+                        if (pt.contractType === 'LOWER' || pt.contractType === 'PUT') {
                             won = exitPrice < (entryPrice + barrierOffset);
-                        } else if (pt.contractType === 'HIGHER') {
+                        } else if (pt.contractType === 'HIGHER' || pt.contractType === 'CALL') {
                             won = exitPrice > (entryPrice + barrierOffset);
                         }
                     }
@@ -2205,10 +2205,10 @@ function connectDeriv() {
                 
                 // Asignar al lado correspondiente según el tipo en la solicitud original
                 const buyReqType = msg.echo_req && msg.echo_req.parameters && msg.echo_req.parameters.contract_type;
-                if (buyReqType === 'HIGHER') {
+                if (buyReqType === 'HIGHER' || buyReqType === 'CALL') {
                     botState.dualContractsState.higher.id = cid;
                     botState.dualContractsState.higher.barrier = msg.echo_req.parameters.barrier;
-                } else if (buyReqType === 'LOWER') {
+                } else if (buyReqType === 'LOWER' || buyReqType === 'PUT') {
                     botState.dualContractsState.lower.id = cid;
                     botState.dualContractsState.lower.barrier = msg.echo_req.parameters.barrier;
                 }
