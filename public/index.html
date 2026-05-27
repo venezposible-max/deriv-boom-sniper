@@ -1582,6 +1582,23 @@ body::before {
 
       <div class="control-separator"></div>
 
+      <div class="control-group" style="display:flex; flex-direction:column; align-items:center; min-width: 100px;">
+        <label style="color: var(--accent-red); font-weight: 700;" title="Filtro de Payout Previo (Solo dispara si pago combinado >= stake total + margen)">Cody Filtro</label>
+        <label class="toggle" style="width: 40px; height: 22px; margin-top:4px;">
+          <input type="checkbox" id="toggleCodyPayoutFilter" onchange="handleCodyPayoutFilterToggle(this.checked)">
+          <div class="toggle-track" style="border-radius: 12px;"></div>
+          <div class="toggle-thumb" style="width: 16px; height: 16px; top: 3px; left: 3px;"></div>
+        </label>
+        <div style="font-size: 11px; margin-top: 6px; font-weight: bold; color: var(--text-muted);" id="codyFilterStatusDisplay">Estado: OFF</div>
+      </div>
+
+      <div class="control-group">
+        <label>Cody: Margen (%)</label>
+        <input type="number" id="inputCodyPayoutFilterMargin" value="0" min="0" max="50" step="1" onchange="handleConfigChange()" onblur="handleConfigChange()">
+      </div>
+
+      <div class="control-separator"></div>
+
       <div class="control-group" style="display:flex; flex-direction:column; align-items:center; min-width: 90px;">
         <label style="color: var(--accent-green);" title="Cobertura Cuántica (Progresión Lineal D'Alembert + Ghost Shield)">Cobertura</label>
         <label class="toggle" style="width: 40px; height: 22px; margin-top:4px;">
@@ -2012,6 +2029,20 @@ function updateUI(data) {
   if (document.activeElement !== $('inputAccuTargetTicks')) $('inputAccuTargetTicks').value = data.accuTargetTicks || 3;
   if (document.activeElement !== $('inputCodyMultiplier')) $('inputCodyMultiplier').value = data.codyMultiplier || 1.8;
 
+  // Cody Payout Filter sync
+  const toggleCodyFilter = $('toggleCodyPayoutFilter');
+  if (toggleCodyFilter) {
+    toggleCodyFilter.checked = !!data.codyPayoutFilterEnabled;
+  }
+  const codyFilterDisplay = $('codyFilterStatusDisplay');
+  if (codyFilterDisplay) {
+    codyFilterDisplay.textContent = 'Estado: ' + (data.codyPayoutFilterEnabled ? 'ON 🛡️' : 'OFF ⚡');
+    codyFilterDisplay.style.color = data.codyPayoutFilterEnabled ? 'var(--accent-red)' : 'var(--text-muted)';
+  }
+  if (document.activeElement !== $('inputCodyPayoutFilterMargin')) {
+    $('inputCodyPayoutFilterMargin').value = Math.round((data.codyPayoutFilterMargin || 0.0) * 100);
+  }
+
 
 
   // Sparkline Chart update on every status poll
@@ -2434,11 +2465,12 @@ function handleConfigChange() {
     const accuGrowthRate = (parseFloat($('inputAccuGrowthRate').value) || 3) / 100;
     const accuTargetTicks = parseInt($('inputAccuTargetTicks').value) || 3;
     const codyMultiplier = parseFloat($('inputCodyMultiplier').value) || 1.8;
+    const codyPayoutFilterMargin = (parseFloat($('inputCodyPayoutFilterMargin').value) || 0) / 100;
     try {
       await fetch('/api/config', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ stake, maxDailyLoss, takeProfit, accuGrowthRate, accuTargetTicks, codyMultiplier })
+        body: JSON.stringify({ stake, maxDailyLoss, takeProfit, accuGrowthRate, accuTargetTicks, codyMultiplier, codyPayoutFilterMargin })
       });
       showToast('Configuración actualizada', 'success');
     } catch (e) {
@@ -2473,6 +2505,20 @@ async function handleCoberturaToggle(checked) {
     showToast(`Cobertura Cuántica ${checked ? 'ACTIVADA (Recuperación Segura 🛡️)' : 'desactivada (Sin Cobertura ⚠️)'}`, checked ? 'success' : 'info');
   } catch (e) {
     showToast('Error al actualizar Cobertura', 'error');
+  }
+  fetchStatus();
+}
+
+async function handleCodyPayoutFilterToggle(checked) {
+  try {
+    await fetch('/api/config', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ codyPayoutFilterEnabled: checked })
+    });
+    showToast(`Filtro de Payout Cody ${checked ? 'ACTIVADO 🛡️' : 'desactivado ⚡'}`, checked ? 'success' : 'info');
+  } catch (e) {
+    showToast('Error al actualizar Filtro Cody', 'error');
   }
   fetchStatus();
 }

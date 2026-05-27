@@ -109,6 +109,8 @@ let botState = {
     
     // Cody standard deviation multiplier
     codyMultiplier: 1.8,
+    codyPayoutFilterEnabled: true,  // 🥇 Opción 1: Filtro de Payout Previo habilitado por defecto
+    codyPayoutFilterMargin: 0.0,    // Margen por defecto de 0% (>= totalStake)
     
     // ─── HYDRA MODE: ACCU Puro (desactiva EVEN/ODD y OVER/UNDER) ───
     hydraMode: true,              // 🐍 Cuando true: SOLO ACCU, cero otros motores
@@ -252,6 +254,8 @@ if (fs.existsSync(STATE_FILE)) {
             botState.accuKnockoutCooldownMs = 30000;
             botState.accuTakeProfitAt = 0.02;
             if (botState.codyMultiplier === undefined) botState.codyMultiplier = 1.8;
+            if (botState.codyPayoutFilterEnabled === undefined) botState.codyPayoutFilterEnabled = true;
+            if (botState.codyPayoutFilterMargin === undefined) botState.codyPayoutFilterMargin = 0.0;
             
             // Garantizar variables de Cuenta (Virtual vs Real)
             if (botState.accountMode === undefined) botState.accountMode = 'demo';
@@ -868,6 +872,13 @@ function tryFireTrade() {
         saveState();
     }
     
+    // Failsafe de consulta de payout (proposals) colgada
+    if (botState.pendingPayoutCheck && (now - botState.pendingPayoutCheck.timestamp) > 5000) {
+        console.log(`⚠️ [CODY FILTER FAILSAFE] Timeout de 5 segundos superado esperando proposals. Liberando bot.`);
+        botState.isBuying = false;
+        botState.pendingPayoutCheck = null;
+    }
+    
     if (botState.isBuying || botState.activeContractId || (botState.activeContractIds && botState.activeContractIds.length > 0)) return;
     
     // Control de límite de pérdidas diarias estricto basado en el PnL de la sesión
@@ -1031,12 +1042,6 @@ function tryFireTrade() {
     
     // 🎯 MANEJO DISPARO SIMULTÁNEO DUAL (MOTOR 6)
     if (signal.contractType === 'DUAL') {
-        botState.activeContractIds = [];
-        botState.dualContractsState = {
-            higher: { id: null, finalized: false, profit: 0, won: false },
-            lower: { id: null, finalized: false, profit: 0, won: false }
-        };
-        
         const buyRequestHigher = {
             buy: 1,
             price: finalStake,
@@ -1065,6 +1070,68 @@ function tryFireTrade() {
                 duration_unit: 't',
                 barrier: signal.barrierLower
             }
+        };
+        
+        if (botState.codyPayoutFilterEnabled) {
+            const reqIdHigher = `prop_higher_${Date.now()}_${Math.floor(Math.random() * 1000)}`;
+            const reqIdLower = `prop_lower_${Date.now()}_${Math.floor(Math.random() * 1000)}`;
+            
+            botState.pendingPayoutCheck = {
+                timestamp: Date.now(),
+                activeSymbol: activeSymbol,
+                finalStake: finalStake,
+                signal: signal,
+                reqIdHigher: reqIdHigher,
+                reqIdLower: reqIdLower,
+                payoutHigher: null,
+                payoutLower: null,
+                buyRequestHigher: buyRequestHigher,
+                buyRequestLower: buyRequestLower
+            };
+            
+            const propRequestHigher = {
+                proposal: 1,
+                req_id: reqIdHigher,
+                amount: finalStake,
+                basis: 'stake',
+                contract_type: 'CALL',
+                currency: 'USD',
+                symbol: activeSymbol,
+                duration: 5,
+                duration_unit: 't',
+                barrier: signal.barrierHigher
+            };
+            
+            const propRequestLower = {
+                proposal: 1,
+                req_id: reqIdLower,
+                amount: finalStake,
+                basis: 'stake',
+                contract_type: 'PUT',
+                currency: 'USD',
+                symbol: activeSymbol,
+                duration: 5,
+                duration_unit: 't',
+                barrier: signal.barrierLower
+            };
+            
+            botState.isBuying = true;
+            botState.lastTradeTime = now;
+            
+            console.log(`🔍 [CODY FILTER] Consultando cotizaciones (proposals) a Deriv...`);
+            console.log(`   ⬆️ Proposal Higher con req_id: ${reqIdHigher} y barrera ${signal.barrierHigher}`);
+            console.log(`   ⬇️ Proposal Lower con req_id: ${reqIdLower} y barrera ${signal.barrierLower}`);
+            
+            ws.send(JSON.stringify(propRequestHigher));
+            ws.send(JSON.stringify(propRequestLower));
+            return;
+        }
+        
+        // Si no está habilitado el filtro de payout previo, disparar compra directa
+        botState.activeContractIds = [];
+        botState.dualContractsState = {
+            higher: { id: null, finalized: false, profit: 0, won: false },
+            lower: { id: null, finalized: false, profit: 0, won: false }
         };
         
         botState.isBuying = true;
@@ -1597,7 +1664,8 @@ app.post('/api/config', (req, res) => {
             coberturaEnabled, differPrecision98, quirurgicoMode, accountMode, demoToken, realToken,
             accuGrowthRate, accuTargetTicks, accuMaxTicks, accuVolatilityThreshold,
             accuTrailingPct, accuPriorityMode, accuMinProfitRatio, accuTakeProfitAt,
-            hydraMode, ghostActive, codyMultiplier } = req.body;
+            hydraMode, ghostActive, codyMultiplier,
+            codyPayoutFilterEnabled, codyPayoutFilterMargin } = req.body;
     
     if (stake !== undefined) botState.stake = Math.max(0.35, parseFloat(stake));
     if (maxDailyLoss !== undefined) botState.maxDailyLoss = parseFloat(maxDailyLoss);
@@ -1638,6 +1706,13 @@ app.post('/api/config', (req, res) => {
     
     if (codyMultiplier !== undefined) {
         botState.codyMultiplier = Math.max(0.5, Math.min(5.0, parseFloat(codyMultiplier)));
+    }
+    
+    if (codyPayoutFilterEnabled !== undefined) {
+        botState.codyPayoutFilterEnabled = !!codyPayoutFilterEnabled;
+    }
+    if (codyPayoutFilterMargin !== undefined) {
+        botState.codyPayoutFilterMargin = Math.max(0.0, Math.min(0.5, parseFloat(codyPayoutFilterMargin)));
     }
     
     if (demoToken !== undefined) botState.demoToken = demoToken;
@@ -1932,6 +2007,14 @@ function connectDeriv() {
         }
         
         if (msg.error) {
+            // Cancelar verificación de payout si falla la propuesta
+            if (botState.pendingPayoutCheck && (msg.req_id === botState.pendingPayoutCheck.reqIdHigher || msg.req_id === botState.pendingPayoutCheck.reqIdLower)) {
+                console.error(`❌ [CODY FILTER] Error en consulta de proposal: ${msg.error.message}. Compra abortada.`);
+                botState.isBuying = false;
+                botState.pendingPayoutCheck = null;
+                return;
+            }
+            
             // Silenciar errores no críticos de suscripción duplicada
             if (msg.error.code === 'AlreadySubscribed') {
                 console.log(`ℹ️ Suscripción duplicada ignorada (no crítico): ${msg.error.message}`);
@@ -2028,6 +2111,54 @@ function connectDeriv() {
         
         if (msg.msg_type === 'balance' && msg.balance) {
             botState.balance = msg.balance.balance;
+        }
+        
+        if (msg.msg_type === 'proposal' && msg.proposal) {
+            const prop = msg.proposal;
+            const reqId = msg.req_id;
+            
+            if (botState.pendingPayoutCheck) {
+                const check = botState.pendingPayoutCheck;
+                
+                if (reqId === check.reqIdHigher) {
+                    check.payoutHigher = parseFloat(prop.payout || 0);
+                    console.log(`🔍 [CODY FILTER] Cotización Higher recibida: Payout $${check.payoutHigher.toFixed(2)} (Req ID: ${reqId})`);
+                } else if (reqId === check.reqIdLower) {
+                    check.payoutLower = parseFloat(prop.payout || 0);
+                    console.log(`🔍 [CODY FILTER] Cotización Lower recibida: Payout $${check.payoutLower.toFixed(2)} (Req ID: ${reqId})`);
+                }
+                
+                // Si ya tenemos ambos payouts
+                if (check.payoutHigher !== null && check.payoutLower !== null) {
+                    const totalStake = check.finalStake * 2;
+                    const combinedPayout = check.payoutHigher + check.payoutLower;
+                    const requiredPayout = totalStake * (1 + (botState.codyPayoutFilterMargin || 0.0));
+                    
+                    console.log(`📊 [CODY FILTER] EVALUACIÓN: Payout combinada: $${combinedPayout.toFixed(2)} vs Costo: $${totalStake.toFixed(2)} (Requerido: $${requiredPayout.toFixed(2)})`);
+                    
+                    if (combinedPayout >= requiredPayout) {
+                        console.log(`✅ [CODY FILTER] ¡APROBADO! La matemática favorece el disparo (+${(combinedPayout - totalStake).toFixed(2)} retorno neto). Comprando en REAL...`);
+                        
+                        botState.activeContractIds = [];
+                        botState.dualContractsState = {
+                            higher: { id: null, finalized: false, profit: 0, won: false },
+                            lower: { id: null, finalized: false, profit: 0, won: false }
+                        };
+                        
+                        botState.isBuying = true;
+                        botState.lastTradeTime = Date.now();
+                        
+                        ws.send(JSON.stringify(check.buyRequestHigher));
+                        ws.send(JSON.stringify(check.buyRequestLower));
+                    } else {
+                        console.log(`❌ [CODY FILTER] RECHAZADO: Payout combinado $${combinedPayout.toFixed(2)} < requerido $${requiredPayout.toFixed(2)}. Operación omitida.`);
+                        botState.isBuying = false; // Desbloquear bot
+                    }
+                    
+                    botState.pendingPayoutCheck = null; // Limpiar estado de verificación
+                }
+            }
+            return;
         }
 
         if (msg.msg_type === 'history' && msg.history) {
