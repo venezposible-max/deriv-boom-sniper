@@ -228,19 +228,21 @@ if (fs.existsSync(STATE_FILE)) {
             if (botState.franklinPerezLogic === undefined) botState.franklinPerezLogic = true;
             if (botState.quirurgicoMode === undefined) botState.quirurgicoMode = false;
             
-            if (botState.engineAccumulator === undefined) botState.engineAccumulator = true;
-            if (botState.hydraMode === undefined) botState.hydraMode = true;
-            if (botState.hydraSoloSymbols === undefined) botState.hydraSoloSymbols = ['R_10', '1HZ10V'];
-            if (botState.accuGrowthRate === undefined) botState.accuGrowthRate = 0.01;
-            if (botState.accuTargetTicks === undefined) botState.accuTargetTicks = 2;
-            if (botState.accuMaxTicks === undefined) botState.accuMaxTicks = 3;
-            if (botState.accuVolatilityThreshold === undefined) botState.accuVolatilityThreshold = 0.018;
-            if (botState.accuTrailingPct === undefined) botState.accuTrailingPct = 0.85;
-            if (botState.accuCurrentPeak === undefined) botState.accuCurrentPeak = 0;
-            if (botState.accuPriorityMode === undefined) botState.accuPriorityMode = true;
-            if (botState.accuMinProfitRatio === undefined) botState.accuMinProfitRatio = 0.0;
-            if (botState.accuKnockoutCooldownMs === undefined) botState.accuKnockoutCooldownMs = 30000;
-            if (botState.accuTakeProfitAt === undefined) botState.accuTakeProfitAt = 0.02;
+            botState.engineAccumulator = true;
+            botState.hydraMode = true;
+            botState.engineEvenOdd = false;
+            botState.engineOverUnder = false;
+            botState.hydraSoloSymbols = ['R_10', '1HZ10V'];
+            botState.accuGrowthRate = 0.01;
+            botState.accuTargetTicks = 2;
+            botState.accuMaxTicks = 3;
+            botState.accuVolatilityThreshold = 0.018;
+            botState.accuTrailingPct = 0.85;
+            botState.accuCurrentPeak = 0;
+            botState.accuPriorityMode = true;
+            botState.accuMinProfitRatio = 0.0;
+            botState.accuKnockoutCooldownMs = 30000;
+            botState.accuTakeProfitAt = 0.02;
             
             // Garantizar variables de Cuenta (Virtual vs Real)
             if (botState.accountMode === undefined) botState.accountMode = 'demo';

@@ -1515,13 +1515,13 @@ body::before {
       <div class="control-separator"></div>
 
       <div class="control-group">
-        <label>ACCU: Crecim. (%) 🔒</label>
-        <input type="number" id="inputAccuGrowthRate" value="3" min="1" max="5" step="1" disabled title="Fijado al 3% para la estrategia Ghost Shield">
+        <label>ACCU: Crecim. (%)</label>
+        <input type="number" id="inputAccuGrowthRate" value="1" min="1" max="5" step="1" onchange="handleConfigChange()" onblur="handleConfigChange()">
       </div>
 
       <div class="control-group">
-        <label>ACCU: Meta Ticks 🔒</label>
-        <input type="number" id="inputAccuTargetTicks" value="1" min="1" max="1" step="1" disabled title="Fijado en 1 (Micro-tick Sniper) para la estrategia Ghost Shield">
+        <label>ACCU: Meta Ticks</label>
+        <input type="number" id="inputAccuTargetTicks" value="2" min="1" max="100" step="1" onchange="handleConfigChange()" onblur="handleConfigChange()">
       </div>
 
       <div class="control-separator"></div>
