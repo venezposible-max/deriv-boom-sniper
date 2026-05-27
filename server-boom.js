@@ -105,11 +105,11 @@ let botState = {
     engineAccumulator: false,
     
     // ─── Configuraciones Acumulador ───
-    accuGrowthRate: 0.03,
-    accuTargetTicks: 3,            // Ticks mínimos antes de permitir venta
-    accuMaxTicks: 10,              // Ticks máximos antes de forzar venta
-    accuVolatilityThreshold: 0.045, // Volatilidad máxima admitida (% del growth_rate * 1.5)
-    accuTrailingPct: 0.75,         // Trailing stop: vender si profit cae al 75% del pico
+    accuGrowthRate: 0.02,          // Growth rate global (fallback)
+    accuTargetTicks: 20,           // 🔴 Mínimo 20 ticks antes de poder vender (profit ~$0.49)
+    accuMaxTicks: 40,              // Forzar venta a los 40 ticks (profit ~$1.09 = recupera 1 knockout)
+    accuVolatilityThreshold: 0.018, // 🔴 Filtro más estricto: CV < 1.8% (antes 4.5%)
+    accuTrailingPct: 0.80,         // Trailing: vender si profit cae al 80% del pico
     accuCurrentPeak: 0,            // Pico de profit actual del contrato ACCU en curso
     accuPriorityMode: true,        // Evaluar ACCU primero cuando mercado está calmado
     
@@ -222,13 +222,15 @@ if (fs.existsSync(STATE_FILE)) {
             if (botState.quirurgicoMode === undefined) botState.quirurgicoMode = false;
             
             if (botState.engineAccumulator === undefined) botState.engineAccumulator = false;
-            if (botState.accuGrowthRate === undefined) botState.accuGrowthRate = 0.03;
-            if (botState.accuTargetTicks === undefined) botState.accuTargetTicks = 3;
-            if (botState.accuMaxTicks === undefined) botState.accuMaxTicks = 10;
-            if (botState.accuVolatilityThreshold === undefined) botState.accuVolatilityThreshold = 0.045;
-            if (botState.accuTrailingPct === undefined) botState.accuTrailingPct = 0.75;
+            if (botState.accuGrowthRate === undefined) botState.accuGrowthRate = 0.02;
+            if (botState.accuTargetTicks === undefined) botState.accuTargetTicks = 20;
+            if (botState.accuMaxTicks === undefined) botState.accuMaxTicks = 40;
+            if (botState.accuVolatilityThreshold === undefined) botState.accuVolatilityThreshold = 0.018;
+            if (botState.accuTrailingPct === undefined) botState.accuTrailingPct = 0.80;
             if (botState.accuCurrentPeak === undefined) botState.accuCurrentPeak = 0;
             if (botState.accuPriorityMode === undefined) botState.accuPriorityMode = true;
+            if (botState.accuMinProfitRatio === undefined) botState.accuMinProfitRatio = 0.40;
+            if (botState.accuKnockoutCooldownMs === undefined) botState.accuKnockoutCooldownMs = 180000;
             
             // Garantizar variables de Cuenta (Virtual vs Real)
             if (botState.accountMode === undefined) botState.accountMode = 'demo';
@@ -582,52 +584,90 @@ function calcRecentVolatility(prices, window = 15) {
  */
 function checkMarketCalm(mState) {
     if (!mState.recentPrices || mState.recentPrices.length < 10) return false;
-    const vol = calcRecentVolatility(mState.recentPrices, 15);
-    const threshold = botState.accuVolatilityThreshold || 0.045;
-    // Verificar ausencia de spikes en los últimos 3 precios
-    const last3 = mState.recentPrices.slice(-3);
-    const hasSpike = last3.some((p, i) => {
+    const vol = calcRecentVolatility(mState.recentPrices, 20);
+    const threshold = botState.accuVolatilityThreshold || 0.018;
+    // Verificar ausencia de spikes en los últimos 5 precios (más estricto)
+    const last5 = mState.recentPrices.slice(-5);
+    const hasSpike = last5.some((p, i) => {
         if (i === 0) return false;
-        return Math.abs((p - last3[i - 1]) / last3[i - 1]) > 0.0003;
+        return Math.abs((p - last5[i - 1]) / last5[i - 1]) > 0.0002; // 0.02% = spike (más estricto)
     });
+    // Verificar cooldown de knockout ACCU en este símbolo
+    const accuKnockoutUntil = mState.accuKnockoutUntil || 0;
+    if (Date.now() < accuKnockoutUntil) return false;
     return vol < threshold && !hasSpike;
 }
 
 /**
- * Motor 5: ACUMULADORES — "El Compounder"
+ * Retorna el growth rate óptimo para cada símbolo según su volatilidad.
+ * Más volatilidad = growth rate más bajo = barrera más ancha = menos knockouts
+ * | Symbol  | Vol Index | Growth | Barrier (aprox) |
+ * |---------|-----------|--------|----------------|
+ * | R_10    |    10%    |  3%    |   ~0.015%      |
+ * | R_25    |    25%    |  2%    |   ~0.020%      |
+ * | R_50    |    50%    |  1%    |   ~0.025%      |
+ * | R_75    |    75%    |  1%    |   ~0.025%      |
+ * | R_100   |   100%    |  1%    |   ~0.025%      |
+ */
+function getAccuGrowthRateForSymbol(symbol) {
+    const rates = {
+        'R_10':    0.03, // 3% — V10 es el más tranquilo
+        '1HZ10V':  0.03,
+        'R_25':    0.02, // 2% — moderado
+        '1HZ25V':  0.02,
+        'R_50':    0.01, // 1% — más ancho
+        'R_75':    0.01,
+        'R_100':   0.01,
+        '1HZ100V': 0.01
+    };
+    return rates[symbol] || botState.accuGrowthRate || 0.02;
+}
+
+/**
+ * Motor 5: ACUMULADORES — "El Compounder Pro"
  * Entra SÓLO cuando el mercado está calmado (baja volatilidad, sin spikes)
- * Salida inteligente con trailing stop escalonado
+ * Salida inteligente: no vende hasta tener profit real (≥40% del stake)
  */
 function evaluateAccumulator(mState) {
     const hist = mState.digitHistory;
-    if (hist.length < 20) return null;
+    if (hist.length < 30) return null;
     
-    // ── Filtro 1: Necesitamos historial de precios reales para evaluar volatilidad ──
-    if (!mState.recentPrices || mState.recentPrices.length < 10) return null;
+    // ── Filtro 1: Necesitamos historial de precios reales ──
+    if (!mState.recentPrices || mState.recentPrices.length < 15) return null;
     
-    // ── Filtro 2: Volatilidad del mercado — sólo entrar en mercado estable ──
-    const vol = calcRecentVolatility(mState.recentPrices, 15);
-    const maxVol = botState.accuVolatilityThreshold || 0.045;
+    // ── Filtro 2: Cooldown de knockout ACCU en este símbolo ──
+    const accuKnockoutUntil = mState.accuKnockoutUntil || 0;
+    if (Date.now() < accuKnockoutUntil) {
+        const secsLeft = Math.ceil((accuKnockoutUntil - Date.now()) / 1000);
+        if (Date.now() % 15000 < 1000) console.log(`🚫 ACCU KNOCKOUT COOLDOWN [${mState.symbol}]: ${secsLeft}s restantes. Buscando mercado más tranquilo.`);
+        return null;
+    }
+    
+    // ── Filtro 3: Volatilidad estricta (CV < 1.8%) ──
+    const vol = calcRecentVolatility(mState.recentPrices, 20);
+    const maxVol = botState.accuVolatilityThreshold || 0.018;
     if (vol > maxVol) {
-        return null; // ❌ Mercado demasiado volátil — riesgo de knockout
+        return null; // ❌ Mercado volátil — riesgo de knockout
     }
     
-    // ── Filtro 3: Spike Radar — bloquear si hubo spike en los últimos 3 ticks ──
-    const last3 = mState.recentPrices.slice(-3);
-    const hasSpike = last3.some((p, i) => {
+    // ── Filtro 4: Spike Radar en últimos 5 ticks (más estricto) ──
+    const last5 = mState.recentPrices.slice(-5);
+    const hasSpike = last5.some((p, i) => {
         if (i === 0) return false;
-        return Math.abs((p - last3[i - 1]) / last3[i - 1]) > 0.0003; // 0.03% = spike
+        return Math.abs((p - last5[i - 1]) / last5[i - 1]) > 0.0002; // 0.02% spike
     });
-    if (hasSpike) {
-        return null; // ❌ Spike reciente — no entrar
-    }
+    if (hasSpike) return null; // ❌ Spike reciente
+    
+    // Growth rate adaptivo según la volatilidad del símbolo
+    const optimalGrowthRate = getAccuGrowthRateForSymbol(mState.symbol);
     
     return {
         engine: 'ACCUMULATOR',
         contractType: 'ACCU',
         barrier: null,
         stakeMultiplier: 1.0,
-        reason: `ACCU ✅ Volatilidad:${(vol * 100).toFixed(3)}% < ${(maxVol * 100).toFixed(2)}% | Growth:${botState.accuGrowthRate * 100}% | Target:${botState.accuTargetTicks}-${botState.accuMaxTicks} ticks`,
+        accuGrowthRateOverride: optimalGrowthRate, // Growth rate específico para este símbolo
+        reason: `ACCU ✅ Vol:${(vol * 100).toFixed(3)}%<${(maxVol*100).toFixed(1)}% | Growth:${(optimalGrowthRate*100).toFixed(0)}% | Objetivo:${botState.accuTargetTicks}-${botState.accuMaxTicks}t | MinProfit:${((botState.accuMinProfitRatio||0.4)*100).toFixed(0)}%`,
         entropy: parseFloat(mState.shannonEntropy)
     };
 }
@@ -828,7 +868,11 @@ function tryFireTrade() {
     
     if (signal.contractType === 'ACCU') {
         botState.accuCurrentPeak = 0; // Resetear pico de profit al abrir nuevo ACCU
-        buyRequest.parameters.growth_rate = botState.accuGrowthRate || 0.03;
+        // Usar growth rate específico del símbolo si la señal lo provee
+        const growthRate = signal.accuGrowthRateOverride || botState.accuGrowthRate || 0.02;
+        buyRequest.parameters.growth_rate = growthRate;
+        botState.accuCurrentGrowthRate = growthRate; // Guardar para cálculos de salida
+        console.log(`💰 ACCU Config: growth_rate=${(growthRate*100).toFixed(0)}% | MinTicks=${botState.accuTargetTicks} | MaxTicks=${botState.accuMaxTicks} | MinProfit=${((botState.accuMinProfitRatio||0.4)*100).toFixed(0)}% del stake`);
     } else {
         buyRequest.parameters.duration = 1;
         buyRequest.parameters.duration_unit = 't';
@@ -900,6 +944,13 @@ function finalizeTrade(c) {
         if (mState) {
             mState.lockedUntil = Date.now() + 300000; // 5 minutos (300,000 ms)
             console.log(`🚨 CORTAFUEGOS ACTIVO: Cuarentena de 5 minutos aplicada a ${tradeSymbol} para evitar persistencia de racha. Escaneando los otros 7 mercados...`);
+            
+            // 🔴 ACCU KNOCKOUT: Cooldown adicional específico para Acumuladores
+            if (engine === 'ACCUMULATOR') {
+                const knockoutCooldown = botState.accuKnockoutCooldownMs || 180000; // 3 min por defecto
+                mState.accuKnockoutUntil = Date.now() + knockoutCooldown;
+                console.log(`💥 ACCU KNOCKOUT en ${tradeSymbol}: Cooldown de ${(knockoutCooldown/60000).toFixed(0)} min aplicado a este símbolo. El ACCU buscará mercado más tranquilo.`);
+            }
         }
         
         // Registrar pausa de seguridad de 1 minuto y resetear ticks de re-evaluación
@@ -1747,9 +1798,13 @@ function connectDeriv() {
                 const tickCount = c.tick_stream ? c.tick_stream.length : 0;
                 const currentProfit = parseFloat(c.profit || 0);
                 const currentPeak = botState.accuCurrentPeak || 0;
-                const trailingPct = botState.accuTrailingPct || 0.75;
-                const minTicks = botState.accuTargetTicks || 3;
-                const maxTicks = botState.accuMaxTicks || 10;
+                const trailingPct = botState.accuTrailingPct || 0.80;
+                const minTicks = botState.accuTargetTicks || 20;
+                const maxTicks = botState.accuMaxTicks || 40;
+                const stake = botState.currentStake || botState.stake || 1;
+                // 🔴 NUEVO: Profit mínimo antes de considerar cualquier salida
+                const minProfitRatio = botState.accuMinProfitRatio || 0.40;
+                const minProfitRequired = stake * minProfitRatio; // Ej: $1 stake => necesita $0.40 mínimo
                 
                 // Actualizar pico de profit
                 if (currentProfit > currentPeak) {
@@ -1757,33 +1812,35 @@ function connectDeriv() {
                 }
                 
                 const trailingStop = currentPeak * trailingPct;
-                const trailingTriggered = currentPeak > 0 && currentProfit < trailingStop && tickCount >= minTicks;
+                const trailingTriggered = currentPeak >= minProfitRequired && currentProfit < trailingStop && tickCount >= minTicks;
                 const maxTicksReached = tickCount >= maxTicks;
-                const minTicksAndProfitable = tickCount >= minTicks && currentProfit > 0;
+                // Sólo salida mínima si: ticks OK + profit mínimo alcanzado
+                const readyForExit = tickCount >= minTicks && currentProfit >= minProfitRequired;
                 
                 let sellReason = '';
                 let shouldSell = false;
                 
                 if (maxTicksReached && c.is_valid_to_sell) {
                     shouldSell = true;
-                    sellReason = `Máximo de ${maxTicks} ticks alcanzado`;
+                    sellReason = `Máx ${maxTicks} ticks | Profit: $${currentProfit.toFixed(3)}`;
                 } else if (trailingTriggered && c.is_valid_to_sell) {
                     shouldSell = true;
-                    sellReason = `Trailing Stop: profit $${currentProfit.toFixed(3)} < ${(trailingPct*100).toFixed(0)}% del pico $${currentPeak.toFixed(3)}`;
-                } else if (minTicksAndProfitable && c.is_valid_to_sell) {
-                    // Salida mínima sólo si ya hay ganancia suficiente
-                    const targetGain = botState.stake * (botState.accuGrowthRate || 0.03) * minTicks;
-                    if (currentProfit >= targetGain) {
-                        shouldSell = true;
-                        sellReason = `Meta mínima alcanzada: $${currentProfit.toFixed(3)} en ${tickCount} ticks`;
-                    }
+                    sellReason = `Trailing ${(trailingPct*100).toFixed(0)}%: $${currentProfit.toFixed(3)} < $${currentPeak.toFixed(3)} (pico)`;
+                } else if (readyForExit && c.is_valid_to_sell) {
+                    shouldSell = true;
+                    sellReason = `Objetivo: $${currentProfit.toFixed(3)} >= ${(minProfitRatio*100).toFixed(0)}% stake en ${tickCount} ticks`;
                 }
                 
                 if (shouldSell) {
-                    console.log(`🎯 ACCU VENTA INTELIGENTE [${tickCount} ticks | Profit: $${currentProfit.toFixed(3)} | Pico: $${currentPeak.toFixed(3)}]: ${sellReason}`);
+                    console.log(`🎯 ACCU VENTA [💹${tickCount} ticks | Profit: $${currentProfit.toFixed(3)} | Pico: $${currentPeak.toFixed(3)}]: ${sellReason}`);
                     botState.isSellingAccumulator = c.contract_id;
-                    botState.accuCurrentPeak = 0; // Resetear pico
+                    botState.accuCurrentPeak = 0;
                     ws.send(JSON.stringify({ sell: c.contract_id, price: 0 }));
+                } else if (tickCount % 5 === 0 && tickCount > 0) {
+                    // Log de progreso cada 5 ticks
+                    const growthRate = botState.accuCurrentGrowthRate || 0.02;
+                    const projectedAt20 = (stake * Math.pow(1 + growthRate, 20) - stake).toFixed(3);
+                    console.log(`📈 ACCU CRECIENDO [${tickCount}t]: Profit=$${currentProfit.toFixed(3)} | Pico=$${currentPeak.toFixed(3)} | Target=${minTicks}t | Proyección@20t=$${projectedAt20}`);
                 }
             }
             
