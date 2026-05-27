@@ -1575,6 +1575,11 @@ body::before {
         <input type="number" id="inputAccuTargetTicks" value="2" min="1" max="100" step="1" onchange="handleConfigChange()" onblur="handleConfigChange()">
       </div>
 
+      <div class="control-group">
+        <label>Cody: Mult. Desv.</label>
+        <input type="number" id="inputCodyMultiplier" value="1.8" min="0.5" max="5.0" step="0.1" onchange="handleConfigChange()" onblur="handleConfigChange()">
+      </div>
+
       <div class="control-separator"></div>
 
       <div class="control-group" style="display:flex; flex-direction:column; align-items:center; min-width: 90px;">
@@ -2005,6 +2010,7 @@ function updateUI(data) {
   if (document.activeElement !== $('inputTakeProfit')) $('inputTakeProfit').value = data.takeProfit;
   if (document.activeElement !== $('inputAccuGrowthRate')) $('inputAccuGrowthRate').value = (data.accuGrowthRate || 0.03) * 100;
   if (document.activeElement !== $('inputAccuTargetTicks')) $('inputAccuTargetTicks').value = data.accuTargetTicks || 3;
+  if (document.activeElement !== $('inputCodyMultiplier')) $('inputCodyMultiplier').value = data.codyMultiplier || 1.8;
 
 
 
@@ -2427,11 +2433,12 @@ function handleConfigChange() {
     const takeProfit = parseFloat($('inputTakeProfit').value) || 15;
     const accuGrowthRate = (parseFloat($('inputAccuGrowthRate').value) || 3) / 100;
     const accuTargetTicks = parseInt($('inputAccuTargetTicks').value) || 3;
+    const codyMultiplier = parseFloat($('inputCodyMultiplier').value) || 1.8;
     try {
       await fetch('/api/config', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ stake, maxDailyLoss, takeProfit, accuGrowthRate, accuTargetTicks })
+        body: JSON.stringify({ stake, maxDailyLoss, takeProfit, accuGrowthRate, accuTargetTicks, codyMultiplier })
       });
       showToast('Configuración actualizada', 'success');
     } catch (e) {

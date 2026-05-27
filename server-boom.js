@@ -107,6 +107,9 @@ let botState = {
     engineAccumulator: true,
     engineCodyBarrier: true,
     
+    // Cody standard deviation multiplier
+    codyMultiplier: 1.8,
+    
     // ─── HYDRA MODE: ACCU Puro (desactiva EVEN/ODD y OVER/UNDER) ───
     hydraMode: true,              // 🐍 Cuando true: SOLO ACCU, cero otros motores
     hydraSoloSymbols: ['R_10', '1HZ10V'], // Solo los 2 mercados más estables para ACCU
@@ -248,6 +251,7 @@ if (fs.existsSync(STATE_FILE)) {
             botState.accuMinProfitRatio = 0.0;
             botState.accuKnockoutCooldownMs = 30000;
             botState.accuTakeProfitAt = 0.02;
+            if (botState.codyMultiplier === undefined) botState.codyMultiplier = 1.8;
             
             // Garantizar variables de Cuenta (Virtual vs Real)
             if (botState.accountMode === undefined) botState.accountMode = 'demo';
@@ -678,8 +682,9 @@ function evaluateCodyBarrier(mState) {
     const rsi = calculateRSI(prices, 14);
     const currentPrice = mState.lastTickPrice || prices[prices.length - 1];
     
-    // B = 3.5 * StdDev
-    let offset = 3.5 * stdDev;
+    // B = codyMultiplier * StdDev
+    const mult = botState.codyMultiplier || 1.8;
+    let offset = mult * stdDev;
     
     // Margen de seguridad mínimo
     const minOffset = currentPrice * 0.00005;
@@ -700,7 +705,7 @@ function evaluateCodyBarrier(mState) {
             barrierHigher: `-${finalOffset}`,
             barrierLower: `+${finalOffset}`,
             stakeMultiplier: 1.0,
-            reason: `Dual Sniper por Extremo RSI:${rsi.toFixed(1)} | StdDev:${stdDev.toFixed(decimals)} | Barrera: ±${finalOffset}`,
+            reason: `Dual Sniper por Extremo RSI:${rsi.toFixed(1)} | Mult:${mult} | StdDev:${stdDev.toFixed(decimals)} | Barrera: ±${finalOffset}`,
             entropy: parseFloat(mState.shannonEntropy)
         };
     }
@@ -1580,7 +1585,7 @@ app.post('/api/config', (req, res) => {
             coberturaEnabled, differPrecision98, quirurgicoMode, accountMode, demoToken, realToken,
             accuGrowthRate, accuTargetTicks, accuMaxTicks, accuVolatilityThreshold,
             accuTrailingPct, accuPriorityMode, accuMinProfitRatio, accuTakeProfitAt,
-            hydraMode, ghostActive } = req.body;
+            hydraMode, ghostActive, codyMultiplier } = req.body;
     
     if (stake !== undefined) botState.stake = Math.max(0.35, parseFloat(stake));
     if (maxDailyLoss !== undefined) botState.maxDailyLoss = parseFloat(maxDailyLoss);
@@ -1617,6 +1622,10 @@ app.post('/api/config', (req, res) => {
             botState.ghostNextTradeReal = false;
             botState.forcedSignal = null;
         }
+    }
+    
+    if (codyMultiplier !== undefined) {
+        botState.codyMultiplier = Math.max(0.5, Math.min(5.0, parseFloat(codyMultiplier)));
     }
     
     if (demoToken !== undefined) botState.demoToken = demoToken;
