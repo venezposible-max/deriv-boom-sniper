@@ -700,13 +700,14 @@ function evaluateCodyBarrier(mState) {
     // para cosechar doble ganancia si queda en el canal, o mitigar pérdida si rompe un lado.
     if (rsi >= 65 || rsi <= 35) {
         // ─── FILTRO DE BARRERA MÁXIMA ────────────────────────────────────────────
-        // Deriv rechaza contratos con barrera tan amplia que el pago es ≈$0
-        // ("This contract offers no return"). Límite: 0.25% del precio actual.
-        // Si la señal supera este límite, el mercado está demasiado volátil y
-        // es mejor omitirla que desperdiciar la llamada a la API.
-        const maxBarrier = parseFloat((currentPrice * 0.0025).toFixed(decimals));
-        if (finalOffset > maxBarrier) {
-            console.log(`⏭️ [CODY] Señal omitida: barrera ±${finalOffset} excede límite ±${maxBarrier} (mercado volátil, Deriv rechazaría)`);
+        // Deriv rechaza contratos con pago ≈$0 ("This contract offers no return").
+        // Cap empírico fijo: 0.70 — basado en datos observados:
+        //   ✅ Aceptados: ±0.295, ±0.35, ±0.44, ±0.505, ±0.569, ±0.577, ±0.59
+        //   ❌ Rechazados: ±0.871, ±1.595, ±1.700, ±1.809, ±1.928, ±2.083
+        // El 0.70 separa perfectamente ambos grupos en todos los símbolos.
+        const MAX_CODY_BARRIER = 0.70;
+        if (finalOffset > MAX_CODY_BARRIER) {
+            console.log(`⏭️ [CODY] Señal omitida: barrera ±${finalOffset} > límite ±${MAX_CODY_BARRIER} (Deriv rechazaría)`);
             return null;
         }
         // ─────────────────────────────────────────────────────────────────────────
