@@ -1873,8 +1873,8 @@ function connectDeriv() {
                 // 🔴 FIX 1: Actualizar lastTradeTime en cada update para que el FAILSAFE NUNCA mate un ACCU vivo
                 botState.lastTradeTime = Date.now();
                 
-                // 🔴 FIX 2: Usar c.tick_count (API real de Deriv) en lugar de tick_stream.length (se resetea en reconexiones)
-                const tickCount = c.tick_count || (c.tick_stream ? c.tick_stream.length : 0);
+                // 🔴 FIX 2: Usar c.tick_passed (API real de Deriv) que representa exactamente los ticks transcurridos en ACCU, o fallback a tick_stream.length. EVITAR c.tick_count porque Deriv retorna 250 fijo como límite de consulta.
+                const tickCount = typeof c.tick_passed === 'number' ? c.tick_passed : (c.tick_stream ? c.tick_stream.length : 0);
                 const currentProfit = parseFloat(c.profit || 0);
                 const currentPeak = botState.accuCurrentPeak || 0;
                 const trailingPct = botState.accuTrailingPct || 0.80;
