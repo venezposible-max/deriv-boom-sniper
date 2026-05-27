@@ -1549,8 +1549,12 @@ function connectDeriv() {
                 botState.isBuying = false;
                 console.error(`❌ Error en compra: ${msg.error.message}`);
                 
-                // Si es por límite de posiciones, aplicar cooldown para evitar spam a la API
-                if (msg.error.code === 'OpenPositionLimitExceeded' || msg.error.code === 'RateLimit') {
+                // 🔴 FIX: OpenPositionLimitExceeded = ACCU ya existe en Deriv, adoptarlo
+                if (msg.error.code === 'OpenPositionLimitExceeded') {
+                    console.log(`🔍 ACCU ya existe en Deriv. Consultando portfolio para adoptarlo...`);
+                    ws.send(JSON.stringify({ portfolio: 1 }));
+                    // NO aplicar lossPause — el contrato anterior sigue activo y generando profit
+                } else if (msg.error.code === 'RateLimit') {
                     botState.lossPauseUntil = Date.now() + 60000;
                     console.log(`⏳ Pausa de seguridad de 60s aplicada debido a límite de la API.`);
                 }
@@ -1793,18 +1797,21 @@ function connectDeriv() {
             const c = msg.proposal_open_contract;
             if (!c) return;
             
-            // ── ACCUMULATOR: Take Profit Escalonado Inteligente con Trailing Stop ──
+            // ── ACCUMULATOR: Mantenimiento del contrato activo ──
             if (botState.currentContractType === 'ACCU' && c.contract_id === botState.activeContractId && !c.is_sold && botState.isSellingAccumulator !== c.contract_id) {
-                const tickCount = c.tick_stream ? c.tick_stream.length : 0;
+                // 🔴 FIX 1: Actualizar lastTradeTime en cada update para que el FAILSAFE NUNCA mate un ACCU vivo
+                botState.lastTradeTime = Date.now();
+                
+                // 🔴 FIX 2: Usar c.tick_count (API real de Deriv) en lugar de tick_stream.length (se resetea en reconexiones)
+                const tickCount = c.tick_count || (c.tick_stream ? c.tick_stream.length : 0);
                 const currentProfit = parseFloat(c.profit || 0);
                 const currentPeak = botState.accuCurrentPeak || 0;
                 const trailingPct = botState.accuTrailingPct || 0.80;
                 const minTicks = botState.accuTargetTicks || 20;
                 const maxTicks = botState.accuMaxTicks || 40;
                 const stake = botState.currentStake || botState.stake || 1;
-                // 🔴 NUEVO: Profit mínimo antes de considerar cualquier salida
                 const minProfitRatio = botState.accuMinProfitRatio || 0.40;
-                const minProfitRequired = stake * minProfitRatio; // Ej: $1 stake => necesita $0.40 mínimo
+                const minProfitRequired = stake * minProfitRatio;
                 
                 // Actualizar pico de profit
                 if (currentProfit > currentPeak) {
@@ -1820,9 +1827,14 @@ function connectDeriv() {
                 let sellReason = '';
                 let shouldSell = false;
                 
-                if (maxTicksReached && c.is_valid_to_sell) {
+                // 🔴 FIX 3: SALIDA DE EMERGENCIA ABSOLUTA — si profit >= 3x stake, vender SIEMPRE sin importar ticks
+                const absoluteExit = currentProfit >= stake * 3;
+                
+                if ((absoluteExit || maxTicksReached) && c.is_valid_to_sell) {
                     shouldSell = true;
-                    sellReason = `Máx ${maxTicks} ticks | Profit: $${currentProfit.toFixed(3)}`;
+                    sellReason = absoluteExit
+                        ? `🚨 SALIDA ABSOLUTA: $${currentProfit.toFixed(3)} >= 3x stake. Asegurando ganancia.`
+                        : `Máx ${maxTicks} ticks | Profit: $${currentProfit.toFixed(3)}`;
                 } else if (trailingTriggered && c.is_valid_to_sell) {
                     shouldSell = true;
                     sellReason = `Trailing ${(trailingPct*100).toFixed(0)}%: $${currentProfit.toFixed(3)} < $${currentPeak.toFixed(3)} (pico)`;
@@ -1840,7 +1852,7 @@ function connectDeriv() {
                     // Log de progreso cada 5 ticks
                     const growthRate = botState.accuCurrentGrowthRate || 0.02;
                     const projectedAt20 = (stake * Math.pow(1 + growthRate, 20) - stake).toFixed(3);
-                    console.log(`📈 ACCU CRECIENDO [${tickCount}t]: Profit=$${currentProfit.toFixed(3)} | Pico=$${currentPeak.toFixed(3)} | Target=${minTicks}t | Proyección@20t=$${projectedAt20}`);
+                    console.log(`📈 ACCU CRECIENDO [${tickCount}t]: Profit=$${currentProfit.toFixed(3)} | Pico=$${currentPeak.toFixed(3)} | Target=${minTicks}t/${(minProfitRatio*100).toFixed(0)}%stake | Proj@20t=$${projectedAt20}`);
                 }
             }
             
