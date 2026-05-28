@@ -703,18 +703,11 @@ function evaluateCodyBarrier(mState) {
     // En el canal de Cody, disparamos AMBOS lados simultáneamente (Hedged Double Sniper)
     // para cosechar doble ganancia si queda en el canal, o mitigar pérdida si rompe un lado.
     if (rsi >= 65 || rsi <= 35) {
-        // ─── FILTRO DE BARRERA MÁXIMA ────────────────────────────────────────────
-        // Deriv rechaza contratos con pago ≈$0 ("This contract offers no return").
-        // Cap empírico fijo: 0.70 — basado en datos observados:
-        //   ✅ Aceptados: ±0.295, ±0.35, ±0.44, ±0.505, ±0.569, ±0.577, ±0.59
-        //   ❌ Rechazados: ±0.871, ±1.595, ±1.700, ±1.809, ±1.928, ±2.083
-        // El 0.70 separa perfectamente ambos grupos en todos los símbolos.
-        const MAX_CODY_BARRIER = 0.70;
-        if (finalOffset > MAX_CODY_BARRIER) {
-            console.log(`⏭️ [CODY] Señal omitida: barrera ±${finalOffset} > límite ±${MAX_CODY_BARRIER} (Deriv rechazaría)`);
-            return null;
-        }
-        // ─────────────────────────────────────────────────────────────────────────
+        // ─── FILTRO DE BARRERA MÁXIMA ELIMINADO ────────────────────────────────
+        // Al invertir las barreras para cazar rompimientos (Long Volatility), 
+        // los contratos ahora ofrecen altos retornos (ej. $3.00), por lo que 
+        // Deriv NUNCA los rechazará por "This contract offers no return".
+        // El límite fijo de 0.70 ya no es necesario ni correcto para símbolos de alta volatilidad.
         return {
             engine: 'CODY_BARRIER',
             contractType: 'DUAL',
