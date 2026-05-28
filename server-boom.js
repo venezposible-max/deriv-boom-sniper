@@ -718,10 +718,10 @@ function evaluateCodyBarrier(mState) {
         return {
             engine: 'CODY_BARRIER',
             contractType: 'DUAL',
-            barrierHigher: `-${finalOffset}`,
-            barrierLower: `+${finalOffset}`,
+            barrierHigher: `+${finalOffset}`,
+            barrierLower: `-${finalOffset}`,
             stakeMultiplier: 1.0,
-            reason: `Dual Sniper por Extremo RSI:${rsi.toFixed(1)} | Mult:${mult} | StdDev:${stdDev.toFixed(decimals)} | Barrera: ±${finalOffset}`,
+            reason: `Dual Sniper Breakout por Extremo RSI:${rsi.toFixed(1)} | Mult:${mult} | StdDev:${stdDev.toFixed(decimals)} | Barrera: ±${finalOffset}`,
             entropy: parseFloat(mState.shannonEntropy)
         };
     }
@@ -2148,13 +2148,13 @@ function connectDeriv() {
                 // Si ya tenemos ambos payouts
                 if (check.payoutHigher !== null && check.payoutLower !== null) {
                     const totalStake = check.finalStake * 2;
-                    const combinedPayout = check.payoutHigher + check.payoutLower;
+                    const minPayout = Math.min(check.payoutHigher, check.payoutLower);
                     const requiredPayout = totalStake * (1 + (botState.codyPayoutFilterMargin || 0.0));
                     
-                    console.log(`📊 [CODY FILTER] EVALUACIÓN: Payout combinada: $${combinedPayout.toFixed(2)} vs Costo: $${totalStake.toFixed(2)} (Requerido: $${requiredPayout.toFixed(2)})`);
+                    console.log(`📊 [CODY FILTER] EVALUACIÓN BREAKOUT: Peor Payout: $${minPayout.toFixed(2)} vs Costo Total: $${totalStake.toFixed(2)} (Requerido: $${requiredPayout.toFixed(2)})`);
                     
-                    if (combinedPayout >= requiredPayout) {
-                        console.log(`✅ [CODY FILTER] ¡APROBADO! La matemática favorece el disparo (+${(combinedPayout - totalStake).toFixed(2)} retorno neto). Comprando en REAL...`);
+                    if (minPayout >= requiredPayout) {
+                        console.log(`✅ [CODY FILTER] ¡APROBADO! Rompimiento garantizado (+${(minPayout - totalStake).toFixed(2)} retorno neto mínimo si uno gana). Comprando en REAL...`);
                         
                         botState.activeContractIds = [];
                         botState.dualContractsState = {
@@ -2168,7 +2168,7 @@ function connectDeriv() {
                         ws.send(JSON.stringify(check.buyRequestHigher));
                         ws.send(JSON.stringify(check.buyRequestLower));
                     } else {
-                        console.log(`❌ [CODY FILTER] RECHAZADO: Payout combinado $${combinedPayout.toFixed(2)} < requerido $${requiredPayout.toFixed(2)}. Operación omitida.`);
+                        console.log(`❌ [CODY FILTER] RECHAZADO: Peor Payout $${minPayout.toFixed(2)} < requerido $${requiredPayout.toFixed(2)}. Operación omitida.`);
                         botState.isBuying = false; // Desbloquear bot
                     }
                     
