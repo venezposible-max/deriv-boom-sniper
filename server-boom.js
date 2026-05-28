@@ -708,15 +708,30 @@ function evaluateCodyBarrier(mState) {
         // los contratos ahora ofrecen altos retornos (ej. $3.00), por lo que 
         // Deriv NUNCA los rechazará por "This contract offers no return".
         // El límite fijo de 0.70 ya no es necesario ni correcto para símbolos de alta volatilidad.
-        return {
-            engine: 'CODY_BARRIER',
-            contractType: 'DUAL',
-            barrierHigher: `+${finalOffset}`,
-            barrierLower: `-${finalOffset}`,
-            stakeMultiplier: 1.0,
-            reason: `Dual Sniper Breakout por Extremo RSI:${rsi.toFixed(1)} | Mult:${mult} | StdDev:${stdDev.toFixed(decimals)} | Barrera: ±${finalOffset}`,
-            entropy: parseFloat(mState.shannonEntropy)
-        };
+        // OPCIÓN A: Francotirador Direccional (Single Leg)
+        // En lugar de disparar doble (costando el doble), usamos el RSI 
+        // para predecir el rebote inminente.
+        // Si RSI >= 65 (sobrecomprado), esperamos caída -> Compramos PUT con barrera + (margen de error hacia arriba)
+        // Si RSI <= 35 (sobrevendido), esperamos subida -> Compramos CALL con barrera - (margen de error hacia abajo)
+        if (rsi >= 65) {
+            return {
+                engine: 'CODY_BARRIER',
+                contractType: 'PUT',
+                barrier: `+${finalOffset}`,
+                stakeMultiplier: 1.0,
+                reason: `Direccional Sniper por Sobrecompra RSI:${rsi.toFixed(1)} | Barrera de Seguridad: +${finalOffset}`,
+                entropy: parseFloat(mState.shannonEntropy)
+            };
+        } else if (rsi <= 35) {
+            return {
+                engine: 'CODY_BARRIER',
+                contractType: 'CALL',
+                barrier: `-${finalOffset}`,
+                stakeMultiplier: 1.0,
+                reason: `Direccional Sniper por Sobrevendido RSI:${rsi.toFixed(1)} | Barrera de Seguridad: -${finalOffset}`,
+                entropy: parseFloat(mState.shannonEntropy)
+            };
+        }
     }
     
     return null;
