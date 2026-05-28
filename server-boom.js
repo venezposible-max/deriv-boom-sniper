@@ -708,30 +708,20 @@ function evaluateCodyBarrier(mState) {
         // los contratos ahora ofrecen altos retornos (ej. $3.00), por lo que 
         // Deriv NUNCA los rechazará por "This contract offers no return".
         // El límite fijo de 0.70 ya no es necesario ni correcto para símbolos de alta volatilidad.
-        // OPCIÓN A: Francotirador Direccional (Single Leg)
-        // En lugar de disparar doble (costando el doble), usamos el RSI 
-        // para predecir el rebote inminente.
-        // Si RSI >= 65 (sobrecomprado), esperamos caída -> Compramos PUT con barrera + (margen de error hacia arriba)
-        // Si RSI <= 35 (sobrevendido), esperamos subida -> Compramos CALL con barrera - (margen de error hacia abajo)
-        if (rsi >= 65) {
-            return {
-                engine: 'CODY_BARRIER',
-                contractType: 'PUT',
-                barrier: `+${finalOffset}`,
-                stakeMultiplier: 1.0,
-                reason: `Direccional Sniper por Sobrecompra RSI:${rsi.toFixed(1)} | Barrera de Seguridad: +${finalOffset}`,
-                entropy: parseFloat(mState.shannonEntropy)
-            };
-        } else if (rsi <= 35) {
-            return {
-                engine: 'CODY_BARRIER',
-                contractType: 'CALL',
-                barrier: `-${finalOffset}`,
-                stakeMultiplier: 1.0,
-                reason: `Direccional Sniper por Sobrevendido RSI:${rsi.toFixed(1)} | Barrera de Seguridad: -${finalOffset}`,
-                entropy: parseFloat(mState.shannonEntropy)
-            };
-        }
+        // OPCIÓN B: Cazador de Rompimientos (Volatilidad)
+        // Disparamos AMBOS lados simultáneamente, pero con barreras INVERTIDAS.
+        // Higher con barrera + (difícil) y Lower con barrera - (difícil).
+        // Si el precio rompe fuertemente (como se espera en un RSI extremo), 
+        // un contrato gana con un pago > 200%, cubriendo ambos costos y dejando ganancia.
+        return {
+            engine: 'CODY_BARRIER',
+            contractType: 'DUAL',
+            barrierHigher: `+${finalOffset}`,
+            barrierLower: `-${finalOffset}`,
+            stakeMultiplier: 1.0,
+            reason: `Dual Sniper Breakout por Extremo RSI:${rsi.toFixed(1)} | Mult:${mult} | StdDev:${stdDev.toFixed(decimals)} | Barrera: ±${finalOffset}`,
+            entropy: parseFloat(mState.shannonEntropy)
+        };
     }
     
     return null;
@@ -1090,7 +1080,8 @@ function tryFireTrade() {
             }
         };
         
-        if (botState.codyPayoutFilterEnabled) {
+        // 🛡️ FILTRO DE SEGURIDAD FORZADO (Opción B requiere esto sí o sí)
+        if (true || botState.codyPayoutFilterEnabled) {
             const reqIdHigher = Math.floor(Math.random() * 1000000) + 100000;
             const reqIdLower = reqIdHigher + 1;
             
