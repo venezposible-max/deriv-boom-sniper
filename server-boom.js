@@ -131,8 +131,8 @@ let botState = {
     // ─── Variables del Escudo de Trade Fantasma (Ghost Shield) ───
     ghostActive: true,
     
-    // ─── Bollinger Shield ───
     bollingerShield: false,
+    fibonacciShield: false,
     ghostNextTradeReal: false,
     ghostPendingTrade: null,
     
@@ -240,6 +240,7 @@ if (fs.existsSync(STATE_FILE)) {
             if (botState.franklinPerezLogic === undefined) botState.franklinPerezLogic = true;
             if (botState.quirurgicoMode === undefined) botState.quirurgicoMode = false;
             if (botState.bollingerShield === undefined) botState.bollingerShield = false;
+            if (botState.fibonacciShield === undefined) botState.fibonacciShield = false;
             
             botState.engineAccumulator = true;
             botState.engineCodyBarrier = true;
@@ -693,6 +694,25 @@ function calculateBollingerBands(prices, period = 20, multiplier = 2) {
 }
 
 /**
+ * Calcula las Zonas Doradas de Fibonacci de los últimos N ticks.
+ */
+function calculateFibonacciZones(prices, period = 100) {
+    if (prices.length < period) return null;
+    const slice = prices.slice(-period);
+    const max = Math.max(...slice);
+    const min = Math.min(...slice);
+    const diff = max - min;
+    
+    if (diff === 0) return null;
+    
+    return {
+        fib382: min + diff * 0.618,
+        fib500: min + diff * 0.500,
+        fib618: min + diff * 0.382
+    };
+}
+
+/**
  * MOTOR 6: Francotirador de Barreras Cody Trader (Higher/Lower)
  * Calcula dinámicamente un offset a 3.5 desviaciones estándar para disparar con 98%+ supervivencia.
  */
@@ -737,12 +757,22 @@ function evaluateCodyBarrier(mState) {
                 const bb = calculateBollingerBands(prices, 20, 2);
                 if (bb && currentPrice < bb.upper) return null;
             }
+            if (botState.fibonacciShield) {
+                const fib = calculateFibonacciZones(prices, 100);
+                if (fib) {
+                    const margin = stdDev * 0.25;
+                    const near382 = Math.abs(currentPrice - fib.fib382) <= margin;
+                    const near500 = Math.abs(currentPrice - fib.fib500) <= margin;
+                    const near618 = Math.abs(currentPrice - fib.fib618) <= margin;
+                    if (!near382 && !near500 && !near618) return null;
+                }
+            }
             return {
                 engine: 'CODY_BARRIER',
                 contractType: 'PUT',
                 barrier: null,
                 stakeMultiplier: 1.0,
-                reason: `Sniper Clásico (Sin Barrera) por Sobrecompra RSI:${rsi.toFixed(1)}${botState.bollingerShield ? ' + BB Breakout' : ''}`,
+                reason: `Sniper Clásico (Sin Barrera) por Sobrecompra RSI:${rsi.toFixed(1)}${botState.bollingerShield ? ' + BB Breakout' : ''}${botState.fibonacciShield ? ' + Fib Golden Zone' : ''}`,
                 entropy: parseFloat(mState.shannonEntropy)
             };
         } else if (rsi <= 35) {
@@ -750,12 +780,22 @@ function evaluateCodyBarrier(mState) {
                 const bb = calculateBollingerBands(prices, 20, 2);
                 if (bb && currentPrice > bb.lower) return null;
             }
+            if (botState.fibonacciShield) {
+                const fib = calculateFibonacciZones(prices, 100);
+                if (fib) {
+                    const margin = stdDev * 0.25;
+                    const near382 = Math.abs(currentPrice - fib.fib382) <= margin;
+                    const near500 = Math.abs(currentPrice - fib.fib500) <= margin;
+                    const near618 = Math.abs(currentPrice - fib.fib618) <= margin;
+                    if (!near382 && !near500 && !near618) return null;
+                }
+            }
             return {
                 engine: 'CODY_BARRIER',
                 contractType: 'CALL',
                 barrier: null,
                 stakeMultiplier: 1.0,
-                reason: `Sniper Clásico (Sin Barrera) por Sobrevendido RSI:${rsi.toFixed(1)}${botState.bollingerShield ? ' + BB Breakdown' : ''}`,
+                reason: `Sniper Clásico (Sin Barrera) por Sobrevendido RSI:${rsi.toFixed(1)}${botState.bollingerShield ? ' + BB Breakdown' : ''}${botState.fibonacciShield ? ' + Fib Golden Zone' : ''}`,
                 entropy: parseFloat(mState.shannonEntropy)
             };
         }
@@ -1640,7 +1680,7 @@ app.post('/api/config', (req, res) => {
             coberturaEnabled, differPrecision98, quirurgicoMode, accountMode, demoToken, realToken,
             accuGrowthRate, accuTargetTicks, accuMaxTicks, accuVolatilityThreshold,
             accuTrailingPct, accuPriorityMode, accuMinProfitRatio, accuTakeProfitAt,
-            hydraMode, ghostActive, codyMultiplier, bollingerShield,
+            hydraMode, ghostActive, codyMultiplier, bollingerShield, fibonacciShield,
             codyPayoutFilterEnabled, codyPayoutFilterMargin } = req.body;
     
     if (stake !== undefined) botState.stake = Math.max(0.35, parseFloat(stake));
@@ -1656,6 +1696,7 @@ app.post('/api/config', (req, res) => {
     if (differPrecision98 !== undefined) botState.differPrecision98 = !!differPrecision98;
     if (quirurgicoMode !== undefined) botState.quirurgicoMode = !!quirurgicoMode;
     if (bollingerShield !== undefined) botState.bollingerShield = !!bollingerShield;
+    if (fibonacciShield !== undefined) botState.fibonacciShield = !!fibonacciShield;
     
     // ── Configuración ACCU avanzada ──
     if (accuGrowthRate !== undefined) botState.accuGrowthRate = parseFloat(accuGrowthRate);

@@ -1491,6 +1491,17 @@ body::before {
         </label>
         <div style="font-size: 11px; margin-top: 6px; font-weight: bold; color: var(--text-muted);" id="bollingerStatusDisplay">Estado: OFF</div>
       </div>
+      <div class="control-separator"></div>
+
+      <div class="control-group" style="display:flex; flex-direction:column; align-items:center; min-width: 100px;">
+        <label style="color: #fbbf24; font-weight: 700;" title="Escudo Fibonacci (Solo dispara en zonas de rebote áureo)">Fibonacci Shield</label>
+        <label class="toggle" style="width: 40px; height: 22px; margin-top:4px;">
+          <input type="checkbox" id="toggleFibonacciShield" onchange="handleFibonacciShieldToggle(this.checked)">
+          <div class="toggle-track" style="border-radius: 12px; background-color: var(--panel-bg);"></div>
+          <div class="toggle-thumb" style="width: 16px; height: 16px; top: 3px; left: 3px;"></div>
+        </label>
+        <div style="font-size: 11px; margin-top: 6px; font-weight: bold; color: var(--text-muted);" id="fibonacciStatusDisplay">Estado: OFF</div>
+      </div>
 
 
 
@@ -1791,6 +1802,22 @@ function updateUI(data) {
     } else {
       bollingerDisplay.textContent = 'Estado: OFF';
       bollingerDisplay.style.color = 'var(--text-muted)';
+    }
+  }
+
+  // Fibonacci Shield sync
+  const toggleFibonacci = $('toggleFibonacciShield');
+  if (toggleFibonacci) {
+    toggleFibonacci.checked = !!data.fibonacciShield;
+  }
+  const fibonacciDisplay = $('fibonacciStatusDisplay');
+  if (fibonacciDisplay) {
+    if (data.fibonacciShield) {
+      fibonacciDisplay.textContent = 'Estado: ON';
+      fibonacciDisplay.style.color = '#fbbf24';
+    } else {
+      fibonacciDisplay.textContent = 'Estado: OFF';
+      fibonacciDisplay.style.color = 'var(--text-muted)';
     }
   }
 
@@ -2394,9 +2421,23 @@ async function handleBollingerShieldToggle(checked) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ bollingerShield: checked })
     });
-    showToast(`Bollinger Shield ${checked ? 'ACTIVADO (Filtro BB Estricto)' : 'desactivado'}`, checked ? 'success' : 'info');
+    showToast(`Bollinger Shield ${checked ? 'ACTIVADO' : 'desactivado'}`, checked ? 'success' : 'info');
   } catch (e) {
     showToast('Error al actualizar Bollinger Shield', 'error');
+  }
+  fetchStatus();
+}
+
+async function handleFibonacciShieldToggle(checked) {
+  try {
+    await fetch('/api/config', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ fibonacciShield: checked })
+    });
+    showToast(`Fibonacci Shield ${checked ? 'ACTIVADO (Filtro Áureo)' : 'desactivado'}`, checked ? 'success' : 'info');
+  } catch (e) {
+    showToast('Error al actualizar Fibonacci Shield', 'error');
   }
   fetchStatus();
 }
