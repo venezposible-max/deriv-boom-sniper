@@ -1988,8 +1988,8 @@ function connectDeriv() {
                         setTimeout(() => {
                             if (ws && ws.readyState === WebSocket.OPEN) {
                                 const mState = botState.markets[sym];
-                                if (mState && mState.history && mState.history.length >= 250) {
-                                    console.log(`🔥 KRAKEN CARGADO [${sym}]: Historial recuperado de caché en RAM (${mState.history.length} ticks). Ahorrando petición API.`);
+                                if (mState && mState.digitHistory && mState.digitHistory.length >= 250) {
+                                    console.log(`🔥 KRAKEN CARGADO [${sym}]: Historial recuperado de caché en RAM (${mState.digitHistory.length} ticks). Ahorrando petición API.`);
                                 } else {
                                     console.log(`📥 Descargando historial de 300 ticks para ${sym}...`);
                                     ws.send(JSON.stringify({
