@@ -835,30 +835,7 @@ function tryFireTrade() {
     
     const now = Date.now();
     
-    // Si estamos en pausa por pérdida (enfriamiento de 1 minuto)
-    if (botState.lossPauseUntil) {
-        if (now < botState.lossPauseUntil) {
-            const secondsLeft = Math.ceil((botState.lossPauseUntil - now) / 1000);
-            if (now % 10000 < 1000) { // Loguear cada 10s
-                console.log(`⏳ PAUSA POR PÉRDIDA: Esperando ${secondsLeft}s para enfriamiento de la red.`);
-            }
-            return;
-        } else {
-            // El tiempo pasó, ahora exigimos la captura de ticks frescos
-            const ticksProcessed = botState.lossPauseTicksProcessed || 0;
-            if (ticksProcessed < 20) {
-                if (now % 10000 < 1000) {
-                    console.log(`⏳ RE-EVALUACIÓN POST-PÉRDIDA: Esperando ticks frescos (${ticksProcessed}/20) para actualizar matriz de Markov...`);
-                }
-                return;
-            }
-            // Superadas ambas condiciones, limpiamos la pausa de seguridad
-            console.log(`🛡️ RE-EVALUACIÓN COMPLETADA: Matriz de Markov actualizada con ${ticksProcessed} ticks frescos. Reanudando operaciones.`);
-            botState.lossPauseUntil = null;
-            botState.lossPauseTicksProcessed = 0;
-            saveState();
-        }
-    }
+
     
     // Failsafe de contrato colgado (15 segundos para normales, 120 segundos para ACCUMULATOR)
     const failsafeTimeout = botState.currentContractType === 'ACCU' ? 120000 : 15000;
@@ -1226,10 +1203,7 @@ function finalizeTrade(c) {
             }
         }
         
-        // Registrar pausa de seguridad de 1 minuto y resetear ticks de re-evaluación
-        botState.lossPauseUntil = Date.now() + 60000;
-        botState.lossPauseTicksProcessed = 0;
-        console.log(`🚨 PÉRDIDA DETECTADA: Iniciando pausa de enfriamiento de 60 segundos y captura de 20 ticks para re-evaluación.`);
+        // Registrar pérdida y continuar escaneo
         saveState();
         
         // Momentum Shield y Pausas (Desactivados por premisa de operación continua e ininterrumpida)
@@ -1378,10 +1352,7 @@ function finalizeDualTrade(tradeSymbol = SYMBOL) {
             console.log(`🚨 CORTAFUEGOS ACTIVO: Cuarentena de 5 minutos aplicada a ${tradeSymbol} por pérdida en Dual Cody.`);
         }
         
-        botState.lossPauseUntil = Date.now() + 60000;
-        botState.lossPauseTicksProcessed = 0;
-        console.log(`🚨 PÉRDIDA DUAL DETECTADA: Iniciando pausa de enfriamiento de 60 segundos.`);
-        
+
         console.log(`❌ DUAL LOSS -$${Math.abs(netProfit).toFixed(2)} [${tradeSymbol} - ${name}] | PnL: $${botState.pnlSession.toFixed(2)}`);
         console.log(`   📈 Higher: ${profitHigher > 0 ? 'WIN ✅' : 'LOSS ❌'} ($${profitHigher.toFixed(2)})`);
         console.log(`   📉 Lower: ${profitLower > 0 ? 'WIN ✅' : 'LOSS ❌'} ($${profitLower.toFixed(2)})`);
@@ -2027,8 +1998,7 @@ function connectDeriv() {
                     ws.send(JSON.stringify({ portfolio: 1 }));
                     // NO aplicar lossPause — el contrato anterior sigue activo y generando profit
                 } else if (msg.error.code === 'RateLimit') {
-                    botState.lossPauseUntil = Date.now() + 60000;
-                    console.log(`⏳ Pausa de seguridad de 60s aplicada debido a límite de la API.`);
+                    console.log(`⏳ Pausa de seguridad aplicada debido a límite de la API.`);
                 }
             }
             if (msg.msg_type === 'sell') {
@@ -2242,11 +2212,6 @@ function connectDeriv() {
                 if (mState.digitHistory.length >= 50) {
                     mState.shannonEntropy = calcEntropy(mState.digitHistory, 100).toFixed(3);
                     updateHotDigit(mState);
-                }
-                
-                // Incrementar conteo de ticks capturados en la pausa (solo si es el mercado que disparó la pausa)
-                if (botState.lossPauseUntil && Date.now() < botState.lossPauseUntil) {
-                    botState.lossPauseTicksProcessed = (botState.lossPauseTicksProcessed || 0) + 1;
                 }
                 
                 // Evaluar resultado del Ghost Trade - Verificando que pertenezca a este símbolo
