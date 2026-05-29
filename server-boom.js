@@ -130,6 +130,9 @@ let botState = {
     
     // ─── Variables del Escudo de Trade Fantasma (Ghost Shield) ───
     ghostActive: true,
+    
+    // ─── Bollinger Shield ───
+    bollingerShield: false,
     ghostNextTradeReal: false,
     ghostPendingTrade: null,
     
@@ -236,6 +239,7 @@ if (fs.existsSync(STATE_FILE)) {
             if (botState.differPrecision98 === undefined) botState.differPrecision98 = false;
             if (botState.franklinPerezLogic === undefined) botState.franklinPerezLogic = true;
             if (botState.quirurgicoMode === undefined) botState.quirurgicoMode = false;
+            if (botState.bollingerShield === undefined) botState.bollingerShield = false;
             
             botState.engineAccumulator = true;
             botState.engineCodyBarrier = true;
@@ -673,6 +677,22 @@ function calculateStdDev(prices, period = 30) {
 }
 
 /**
+ * Calcula las Bandas de Bollinger de un arreglo de precios.
+ */
+function calculateBollingerBands(prices, period = 20, multiplier = 2) {
+    if (prices.length < period) return null;
+    const slice = prices.slice(-period);
+    const mean = slice.reduce((a, b) => a + b, 0) / period;
+    const variance = slice.reduce((sum, p) => sum + Math.pow(p - mean, 2), 0) / period;
+    const stdDev = Math.sqrt(variance);
+    return {
+        upper: mean + (stdDev * multiplier),
+        middle: mean,
+        lower: mean - (stdDev * multiplier)
+    };
+}
+
+/**
  * MOTOR 6: Francotirador de Barreras Cody Trader (Higher/Lower)
  * Calcula dinámicamente un offset a 3.5 desviaciones estándar para disparar con 98%+ supervivencia.
  */
@@ -713,21 +733,29 @@ function evaluateCodyBarrier(mState) {
         // usamos el contrato clásico Rise/Fall (CALL/PUT) que paga ~95.3%.
         // 1 Win recupera 1 Loss. El RSI extremo nos da el Edge estadístico (>50% Win Rate).
         if (rsi >= 65) {
+            if (botState.bollingerShield) {
+                const bb = calculateBollingerBands(prices, 20, 2);
+                if (bb && currentPrice < bb.upper) return null;
+            }
             return {
                 engine: 'CODY_BARRIER',
                 contractType: 'PUT',
                 barrier: null,
                 stakeMultiplier: 1.0,
-                reason: `Sniper Clásico (Sin Barrera) por Sobrecompra RSI:${rsi.toFixed(1)}`,
+                reason: `Sniper Clásico (Sin Barrera) por Sobrecompra RSI:${rsi.toFixed(1)}${botState.bollingerShield ? ' + BB Breakout' : ''}`,
                 entropy: parseFloat(mState.shannonEntropy)
             };
         } else if (rsi <= 35) {
+            if (botState.bollingerShield) {
+                const bb = calculateBollingerBands(prices, 20, 2);
+                if (bb && currentPrice > bb.lower) return null;
+            }
             return {
                 engine: 'CODY_BARRIER',
                 contractType: 'CALL',
                 barrier: null,
                 stakeMultiplier: 1.0,
-                reason: `Sniper Clásico (Sin Barrera) por Sobrevendido RSI:${rsi.toFixed(1)}`,
+                reason: `Sniper Clásico (Sin Barrera) por Sobrevendido RSI:${rsi.toFixed(1)}${botState.bollingerShield ? ' + BB Breakdown' : ''}`,
                 entropy: parseFloat(mState.shannonEntropy)
             };
         }
@@ -1612,7 +1640,7 @@ app.post('/api/config', (req, res) => {
             coberturaEnabled, differPrecision98, quirurgicoMode, accountMode, demoToken, realToken,
             accuGrowthRate, accuTargetTicks, accuMaxTicks, accuVolatilityThreshold,
             accuTrailingPct, accuPriorityMode, accuMinProfitRatio, accuTakeProfitAt,
-            hydraMode, ghostActive, codyMultiplier,
+            hydraMode, ghostActive, codyMultiplier, bollingerShield,
             codyPayoutFilterEnabled, codyPayoutFilterMargin } = req.body;
     
     if (stake !== undefined) botState.stake = Math.max(0.35, parseFloat(stake));
@@ -1627,6 +1655,7 @@ app.post('/api/config', (req, res) => {
     if (coberturaEnabled !== undefined) botState.coberturaEnabled = !!coberturaEnabled;
     if (differPrecision98 !== undefined) botState.differPrecision98 = !!differPrecision98;
     if (quirurgicoMode !== undefined) botState.quirurgicoMode = !!quirurgicoMode;
+    if (bollingerShield !== undefined) botState.bollingerShield = !!bollingerShield;
     
     // ── Configuración ACCU avanzada ──
     if (accuGrowthRate !== undefined) botState.accuGrowthRate = parseFloat(accuGrowthRate);

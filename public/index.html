@@ -1480,6 +1480,17 @@ body::before {
         </label>
         <div style="font-size: 11px; margin-top: 6px; font-weight: bold; color: var(--text-muted);" id="ghostStatusDisplay">Estado: OFF</div>
       </div>
+      <div class="control-separator"></div>
+
+      <div class="control-group" style="display:flex; flex-direction:column; align-items:center; min-width: 100px;">
+        <label style="color: #60a5fa; font-weight: 700;" title="Escudo Bollinger (Filtra señales usando desviación estándar)">Bollinger Shield</label>
+        <label class="toggle" style="width: 40px; height: 22px; margin-top:4px;">
+          <input type="checkbox" id="toggleBollingerShield" onchange="handleBollingerShieldToggle(this.checked)">
+          <div class="toggle-track" style="border-radius: 12px; background-color: var(--panel-bg);"></div>
+          <div class="toggle-thumb" style="width: 16px; height: 16px; top: 3px; left: 3px;"></div>
+        </label>
+        <div style="font-size: 11px; margin-top: 6px; font-weight: bold; color: var(--text-muted);" id="bollingerStatusDisplay">Estado: OFF</div>
+      </div>
 
 
 
@@ -1758,8 +1769,29 @@ function updateUI(data) {
   }
   const ghostDisplay = $('ghostStatusDisplay');
   if (ghostDisplay) {
-    ghostDisplay.textContent = 'Estado: ' + (data.ghostActive ? 'ON 👻' : 'OFF ⚡');
-    ghostDisplay.style.color = data.ghostActive ? '#a78bfa' : 'var(--text-muted)';
+    if (data.ghostActive) {
+      ghostDisplay.textContent = 'Estado: ON';
+      ghostDisplay.style.color = '#a78bfa';
+    } else {
+      ghostDisplay.textContent = 'Estado: OFF';
+      ghostDisplay.style.color = 'var(--text-muted)';
+    }
+  }
+
+  // Bollinger Shield sync
+  const toggleBollinger = $('toggleBollingerShield');
+  if (toggleBollinger) {
+    toggleBollinger.checked = !!data.bollingerShield;
+  }
+  const bollingerDisplay = $('bollingerStatusDisplay');
+  if (bollingerDisplay) {
+    if (data.bollingerShield) {
+      bollingerDisplay.textContent = 'Estado: ON';
+      bollingerDisplay.style.color = '#60a5fa';
+    } else {
+      bollingerDisplay.textContent = 'Estado: OFF';
+      bollingerDisplay.style.color = 'var(--text-muted)';
+    }
   }
 
   // Account Mode sync
@@ -2351,6 +2383,20 @@ async function handleGhostActiveToggle(checked) {
     showToast(`Ghost Shield ${checked ? 'ACTIVADO (Operaciones simuladas primero 👻)' : 'desactivado (Operaciones reales directas ⚡)'}`, checked ? 'success' : 'info');
   } catch (e) {
     showToast('Error al actualizar Ghost Shield', 'error');
+  }
+  fetchStatus();
+}
+
+async function handleBollingerShieldToggle(checked) {
+  try {
+    await fetch('/api/config', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ bollingerShield: checked })
+    });
+    showToast(`Bollinger Shield ${checked ? 'ACTIVADO (Filtro BB Estricto)' : 'desactivado'}`, checked ? 'success' : 'info');
+  } catch (e) {
+    showToast('Error al actualizar Bollinger Shield', 'error');
   }
   fetchStatus();
 }
