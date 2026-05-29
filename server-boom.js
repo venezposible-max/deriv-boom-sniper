@@ -2327,7 +2327,7 @@ function connectDeriv() {
                     } else if (pt.engine === 'CODY_BARRIER') {
                         const exitPrice = mState.lastTickPrice;
                         const entryPrice = pt.entryTickPrice;
-                        const barrierOffset = parseFloat(pt.barrier); // ej. +0.15 o -0.15
+                        const barrierOffset = pt.barrier ? parseFloat(pt.barrier) : 0;
                         
                         if (pt.contractType === 'LOWER' || pt.contractType === 'PUT') {
                             won = exitPrice < (entryPrice + barrierOffset);
