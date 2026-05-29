@@ -731,6 +731,7 @@ function evaluateCodyBarrier(mState) {
                 entropy: parseFloat(mState.shannonEntropy)
             };
         }
+    }
     
     return null;
 }
