@@ -708,21 +708,29 @@ function evaluateCodyBarrier(mState) {
         // los contratos ahora ofrecen altos retornos (ej. $3.00), por lo que 
         // Deriv NUNCA los rechazará por "This contract offers no return".
         // El límite fijo de 0.70 ya no es necesario ni correcto para símbolos de alta volatilidad.
-        // OPCIÓN B: Cazador de Rompimientos (Volatilidad)
-        // Disparamos AMBOS lados simultáneamente, pero con barreras INVERTIDAS.
-        // Higher con barrera + (difícil) y Lower con barrera - (difícil).
-        // Si el precio rompe fuertemente (como se espera en un RSI extremo), 
-        // un contrato gana con un pago > 200%, cubriendo ambos costos y dejando ganancia.
-        return {
-            engine: 'CODY_BARRIER',
-            contractType: 'DUAL',
-            barrierHigher: `+${finalOffset}`,
-            barrierLower: `-${finalOffset}`,
-            stakeMultiplier: 1.0,
-            reason: `Dual Sniper Breakout por Extremo RSI:${rsi.toFixed(1)} | Mult:${mult} | StdDev:${stdDev.toFixed(decimals)} | Barrera: ±${finalOffset}`,
-            entropy: parseFloat(mState.shannonEntropy)
-        };
-    }
+        // OPCIÓN C: Sniper Clásico (Sin Barrera)
+        // Ya que las barreras duales pierden mucho y las de seguridad pagan centavos,
+        // usamos el contrato clásico Rise/Fall (CALL/PUT) que paga ~95.3%.
+        // 1 Win recupera 1 Loss. El RSI extremo nos da el Edge estadístico (>50% Win Rate).
+        if (rsi >= 65) {
+            return {
+                engine: 'CODY_BARRIER',
+                contractType: 'PUT',
+                barrier: null,
+                stakeMultiplier: 1.0,
+                reason: `Sniper Clásico (Sin Barrera) por Sobrecompra RSI:${rsi.toFixed(1)}`,
+                entropy: parseFloat(mState.shannonEntropy)
+            };
+        } else if (rsi <= 35) {
+            return {
+                engine: 'CODY_BARRIER',
+                contractType: 'CALL',
+                barrier: null,
+                stakeMultiplier: 1.0,
+                reason: `Sniper Clásico (Sin Barrera) por Sobrevendido RSI:${rsi.toFixed(1)}`,
+                entropy: parseFloat(mState.shannonEntropy)
+            };
+        }
     
     return null;
 }
