@@ -1738,10 +1738,8 @@ function updateUI(data) {
   $('statWinLoss').textContent = data.winsSession + ' / ' + data.lossesSession;
 
   // Engine toggles sync
-  $('toggleEvenOdd').checked = data.engineEvenOdd;
-  $('toggleOverUnder').checked = data.engineOverUnder;
-  $('toggleAccumulator').checked = !!data.engineAccumulator;
-  $('toggleCodyBarrier').checked = !!data.engineCodyBarrier;
+  const toggleCody = $('toggleCodyBarrier');
+  if (toggleCody) toggleCody.checked = !!data.engineCodyBarrier;
 
   // Martingale sync
   const toggleCob = $('toggleCobertura');
@@ -1857,8 +1855,7 @@ function updateUI(data) {
   if (document.activeElement !== $('inputStake')) $('inputStake').value = data.stake;
   if (document.activeElement !== $('inputMaxLoss')) $('inputMaxLoss').value = data.maxDailyLoss;
   if (document.activeElement !== $('inputTakeProfit')) $('inputTakeProfit').value = data.takeProfit;
-  if (document.activeElement !== $('inputAccuGrowthRate')) $('inputAccuGrowthRate').value = (data.accuGrowthRate || 0.03) * 100;
-  if (document.activeElement !== $('inputAccuTargetTicks')) $('inputAccuTargetTicks').value = data.accuTargetTicks || 3;
+
   if (document.activeElement !== $('inputCodyMultiplier')) $('inputCodyMultiplier').value = data.codyMultiplier || 1.8;
 
   // Cody Payout Filter sync
@@ -2294,15 +2291,13 @@ function handleConfigChange() {
     const stake = parseFloat($('inputStake').value) || 1;
     const maxDailyLoss = parseFloat($('inputMaxLoss').value) || 20;
     const takeProfit = parseFloat($('inputTakeProfit').value) || 15;
-    const accuGrowthRate = (parseFloat($('inputAccuGrowthRate').value) || 3) / 100;
-    const accuTargetTicks = parseInt($('inputAccuTargetTicks').value) || 3;
     const codyMultiplier = parseFloat($('inputCodyMultiplier').value) || 1.8;
     const codyPayoutFilterMargin = (parseFloat($('inputCodyPayoutFilterMargin').value) || 0) / 100;
     try {
       await fetch('/api/config', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ stake, maxDailyLoss, takeProfit, accuGrowthRate, accuTargetTicks, codyMultiplier, codyPayoutFilterMargin })
+        body: JSON.stringify({ stake, maxDailyLoss, takeProfit, codyMultiplier, codyPayoutFilterMargin })
       });
       showToast('Configuración actualizada', 'success');
     } catch (e) {
@@ -2313,15 +2308,6 @@ function handleConfigChange() {
 }
 
 // ── Engine Toggle Listeners ────────────────────────────────────────────────
-$('toggleEvenOdd').addEventListener('change', function() {
-  handleEngineToggle('EVEN_ODD', this.checked);
-});
-$('toggleOverUnder').addEventListener('change', function() {
-  handleEngineToggle('OVER_UNDER', this.checked);
-});
-$('toggleAccumulator').addEventListener('change', function() {
-  handleEngineToggle('ACCUMULATOR', this.checked);
-});
 $('toggleCodyBarrier').addEventListener('change', function() {
   handleEngineToggle('CODY_BARRIER', this.checked);
 });
