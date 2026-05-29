@@ -1987,14 +1987,19 @@ function connectDeriv() {
                     SCAN_SYMBOLS.forEach((sym, idx) => {
                         setTimeout(() => {
                             if (ws && ws.readyState === WebSocket.OPEN) {
-                                console.log(`📥 Descargando historial de 300 ticks para ${sym}...`);
-                                ws.send(JSON.stringify({
-                                    ticks_history: sym,
-                                    count: 300,
-                                    end: 'latest',
-                                    style: 'ticks',
-                                    adjust_start_time: 1
-                                }));
+                                const mState = botState.markets[sym];
+                                if (mState && mState.history && mState.history.length >= 250) {
+                                    console.log(`🔥 KRAKEN CARGADO [${sym}]: Historial recuperado de caché en RAM (${mState.history.length} ticks). Ahorrando petición API.`);
+                                } else {
+                                    console.log(`📥 Descargando historial de 300 ticks para ${sym}...`);
+                                    ws.send(JSON.stringify({
+                                        ticks_history: sym,
+                                        count: 300,
+                                        end: 'latest',
+                                        style: 'ticks',
+                                        adjust_start_time: 1
+                                    }));
+                                }
                             }
                         }, idx * 250); // Espaciado a 250ms entre cada mercado
                     });
