@@ -867,9 +867,6 @@ function tryFireTrade() {
         botState.activeContractId = null;
         botState.currentContractId = null;
         botState.isBuying = false;
-        if (typeof ws !== 'undefined' && ws && ws.readyState === 1) {
-            ws.send(JSON.stringify({ forget_all: 'proposal_open_contract' }));
-        }
         saveState();
     }
     if (botState.currentContractType === 'DUAL' && botState.activeContractIds && botState.activeContractIds.length > 0 && (now - botState.lastTradeTime) > failsafeTimeout) {
@@ -879,9 +876,6 @@ function tryFireTrade() {
         botState.currentContractId = null;
         botState.isBuying = false;
         botState.currentEngine = null;
-        if (typeof ws !== 'undefined' && ws && ws.readyState === 1) {
-            ws.send(JSON.stringify({ forget_all: 'proposal_open_contract' }));
-        }
         saveState();
     }
     
@@ -1374,12 +1368,6 @@ function finalizeTrade(c) {
     botState.isBuying = false;
     botState.currentEngine = null;
     
-    // 🧹 LIMPIEZA DE MEMORIA: Desuscribirse del contrato para evitar 
-    // que Deriv nos desconecte por "Violación de Política" (Rate Limit de suscripciones)
-    if (typeof ws !== 'undefined' && ws && ws.readyState === 1) {
-        ws.send(JSON.stringify({ forget_all: 'proposal_open_contract' }));
-    }
-    
     saveState();
 }
 
@@ -1501,11 +1489,6 @@ function finalizeDualTrade(tradeSymbol = SYMBOL) {
     botState.currentEngine = null;
     botState.activeContractIds = [];
     botState.dualContractsState = null;
-    
-    // 🧹 LIMPIEZA DE MEMORIA: Evitar leak de suscripciones (Error 1008)
-    if (typeof ws !== 'undefined' && ws && ws.readyState === 1) {
-        ws.send(JSON.stringify({ forget_all: 'proposal_open_contract' }));
-    }
     
     saveState();
 }
@@ -2425,6 +2408,12 @@ function connectDeriv() {
         if (msg.msg_type === 'proposal_open_contract') {
             const c = msg.proposal_open_contract;
             if (!c) return;
+            
+            // 🧹 LIMPIEZA QUIRÚRGICA: Olvidar solo ESTA suscripción exacta al terminar el contrato.
+            // Esto evita el Error 1008 sin usar forget_all (que a veces crashea la conexión).
+            if (c.is_sold && msg.subscription && msg.subscription.id) {
+                ws.send(JSON.stringify({ forget: msg.subscription.id }));
+            }
             
             if (botState.currentContractType === 'DUAL') {
                 if (botState.dualContractsState) {
