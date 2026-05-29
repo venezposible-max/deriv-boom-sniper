@@ -1563,17 +1563,7 @@ body::before {
         <input type="number" id="inputTakeProfit" value="15" min="1" max="1000" step="1" onchange="handleConfigChange()" onblur="handleConfigChange()">
       </div>
 
-      <div class="control-separator"></div>
 
-      <div class="control-group">
-        <label>ACCU: Crecim. (%)</label>
-        <input type="number" id="inputAccuGrowthRate" value="1" min="1" max="5" step="1" onchange="handleConfigChange()" onblur="handleConfigChange()">
-      </div>
-
-      <div class="control-group">
-        <label>ACCU: Meta Ticks</label>
-        <input type="number" id="inputAccuTargetTicks" value="2" min="1" max="100" step="1" onchange="handleConfigChange()" onblur="handleConfigChange()">
-      </div>
 
       <div class="control-group">
         <label>Cody: Mult. Desv.</label>
@@ -1621,18 +1611,7 @@ body::before {
         <div style="font-size: 11px; margin-top: 6px; font-weight: bold; color: var(--text-muted);" id="ghostStatusDisplay">Estado: OFF</div>
       </div>
 
-      <div class="control-separator"></div>
 
-      <div class="control-group" style="display:flex; flex-direction:column; align-items:center; min-width: 100px;">
-        <label style="color: var(--accent-blue); font-weight: 700;">Quirúrgico</label>
-        <label class="toggle" style="width: 40px; height: 22px; margin-top:4px;">
-          <input type="checkbox" id="toggleQuirurgico" onchange="handleQuirurgicoToggle(this.checked)">
-          <div class="toggle-track" style="border-radius: 12px;"></div>
-          <div class="toggle-thumb" style="width: 16px; height: 16px; top: 3px; left: 3px;"></div>
-        </label>
-        <div style="font-size: 11px; margin-top: 6px; font-weight: bold; color: var(--text-muted);" id="quirurgicoStatusDisplay">Modo: Normal</div>
-      </div>
-      <div class="control-separator"></div>
 
       <div class="control-group" style="display:flex; flex-direction:column; align-items:center; min-width: 100px;">
         <label id="accountLabel" style="color: var(--accent-orange); font-weight: 700;">Cuenta: DEMO</label>
@@ -1915,17 +1894,6 @@ function updateUI(data) {
     ghostDisplay.style.color = data.ghostActive ? '#a78bfa' : 'var(--text-muted)';
   }
 
-  // Quirúrgico sync
-  const toggleQui = $('toggleQuirurgico');
-  if (toggleQui) {
-    toggleQui.checked = !!data.quirurgicoMode;
-  }
-  const quiDisplay = $('quirurgicoStatusDisplay');
-  if (quiDisplay) {
-    quiDisplay.textContent = 'Modo: ' + (data.quirurgicoMode ? 'Quirúrgico' : 'Normal');
-    quiDisplay.style.color = data.quirurgicoMode ? 'var(--accent-blue)' : 'var(--text-muted)';
-  }
-
   // Account Mode sync
   const toggleAcc = $('toggleAccountMode');
   if (toggleAcc) {
@@ -1947,15 +1915,9 @@ function updateUI(data) {
   if (document.activeElement !== $('inputRealToken')) $('inputRealToken').value = data.realToken || '';
 
   // Engine cards active state
-  updateEngineCard('engineCardEvenOdd', 'statusEvenOdd', data.engineEvenOdd, data.isRunning, data.currentEngine === 'EVEN_ODD');
-  updateEngineCard('engineCardOverUnder', 'statusOverUnder', data.engineOverUnder, data.isRunning, data.currentEngine === 'OVER_UNDER');
-  updateEngineCard('engineCardAccumulator', 'statusAccumulator', data.engineAccumulator, data.isRunning, data.currentEngine === 'ACCUMULATOR');
   updateEngineCard('engineCardCodyBarrier', 'statusCodyBarrier', data.engineCodyBarrier, data.isRunning, data.currentEngine === 'CODY_BARRIER');
 
   // Engine stats
-  updateEngineStats('eo', data.engineStats.EVEN_ODD);
-  updateEngineStats('ou', data.engineStats.OVER_UNDER);
-  if (data.engineStats.ACCUMULATOR) updateEngineStats('accu', data.engineStats.ACCUMULATOR);
   if (data.engineStats.CODY_BARRIER) updateEngineStats('cody', data.engineStats.CODY_BARRIER);
 
   // Darwin mode badges toggling
@@ -2533,20 +2495,6 @@ async function handleGhostActiveToggle(checked) {
     showToast(`Ghost Shield ${checked ? 'ACTIVADO (Operaciones simuladas primero 👻)' : 'desactivado (Operaciones reales directas ⚡)'}`, checked ? 'success' : 'info');
   } catch (e) {
     showToast('Error al actualizar Ghost Shield', 'error');
-  }
-  fetchStatus();
-}
-
-async function handleQuirurgicoToggle(checked) {
-  try {
-    await fetch('/api/config', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ quirurgicoMode: checked })
-    });
-    showToast(`Modo Quirúrgico ${checked ? 'ACTIVADO (Precisión Quirúrgica 🎯)' : 'desactivado (Modo Normal 🎰)'}`, checked ? 'success' : 'info');
-  } catch (e) {
-    showToast('Error al actualizar Modo Quirúrgico', 'error');
   }
   fetchStatus();
 }

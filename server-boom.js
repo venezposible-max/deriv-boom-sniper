@@ -971,43 +971,8 @@ function tryFireTrade() {
                 signal = evaluateCodyBarrier(mState);
             }
             
-            if (!signal) {
-                if (botState.hydraMode && botState.engineAccumulator) {
-                    // 🐍 HYDRA MODE: SOLO ACCU, sin otros motores
-                    signal = evaluateAccumulator(mState);
-                    if (signal) {
-                        signal._isPriority = true;
-                        console.log(`🐍 [HYDRA] ACCU en ${sym} | Vol:${signal.reason.split('|')[0].split(':')[1] || ''} | Growth:${((signal.accuGrowthRateOverride||0.01)*100).toFixed(0)}%`);
-                    }
-                } else {
-                    // 🦑 MODO NORMAL: ACCU prioritario + otros motores como fallback
-                    const marketIsCalm = botState.engineAccumulator && botState.accuPriorityMode && checkMarketCalm(mState);
-                    if (marketIsCalm && !signal) {
-                        signal = evaluateAccumulator(mState);
-                        if (signal) {
-                            signal._isPriority = true;
-                            console.log(`🎯 [ACCU PRIORITY] Mercado calmado en ${sym} — ACCU toma precedencia sobre motores de dígito.`);
-                        }
-                    }
-                    
-                    // Motores de dígito (prioridad alternada)
-                    if (!signal) {
-                        const nextPriority = botState.lastEngineFired === 'OVER_UNDER' ? 'EVEN_ODD' : 'OVER_UNDER';
-                        if (nextPriority === 'EVEN_ODD') {
-                            if (botState.engineEvenOdd) signal = evaluateEvenOdd(mState);
-                            if (!signal && botState.engineOverUnder) signal = evaluateOverUnder(mState);
-                        } else {
-                            if (botState.engineOverUnder) signal = evaluateOverUnder(mState);
-                            if (!signal && botState.engineEvenOdd) signal = evaluateEvenOdd(mState);
-                        }
-                    }
-                    
-                    // ACCUMULATOR como fallback
-                    if (!signal && botState.engineAccumulator && !marketIsCalm) {
-                        signal = evaluateAccumulator(mState);
-                    }
-                }
-            }
+                    // Los motores de dígito y Accumulator fueron eliminados a petición del usuario.
+                    // Ahora el bot opera exclusivamente como Cody Barrier Sniper.
             
             if (signal) {
                 signalSymbol = sym;
