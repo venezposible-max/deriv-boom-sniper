@@ -938,13 +938,8 @@ function tryFireTrade() {
         signalSymbol = botState.forcedSignal.symbol;
         botState.forcedSignal = null;
     } else {
-        // Si Cody Barrier está encendido, solo operamos el símbolo activo seleccionado.
-        // De lo contrario, si está en HYDRA, operamos los estables, y si no, la lista completa.
-        let scanList = botState.engineCodyBarrier
-            ? [SYMBOL]
-            : (botState.hydraMode && botState.engineAccumulator)
-                ? (botState.hydraSoloSymbols || ['R_10', '1HZ10V'])
-                : SCAN_SYMBOLS;
+        // MODO CAZADOR GLOBAL: Escanear todos los mercados disponibles
+        let scanList = SCAN_SYMBOLS;
             
         // 🎲 ESCÁNER ALEATORIO: Barajar la lista para alternar entre mercados
         scanList = [...scanList];
