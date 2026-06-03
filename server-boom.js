@@ -742,7 +742,7 @@ function evaluateCodyBarrier(mState) {
     
     // En el canal de Cody, disparamos AMBOS lados simultáneamente (Hedged Double Sniper)
     // para cosechar doble ganancia si queda en el canal, o mitigar pérdida si rompe un lado.
-    if (rsi >= 65 || rsi <= 35) {
+    if (rsi >= 75 || rsi <= 25) {
         // ─── FILTRO DE BARRERA MÁXIMA ELIMINADO ────────────────────────────────
         // Al invertir las barreras para cazar rompimientos (Long Volatility), 
         // los contratos ahora ofrecen altos retornos (ej. $3.00), por lo que 
@@ -752,7 +752,7 @@ function evaluateCodyBarrier(mState) {
         // Ya que las barreras duales pierden mucho y las de seguridad pagan centavos,
         // usamos el contrato clásico Rise/Fall (CALL/PUT) que paga ~95.3%.
         // 1 Win recupera 1 Loss. El RSI extremo nos da el Edge estadístico (>50% Win Rate).
-        if (rsi >= 65) {
+        if (rsi >= 75) {
             if (botState.bollingerShield) {
                 const bb = calculateBollingerBands(prices, 20, 2);
                 if (bb && currentPrice < bb.upper) return null;
@@ -775,7 +775,7 @@ function evaluateCodyBarrier(mState) {
                 reason: `Sniper Clásico (Sin Barrera) por Sobrecompra RSI:${rsi.toFixed(1)}${botState.bollingerShield ? ' + BB Breakout' : ''}${botState.fibonacciShield ? ' + Fib Golden Zone' : ''}`,
                 entropy: parseFloat(mState.shannonEntropy)
             };
-        } else if (rsi <= 35) {
+        } else if (rsi <= 25) {
             if (botState.bollingerShield) {
                 const bb = calculateBollingerBands(prices, 20, 2);
                 if (bb && currentPrice > bb.lower) return null;
@@ -1189,7 +1189,7 @@ function tryFireTrade() {
         botState.accuCurrentGrowthRate = growthRate; // Guardar para cálculos de salida
         console.log(`💰 ACCU Config: growth_rate=${(growthRate*100).toFixed(0)}% | MinTicks=${botState.accuTargetTicks} | MaxTicks=${botState.accuMaxTicks} | MinProfit=${((botState.accuMinProfitRatio||0.4)*100).toFixed(0)}% del stake`);
     } else if (signal.engine === 'CODY_BARRIER') {
-        buyRequest.parameters.duration = 5;
+        buyRequest.parameters.duration = 7;
         buyRequest.parameters.duration_unit = 't';
     } else {
         buyRequest.parameters.duration = 1;
