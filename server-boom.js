@@ -105,7 +105,7 @@ let botState = {
     engineEvenOdd: false,
     engineOverUnder: false,
     engineAccumulator: true,
-    engineCodyBarrier: true,
+    engineCodyBarrier: false,
     engineMarkovDiffers: false,
     
     // Cody standard deviation multiplier
@@ -245,7 +245,7 @@ if (fs.existsSync(STATE_FILE)) {
             if (botState.fibonacciShield === undefined) botState.fibonacciShield = false;
             
             botState.engineAccumulator = true;
-            botState.engineCodyBarrier = true;
+            botState.engineCodyBarrier = false;
             botState.hydraMode = true;
             botState.engineEvenOdd = false;
             botState.engineOverUnder = false;
@@ -773,6 +773,7 @@ function evaluateMarkovDiffers() {
 }
 
 function evaluateCodyBarrier(mState) {
+    return null; // CODY DISABLED
     if (!botState.engineCodyBarrier) return null;
     
     const prices = mState.recentPrices;
