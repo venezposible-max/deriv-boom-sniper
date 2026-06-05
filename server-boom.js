@@ -722,14 +722,14 @@ function calculateFibonacciZones(prices, period = 100) {
 // 🎯 MOTOR 7: MARKOV DIFFERS (Volatility 50 / R_50)
 const TRAINING_WINDOW = 2000;
 const THRESHOLD_PERCENT = 2.0;
-botState.markovHistory = {}; // Store ticks for markov
+// Using mState.digitHistory instead
 
 function evaluateMarkovDiffers() {
     if (!botState.engineMarkovDiffers) return null;
     const sym = 'R_50';
     
-    if (!botState.markovHistory[sym]) return null;
-    const hist = botState.markovHistory[sym];
+    if (!botState.markets[sym] || !botState.markets[sym].digitHistory) return null;
+    const hist = botState.markets[sym].digitHistory;
     if (hist.length < TRAINING_WINDOW) return null;
 
     let matrix = Array(10).fill(0).map(() => Array(10).fill(0));
@@ -2053,7 +2053,7 @@ function connectDeriv() {
                                     console.log(`📥 Descargando historial de 300 ticks para ${sym}...`);
                                     ws.send(JSON.stringify({
                                         ticks_history: sym,
-                                        count: 300,
+                                        count: sym === 'R_50' ? 2000 : 300,
                                         end: 'latest',
                                         style: 'ticks',
                                         adjust_start_time: 1
@@ -2331,7 +2331,7 @@ function connectDeriv() {
                 if (mState.recentPrices.length > 50) mState.recentPrices.shift();
                 
                 mState.digitHistory.push(digit);
-                if (mState.digitHistory.length > 300) mState.digitHistory.shift();
+                if (mState.digitHistory.length > 2500) mState.digitHistory.shift();
                 
                 mState.digitFrequency[digit] = (mState.digitFrequency[digit] || 0) + 1;
                 
