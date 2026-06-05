@@ -2214,7 +2214,7 @@ function connectDeriv() {
                     saveState();
                 }
             } else {
-                console.log(`📡 [KRAKEN] No se encontraron contratos ACCU activos pendientes en Deriv.`);
+                console.log(`📡 [KRAKEN] No se encontraron contratos activos pendientes en Deriv.`);
             }
         }
         
