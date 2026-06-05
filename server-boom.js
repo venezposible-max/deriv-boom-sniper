@@ -2089,14 +2089,14 @@ function connectDeriv() {
                         }, idx * 250); // Espaciado a 250ms entre cada mercado
                     });
                 }
-            }, 6000); // Iniciado tras terminar la carga de historiales
+            }, 15000); // Iniciado tras terminar la carga de historiales (Aumentado para evitar colisión con historiales)
             
             setTimeout(() => {
                 if (ws && ws.readyState === WebSocket.OPEN) {
                     ws.send(JSON.stringify({ balance: 1, subscribe: 1 }));
                     console.log(`💰 Suscripción balance activada.`);
                 }
-            }, 9000);
+            }, 18000);
         }
         
         if (msg.error) {
