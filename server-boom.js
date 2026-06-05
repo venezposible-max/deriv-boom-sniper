@@ -106,6 +106,7 @@ let botState = {
     engineOverUnder: false,
     engineAccumulator: true,
     engineCodyBarrier: true,
+    engineMarkovDiffers: false,
     
     // Cody standard deviation multiplier
     codyMultiplier: 1.8,
@@ -147,7 +148,8 @@ let botState = {
         EVEN_ODD: { wins: 0, losses: 0, pnl: 0, autoDisabled: false },
         OVER_UNDER: { wins: 0, losses: 0, pnl: 0, autoDisabled: false },
         ACCUMULATOR: { wins: 0, losses: 0, pnl: 0, autoDisabled: false },
-        CODY_BARRIER: { wins: 0, losses: 0, pnl: 0, autoDisabled: false }
+        CODY_BARRIER: { wins: 0, losses: 0, pnl: 0, autoDisabled: false },
+        MARKOV_DIFFERS: { wins: 0, losses: 0, pnl: 0, autoDisabled: false }
     },
     
     // ─── Analíticas ───
@@ -716,6 +718,60 @@ function calculateFibonacciZones(prices, period = 100) {
  * MOTOR 6: Francotirador de Barreras Cody Trader (Higher/Lower)
  * Calcula dinámicamente un offset a 3.5 desviaciones estándar para disparar con 98%+ supervivencia.
  */
+
+// 🎯 MOTOR 7: MARKOV DIFFERS (Volatility 50 / R_50)
+const TRAINING_WINDOW = 2000;
+const THRESHOLD_PERCENT = 2.0;
+botState.markovHistory = {}; // Store ticks for markov
+
+function evaluateMarkovDiffers() {
+    if (!botState.engineMarkovDiffers) return null;
+    const sym = 'R_50';
+    
+    if (!botState.markovHistory[sym]) return null;
+    const hist = botState.markovHistory[sym];
+    if (hist.length < TRAINING_WINDOW) return null;
+
+    let matrix = Array(10).fill(0).map(() => Array(10).fill(0));
+    let counts = Array(10).fill(0);
+
+    for (let i = 1; i < hist.length; i++) {
+        let prev = hist[i - 1];
+        let curr = hist[i];
+        matrix[prev][curr]++;
+        counts[prev]++;
+    }
+
+    const currentDigit = hist[hist.length - 1];
+    let bestTarget = -1;
+    let lowestProb = 100;
+
+    for (let target = 0; target <= 9; target++) {
+        if (counts[currentDigit] > 0) {
+            let prob = (matrix[currentDigit][target] / counts[currentDigit]) * 100;
+            if (prob > 0 && prob <= THRESHOLD_PERCENT) {
+                if (prob < lowestProb) {
+                    lowestProb = prob;
+                    bestTarget = target;
+                }
+            }
+        }
+    }
+
+    if (bestTarget !== -1) {
+        console.log(`🎯 [MARKOV DIFFERS] Riesgo ${lowestProb.toFixed(2)}% | Último: ${currentDigit}. Apuntando DIGITDIFF a ${bestTarget}`);
+        return {
+            engine: 'MARKOV_DIFFERS',
+            contractType: 'DIGITDIFF',
+            symbol: sym,
+            barrier: String(bestTarget),
+            ticksRemaining: 1,
+            reason: `Markov Prob ${lowestProb.toFixed(1)}%`
+        };
+    }
+    return null;
+}
+
 function evaluateCodyBarrier(mState) {
     if (!botState.engineCodyBarrier) return null;
     
@@ -1203,8 +1259,8 @@ function tryFireTrade() {
     botState.isBuying = true;
     botState.lastTradeTime = now;
     
-    const emojis = { EVEN_ODD: '🎰', OVER_UNDER: '📊', ACCUMULATOR: '📈', CODY_BARRIER: '🎯' };
-    const names = { EVEN_ODD: 'PAR/IMPAR', OVER_UNDER: 'OVER/UNDER', ACCUMULATOR: 'ACUMULADOR', CODY_BARRIER: 'BARRERAS CODY' };
+    const emojis = { EVEN_ODD: '🎰', OVER_UNDER: '📊', ACCUMULATOR: '📈', CODY_BARRIER: '🎯', MARKOV_DIFFERS: '🧠' };
+    const names = { EVEN_ODD: 'PAR/IMPAR', OVER_UNDER: 'OVER/UNDER', ACCUMULATOR: 'ACUMULADOR', CODY_BARRIER: 'BARRERAS CODY', MARKOV_DIFFERS: 'MARKOV DIFFERS' };
     
     console.log(`${emojis[signal.engine] || '🎲'} DISPARO REAL [${activeSymbol} - ${names[signal.engine]}] | ${signal.contractType} B:${signal.barrier || 'N/A'} | Stake: $${finalStake.toFixed(2)} | ${signal.reason}`);
     
@@ -1653,7 +1709,8 @@ app.post('/api/engine-toggle', (req, res) => {
         'EVEN_ODD': 'engineEvenOdd',
         'OVER_UNDER': 'engineOverUnder',
         'ACCUMULATOR': 'engineAccumulator',
-        'CODY_BARRIER': 'engineCodyBarrier'
+        'CODY_BARRIER': 'engineCodyBarrier',
+        'MARKOV_DIFFERS': 'engineMarkovDiffers'
     };
     
     if (!engineMap[engine]) {

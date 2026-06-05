@@ -1312,6 +1312,44 @@ body::before {
   <div class="engines-row">
 
 
+    
+    <!-- MARKOV DIFFERS -->
+    <div class="engine-card glass engine-markov" id="engineCardMarkov">
+      <div class="engine-header">
+        <div class="engine-info-wrap">
+            <div class="engine-icon">🧠</div>
+            <div class="engine-name">MARKOV DIFFERS</div>
+            <div class="engine-subtitle">R_50 Statistical Sniper</div>
+        </div>
+        <label class="switch">
+          <input type="checkbox" id="toggleMarkov">
+          <span class="slider round"></span>
+        </label>
+      </div>
+      <div class="engine-status">
+        <span class="status-dot disabled" id="dotMarkov"></span>
+        <span class="engine-status-text disabled" id="statusMarkov">En espera</span>
+      </div>
+      <div class="engine-stats">
+        <div class="es-box">
+          <span class="es-label">GANADAS</span>
+          <span class="es-value positive" id="markovWins">0</span>
+        </div>
+        <div class="es-box">
+          <span class="es-label">PERDIDAS</span>
+          <span class="es-value negative" id="markovLosses">0</span>
+        </div>
+        <div class="es-box">
+          <span class="es-label">PNL</span>
+          <span class="es-value neutral" id="markovPnl">$0.00</span>
+        </div>
+        <div class="es-box">
+          <span class="es-label">WIN RATE</span>
+          <span class="es-value neutral" id="markovWinRate">0.0%</span>
+        </div>
+      </div>
+    </div>
+
     <!-- CODY BARRIER (MOTOR 6) -->
     <div class="engine-card glass engine-codybarrier" id="engineCardCodyBarrier">
       <div class="engine-header">
