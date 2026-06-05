@@ -2288,8 +2288,8 @@ function connectDeriv() {
                     mState.recentPrices.push(parseFloat(price));
                 });
                 
-                if (mState.digitHistory.length > 300) {
-                    mState.digitHistory = mState.digitHistory.slice(-300);
+                if (mState.digitHistory.length > 2500) {
+                    mState.digitHistory = mState.digitHistory.slice(-2500);
                 }
                 // Mantener sólo los últimos 50 precios reales
                 if (mState.recentPrices && mState.recentPrices.length > 50) {
