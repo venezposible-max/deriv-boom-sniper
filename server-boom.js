@@ -754,7 +754,7 @@ function evaluateMarkovDiffers() {
         for (let target = 0; target <= 9; target++) {
             if (counts[currentDigit] > 0) {
                 let prob = (matrix[currentDigit][target] / counts[currentDigit]) * 100;
-                if (prob > 0 && prob <= 2.0) { // THRESHOLD
+                if (prob > 0 && prob <= 5.0) { // THRESHOLD
                     if (prob < lowestProb) {
                         lowestProb = prob;
                         bestTarget = target;
@@ -2102,7 +2102,7 @@ function connectDeriv() {
             
             setTimeout(() => {
                 if (ws && ws.readyState === WebSocket.OPEN) {
-                    ws.send(JSON.stringify({ balance: 1, subscribe: 1 }));
+                    ws.send(JSON.stringify({ balance: 1 }));
                     console.log(`💰 Suscripción balance activada.`);
                 }
             }, 18000);
