@@ -106,7 +106,7 @@ let botState = {
     engineOverUnder: false,
     engineAccumulator: true,
     engineCodyBarrier: false,
-    engineMarkovDiffers: false,
+    engineMarkovDiffers: true,
     
     // Cody standard deviation multiplier
     codyMultiplier: 1.8,
@@ -1078,6 +1078,15 @@ function tryFireTrade() {
             // 🎯 MOTOR 6: CODY BARRIER SNIPER (Prioridad Absoluta si está encendido)
             if (botState.engineCodyBarrier) {
                 signal = evaluateCodyBarrier(mState);
+            }
+            
+            // 🎯 MOTOR MARKOV OMNISCIENTE
+            if (!signal && botState.engineMarkovDiffers) {
+                signal = evaluateMarkovDiffers();
+                if (signal) {
+                    signalSymbol = signal.symbol;
+                    break; // Salir del loop porque Markov ya encontró una señal en algún mercado
+                }
             }
             
                     // Los motores de dígito y Accumulator fueron eliminados a petición del usuario.
