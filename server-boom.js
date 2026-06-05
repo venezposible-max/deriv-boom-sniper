@@ -237,7 +237,7 @@ if (fs.existsSync(STATE_FILE)) {
             if (botState.takeProfitExtensions === undefined) botState.takeProfitExtensions = 0;
             if (botState.spikeProtectionUntil === undefined) botState.spikeProtectionUntil = 0;
             if (botState.stakeReduced === undefined) botState.stakeReduced = false;
-            if (botState.coberturaEnabled === undefined) botState.coberturaEnabled = true;
+            if (botState.coberturaEnabled === undefined) botState.coberturaEnabled = false;
             if (botState.differPrecision98 === undefined) botState.differPrecision98 = false;
             if (botState.franklinPerezLogic === undefined) botState.franklinPerezLogic = true;
             if (botState.quirurgicoMode === undefined) botState.quirurgicoMode = false;
@@ -283,7 +283,7 @@ if (fs.existsSync(STATE_FILE)) {
             if (botState.hidraFrenoUntil === undefined) botState.hidraFrenoUntil = 0;
             if (botState.ghostNextTradeReal === undefined) botState.ghostNextTradeReal = false;
             if (botState.ghostPendingBarrier === undefined) botState.ghostPendingBarrier = null;
-            if (botState.ghostActive === undefined) botState.ghostActive = true;
+            if (botState.ghostActive === undefined) botState.ghostActive = false;
             if (botState.forcedSignal === undefined) botState.forcedSignal = null;
             
             // Garantizar variables de enfriamiento

@@ -1497,7 +1497,7 @@ body::before {
 
       <div class="control-separator"></div>
 
-      <div class="control-group" style="display:flex; flex-direction:column; align-items:center; min-width: 90px;">
+      <div class="control-group" style="display:none; flex-direction:column; align-items:center; min-width: 90px;">
         <label style="color: var(--accent-green);" title="Cobertura Cuántica (Progresión Lineal D'Alembert + Ghost Shield)">Cobertura</label>
         <label class="toggle" style="width: 40px; height: 22px; margin-top:4px;">
           <input type="checkbox" id="toggleCobertura" onchange="handleCoberturaToggle(this.checked)">
@@ -1509,7 +1509,7 @@ body::before {
 
       <div class="control-separator"></div>
 
-      <div class="control-group" style="display:flex; flex-direction:column; align-items:center; min-width: 100px;">
+      <div class="control-group" style="display:none; flex-direction:column; align-items:center; min-width: 100px;">
         <label style="color: #a78bfa; font-weight: 700;" title="Escudo Ghost (Simular pérdidas antes de entrar en real)">Ghost Shield</label>
         <label class="toggle" style="width: 40px; height: 22px; margin-top:4px;">
           <input type="checkbox" id="toggleGhostActive" onchange="handleGhostActiveToggle(this.checked)">
@@ -1520,7 +1520,7 @@ body::before {
       </div>
       <div class="control-separator"></div>
 
-      <div class="control-group" style="display:flex; flex-direction:column; align-items:center; min-width: 100px;">
+      <div class="control-group" style="display:none; flex-direction:column; align-items:center; min-width: 100px;">
         <label style="color: #60a5fa; font-weight: 700;" title="Escudo Bollinger (Filtra señales usando desviación estándar)">Bollinger Shield</label>
         <label class="toggle" style="width: 40px; height: 22px; margin-top:4px;">
           <input type="checkbox" id="toggleBollingerShield" onchange="handleBollingerShieldToggle(this.checked)">
@@ -1531,7 +1531,7 @@ body::before {
       </div>
       <div class="control-separator"></div>
 
-      <div class="control-group" style="display:flex; flex-direction:column; align-items:center; min-width: 100px;">
+      <div class="control-group" style="display:none; flex-direction:column; align-items:center; min-width: 100px;">
         <label style="color: #fbbf24; font-weight: 700;" title="Escudo Fibonacci (Solo dispara en zonas de rebote áureo)">Fibonacci Shield</label>
         <label class="toggle" style="width: 40px; height: 22px; margin-top:4px;">
           <input type="checkbox" id="toggleFibonacciShield" onchange="handleFibonacciShieldToggle(this.checked)">
