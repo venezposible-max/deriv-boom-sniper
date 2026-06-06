@@ -476,7 +476,7 @@ function getDynamicCooldown() {
  * Calcular Stake Ajustado según Escudo de Momentum y Martingala
  */
 function getAdjustedStake(baseStake, engineMultiplier) {
-    let adjusted = baseStake * engineMultiplier;
+    let adjusted = (baseStake || 1) * (engineMultiplier || 1.0);
     
     // Aplicar Cobertura Cuántica (Progresión Lineal D'Alembert: +1x stake base por cada paso)
     if (botState.martingaleStep > 0 && botState.coberturaEnabled) {
