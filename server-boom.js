@@ -478,12 +478,20 @@ function getDynamicCooldown() {
 function getAdjustedStake(baseStake, engineMultiplier) {
     let adjusted = (baseStake || 1) * (engineMultiplier || 1.0);
     
-    // Aplicar Cobertura Cuántica (Progresión Lineal D'Alembert: +1x stake base por cada paso)
+    // Aplicar Cobertura Cuántica
     if (botState.martingaleStep > 0 && botState.coberturaEnabled) {
-        const steps = Math.min(botState.martingaleStep, botState.maxMartingaleSteps || 6);
-        // La progresión lineal D'Alembert incrementa de forma lineal (+1x, +2x, +3x) en lugar de exponencial (x2.1, x4.4, x9.2).
-        // Esto protege drásticamente el capital del usuario ante rachas de mercado adversas.
-        adjusted = adjusted * (1 + steps);
+        if (botState.lastEngineFired === 'MARKOV_DIFFERS') {
+            // Para DIGITDIFF: Multiplicador agresivo x11 para recuperar de un solo golpe
+            if (botState.martingaleStep === 1) {
+                adjusted = adjusted * 11;
+            } else {
+                botState.martingaleStep = 0; // Failsafe
+            }
+        } else {
+            // Motores normales: Progresión Lineal D'Alembert (+1x, +2x, +3x)
+            const steps = Math.min(botState.martingaleStep, botState.maxMartingaleSteps || 6);
+            adjusted = adjusted * (1 + steps);
+        }
     }
     
     return parseFloat(adjusted.toFixed(2));
@@ -1372,11 +1380,19 @@ function finalizeTrade(c) {
     } else {
         if (botState.coberturaEnabled) {
             botState.martingaleStep++;
-            if (botState.martingaleStep > botState.maxMartingaleSteps) {
-                console.log(`💀 COBERTURA CUÁNTICA: Límite máximo de pasos (${botState.maxMartingaleSteps}) superado. Asumiendo pérdida completa y reiniciando stake base para proteger la cuenta.`);
+            let localMaxSteps = botState.maxMartingaleSteps;
+            let multiplierMsg = `(Progresión Lineal D'Alembert) (Multiplicador: x${1 + botState.martingaleStep})`;
+            
+            if (engine === 'MARKOV_DIFFERS') {
+                localMaxSteps = 1; // Solo un intento de recuperación x11
+                multiplierMsg = `(Recuperación Agresiva Única) (Multiplicador: x11)`;
+            }
+            
+            if (botState.martingaleStep > localMaxSteps) {
+                console.log(`💀 COBERTURA CUÁNTICA: Límite máximo de pasos (${localMaxSteps}) superado. Asumiendo pérdida completa y reiniciando stake base para proteger la cuenta.`);
                 botState.martingaleStep = 0;
             } else {
-                console.log(`📈 COBERTURA CUÁNTICA: Pérdida real. Escalando Cobertura (Progresión Lineal D'Alembert) a Nivel ${botState.martingaleStep} (Multiplicador: x${1 + botState.martingaleStep})`);
+                console.log(`📈 COBERTURA CUÁNTICA: Pérdida real. Escalando Cobertura a Nivel ${botState.martingaleStep} ${multiplierMsg}`);
             }
         }
     }
