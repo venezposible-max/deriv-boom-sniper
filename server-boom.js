@@ -130,7 +130,7 @@ let botState = {
     accuTakeProfitAt: 0.02,        // Salida automática cuando profit >= 2% del stake
     
     // ─── Variables del Escudo de Trade Fantasma (Ghost Shield) ───
-    ghostActive: true,
+    ghostActive: false,
     
     bollingerShield: false,
     fibonacciShield: false,
@@ -2381,6 +2381,8 @@ function connectDeriv() {
                     else if (pt.contractType === 'DIGITODD') won = digit % 2 !== 0;
                     else if (pt.contractType === 'DIGITOVER') won = digit > parseInt(pt.barrier);
                     else if (pt.contractType === 'DIGITUNDER') won = digit < parseInt(pt.barrier);
+                    else if (pt.contractType === 'DIGITDIFF') won = digit !== parseInt(pt.barrier);
+                    else if (pt.contractType === 'DIGITMATCH') won = digit === parseInt(pt.barrier);
                     else if (pt.contractType === 'ACCU') {
                         // Ghost Shield dinámico: barrera adaptativa según volatilidad real del símbolo
                         const recentVol = mState.recentPrices && mState.recentPrices.length >= 10
