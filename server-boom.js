@@ -2099,13 +2099,14 @@ function connectDeriv() {
                     });
                 }
             }, 15000); // Iniciado tras terminar la carga de historiales (Aumentado para evitar colisión con historiales)
-            
+            /*
             setTimeout(() => {
                 if (ws && ws.readyState === WebSocket.OPEN) {
                     ws.send(JSON.stringify({ balance: 1 }));
                     console.log(`💰 Suscripción balance activada.`);
                 }
             }, 18000);
+            */
         }
         
         if (msg.error) {
