@@ -754,7 +754,7 @@ function evaluateMarkovDiffers() {
         for (let target = 0; target <= 9; target++) {
             if (counts[currentDigit] > 0) {
                 let prob = (matrix[currentDigit][target] / counts[currentDigit]) * 100;
-                if (prob > 0 && prob <= 3.5) { // THRESHOLD
+                if (prob > 0 && prob <= 6.0) { // THRESHOLD AUMENTADO PARA MAYOR FRECUENCIA
                     if (prob < lowestProb) {
                         lowestProb = prob;
                         bestTarget = target;
