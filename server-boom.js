@@ -1730,7 +1730,8 @@ app.post('/api/control', (req, res) => {
             EVEN_ODD: { wins: 0, losses: 0, pnl: 0, autoDisabled: false },
             OVER_UNDER: { wins: 0, losses: 0, pnl: 0, autoDisabled: false },
             ACCUMULATOR: { wins: 0, losses: 0, pnl: 0, autoDisabled: false },
-            CODY_BARRIER: { wins: 0, losses: 0, pnl: 0, autoDisabled: false }
+            CODY_BARRIER: { wins: 0, losses: 0, pnl: 0, autoDisabled: false },
+            MARKOV_DIFFERS: { wins: 0, losses: 0, pnl: 0, autoDisabled: false }
         };
         saveState();
         console.log('🔄 REGISTROS DE REINICIO DIARIO: Métricas restablecidas en KRAKEN.');
