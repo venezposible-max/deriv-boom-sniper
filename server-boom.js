@@ -239,7 +239,7 @@ if (fs.existsSync(STATE_FILE)) {
             if (botState.takeProfitExtensions === undefined) botState.takeProfitExtensions = 0;
             if (botState.spikeProtectionUntil === undefined) botState.spikeProtectionUntil = 0;
             if (botState.stakeReduced === undefined) botState.stakeReduced = false;
-            if (botState.coberturaEnabled === undefined) botState.coberturaEnabled = false;
+            if (botState.coberturaEnabled === undefined) botState.coberturaEnabled = true;
             if (botState.differPrecision98 === undefined) botState.differPrecision98 = false;
             if (botState.franklinPerezLogic === undefined) botState.franklinPerezLogic = true;
             if (botState.quirurgicoMode === undefined) botState.quirurgicoMode = false;
