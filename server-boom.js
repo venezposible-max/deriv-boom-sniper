@@ -798,8 +798,8 @@ function evaluateMarkovDiffers() {
         let activeThreshold = botState.markovThreshold || 4.0;
         let isRecovery = botState.martingaleStep > 0;
         if (isRecovery) {
-            // 🛡️ Martingala Markov Filtrada Dinámica (Cobertura Ultra-Segura máx 2.0%)
-            activeThreshold = Math.min(2.0, activeThreshold * 0.5);
+            // 🛡️ Martingala Markov Filtrada Dinámica (Cobertura más estricta con piso de 3.8%)
+            activeThreshold = Math.max(3.8, activeThreshold * 0.8);
         }
 
         for (let target = 0; target <= 9; target++) {
