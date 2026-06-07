@@ -58,10 +58,10 @@ let botState = {
     
     // Soporte para Multi-Mercados escaneados en paralelo
     markets: {
-        R_10: { symbol: 'R_10', digitHistory: [], digitFrequency: {}, shannonEntropy: 3.322, totalTicksProcessed: 0, lastTickPrice: 0, lastDigit: null, symbolDecimals: 2 },
-        R_25: { symbol: 'R_25', digitHistory: [], digitFrequency: {}, shannonEntropy: 3.322, totalTicksProcessed: 0, lastTickPrice: 0, lastDigit: null, symbolDecimals: 2 },
-        R_50: { symbol: 'R_50', digitHistory: [], digitFrequency: {}, shannonEntropy: 3.322, totalTicksProcessed: 0, lastTickPrice: 0, lastDigit: null, symbolDecimals: 2 },
-        R_75: { symbol: 'R_75', digitHistory: [], digitFrequency: {}, shannonEntropy: 3.322, totalTicksProcessed: 0, lastTickPrice: 0, lastDigit: null, symbolDecimals: 2 },
+        R_10: { symbol: 'R_10', digitHistory: [], digitFrequency: {}, shannonEntropy: 3.322, totalTicksProcessed: 0, lastTickPrice: 0, lastDigit: null, symbolDecimals: 3 },
+        R_25: { symbol: 'R_25', digitHistory: [], digitFrequency: {}, shannonEntropy: 3.322, totalTicksProcessed: 0, lastTickPrice: 0, lastDigit: null, symbolDecimals: 3 },
+        R_50: { symbol: 'R_50', digitHistory: [], digitFrequency: {}, shannonEntropy: 3.322, totalTicksProcessed: 0, lastTickPrice: 0, lastDigit: null, symbolDecimals: 4 },
+        R_75: { symbol: 'R_75', digitHistory: [], digitFrequency: {}, shannonEntropy: 3.322, totalTicksProcessed: 0, lastTickPrice: 0, lastDigit: null, symbolDecimals: 4 },
         R_100: { symbol: 'R_100', digitHistory: [], digitFrequency: {}, shannonEntropy: 3.322, totalTicksProcessed: 0, lastTickPrice: 0, lastDigit: null, symbolDecimals: 2 },
         '1HZ10V': { symbol: '1HZ10V', digitHistory: [], digitFrequency: {}, shannonEntropy: 3.322, totalTicksProcessed: 0, lastTickPrice: 0, lastDigit: null, symbolDecimals: 2 },
         '1HZ25V': { symbol: '1HZ25V', digitHistory: [], digitFrequency: {}, shannonEntropy: 3.322, totalTicksProcessed: 0, lastTickPrice: 0, lastDigit: null, symbolDecimals: 2 },
@@ -107,6 +107,7 @@ let botState = {
     engineAccumulator: true,
     engineCodyBarrier: false,
     engineMarkovDiffers: true,
+    markovThreshold: 4.0,
     
     // Cody standard deviation multiplier
     codyMultiplier: 1.8,
@@ -204,6 +205,7 @@ if (fs.existsSync(STATE_FILE)) {
             if (!botState.markets) {
                 botState.markets = {};
             }
+            const decimalsMap = { R_10: 3, R_25: 3, R_50: 4, R_75: 4, R_100: 2, '1HZ10V': 2, '1HZ25V': 2, '1HZ100V': 2 };
             SCAN_SYMBOLS.forEach(sym => {
                 if (!botState.markets[sym]) {
                     botState.markets[sym] = {
@@ -214,7 +216,7 @@ if (fs.existsSync(STATE_FILE)) {
                         totalTicksProcessed: 0,
                         lastTickPrice: 0,
                         lastDigit: null,
-                        symbolDecimals: 2
+                        symbolDecimals: decimalsMap[sym] || 2
                     };
                 }
                 if (!botState.markets[sym].digitFrequency || Object.keys(botState.markets[sym].digitFrequency).length === 0) {
@@ -243,6 +245,7 @@ if (fs.existsSync(STATE_FILE)) {
             if (botState.quirurgicoMode === undefined) botState.quirurgicoMode = false;
             if (botState.bollingerShield === undefined) botState.bollingerShield = false;
             if (botState.fibonacciShield === undefined) botState.fibonacciShield = false;
+            if (botState.markovThreshold === undefined) botState.markovThreshold = 4.0;
             
             botState.engineAccumulator = true;
             botState.engineCodyBarrier = false;
@@ -762,7 +765,7 @@ function evaluateMarkovDiffers() {
         for (let target = 0; target <= 9; target++) {
             if (counts[currentDigit] > 0) {
                 let prob = (matrix[currentDigit][target] / counts[currentDigit]) * 100;
-                if (prob > 0 && prob <= 6.0) { // THRESHOLD AUMENTADO PARA MAYOR FRECUENCIA
+                if (prob > 0 && prob <= (botState.markovThreshold || 4.0)) {
                     if (prob < lowestProb) {
                         lowestProb = prob;
                         bestTarget = target;
@@ -1776,7 +1779,7 @@ app.post('/api/config', (req, res) => {
             accuGrowthRate, accuTargetTicks, accuMaxTicks, accuVolatilityThreshold,
             accuTrailingPct, accuPriorityMode, accuMinProfitRatio, accuTakeProfitAt,
             hydraMode, ghostActive, codyMultiplier, bollingerShield, fibonacciShield,
-            codyPayoutFilterEnabled, codyPayoutFilterMargin } = req.body;
+            codyPayoutFilterEnabled, codyPayoutFilterMargin, markovThreshold } = req.body;
     
     if (stake !== undefined) botState.stake = Math.max(0.35, parseFloat(stake));
     if (maxDailyLoss !== undefined) botState.maxDailyLoss = parseFloat(maxDailyLoss);
@@ -1792,6 +1795,7 @@ app.post('/api/config', (req, res) => {
     if (quirurgicoMode !== undefined) botState.quirurgicoMode = !!quirurgicoMode;
     if (bollingerShield !== undefined) botState.bollingerShield = !!bollingerShield;
     if (fibonacciShield !== undefined) botState.fibonacciShield = !!fibonacciShield;
+    if (markovThreshold !== undefined) botState.markovThreshold = Math.max(0.1, Math.min(10.0, parseFloat(markovThreshold)));
     
     // ── Configuración ACCU avanzada ──
     if (accuGrowthRate !== undefined) botState.accuGrowthRate = parseFloat(accuGrowthRate);
@@ -2084,13 +2088,13 @@ function connectDeriv() {
                         setTimeout(() => {
                             if (ws && ws.readyState === WebSocket.OPEN) {
                                 const mState = botState.markets[sym];
-                                if (mState && mState.digitHistory && mState.digitHistory.length >= 250) {
+                                if (mState && mState.digitHistory && mState.digitHistory.length >= 2000) {
                                     console.log(`🔥 KRAKEN CARGADO [${sym}]: Historial recuperado de caché en RAM (${mState.digitHistory.length} ticks). Ahorrando petición API.`);
                                 } else {
-                                    console.log(`📥 Descargando historial de 300 ticks para ${sym}...`);
+                                    console.log(`📥 Descargando historial de 2000 ticks para ${sym}...`);
                                     ws.send(JSON.stringify({
                                         ticks_history: sym,
-                                        count: sym === 'R_50' ? 2000 : 300,
+                                        count: 2000,
                                         end: 'latest',
                                         style: 'ticks',
                                         adjust_start_time: 1

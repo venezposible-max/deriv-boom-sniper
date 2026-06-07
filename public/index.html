@@ -1471,6 +1471,11 @@ body::before {
         <input type="number" id="inputTakeProfit" value="15" min="1" max="1000" step="1" onchange="handleConfigChange()" onblur="handleConfigChange()">
       </div>
 
+      <div class="control-group">
+        <label title="Umbral de Probabilidad de Markov (Menor = Más preciso, Mayor = Más trades)">Umbral Markov (%)</label>
+        <input type="number" id="inputMarkovThreshold" value="4.0" min="0.1" max="10.0" step="0.1" onchange="handleConfigChange()" onblur="handleConfigChange()">
+      </div>
+
 
 
       <div class="control-group">
@@ -1800,6 +1805,8 @@ function updateUI(data) {
   // Engine toggles sync
   const toggleCody = $('toggleCodyBarrier');
   if (toggleCody) toggleCody.checked = !!data.engineCodyBarrier;
+  const toggleMarkov = $('toggleMarkov');
+  if (toggleMarkov) toggleMarkov.checked = !!data.engineMarkovDiffers;
 
   // Martingale sync
   const toggleCob = $('toggleCobertura');
@@ -1881,9 +1888,11 @@ function updateUI(data) {
 
   // Engine cards active state
   updateEngineCard('engineCardCodyBarrier', 'statusCodyBarrier', data.engineCodyBarrier, data.isRunning, data.currentEngine === 'CODY_BARRIER');
+  updateEngineCard('engineCardMarkov', 'statusMarkov', data.engineMarkovDiffers, data.isRunning, data.currentEngine === 'MARKOV_DIFFERS');
 
   // Engine stats
   if (data.engineStats.CODY_BARRIER) updateEngineStats('cody', data.engineStats.CODY_BARRIER);
+  if (data.engineStats.MARKOV_DIFFERS) updateEngineStats('markov', data.engineStats.MARKOV_DIFFERS);
 
   // Darwin mode badges toggling
   ['EVEN_ODD', 'OVER_UNDER', 'ACCUMULATOR', 'CODY_BARRIER'].forEach(eng => {
@@ -1952,6 +1961,7 @@ function updateUI(data) {
   if (document.activeElement !== $('inputStake')) $('inputStake').value = data.stake;
   if (document.activeElement !== $('inputMaxLoss')) $('inputMaxLoss').value = data.maxDailyLoss;
   if (document.activeElement !== $('inputTakeProfit')) $('inputTakeProfit').value = data.takeProfit;
+  if (document.activeElement !== $('inputMarkovThreshold')) $('inputMarkovThreshold').value = data.markovThreshold !== undefined ? data.markovThreshold : 4.0;
 
   if (document.activeElement !== $('inputCodyMultiplier')) $('inputCodyMultiplier').value = data.codyMultiplier || 1.8;
 
@@ -2033,7 +2043,8 @@ function pulseEngine(engineKey) {
     'EVEN_ODD': 'engineCardEvenOdd',
     'OVER_UNDER': 'engineCardOverUnder',
     'ACCUMULATOR': 'engineCardAccumulator',
-    'CODY_BARRIER': 'engineCardCodyBarrier'
+    'CODY_BARRIER': 'engineCardCodyBarrier',
+    'MARKOV_DIFFERS': 'engineCardMarkov'
   };
   const card = $(map[engineKey]);
   if (!card) return;
@@ -2343,9 +2354,11 @@ async function handleEngineToggle(engine, enabled) {
       body: JSON.stringify({ engine, enabled })
     });
     const engineNames = {
-      'EVEN_ODD': 'Even/Odd',
+      'EVEN_ODD': 'Par/Impar',
       'OVER_UNDER': 'Over/Under',
-      'MATCH': 'Match'
+      'ACCUMULATOR': 'Accumulator',
+      'CODY_BARRIER': 'Barreras Cody',
+      'MARKOV_DIFFERS': 'Markov Differs'
     };
     showToast(`Motor ${engineNames[engine]} ${enabled ? 'activado' : 'desactivado'}`, 'info');
   } catch (e) {
@@ -2390,11 +2403,12 @@ function handleConfigChange() {
     const takeProfit = parseFloat($('inputTakeProfit').value) || 15;
     const codyMultiplier = parseFloat($('inputCodyMultiplier').value) || 1.8;
     const codyPayoutFilterMargin = (parseFloat($('inputCodyPayoutFilterMargin').value) || 0) / 100;
+    const markovThreshold = parseFloat($('inputMarkovThreshold').value) || 4.0;
     try {
       await fetch('/api/config', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ stake, maxDailyLoss, takeProfit, codyMultiplier, codyPayoutFilterMargin })
+        body: JSON.stringify({ stake, maxDailyLoss, takeProfit, codyMultiplier, codyPayoutFilterMargin, markovThreshold })
       });
       showToast('Configuración actualizada', 'success');
     } catch (e) {
@@ -2407,6 +2421,9 @@ function handleConfigChange() {
 // ── Engine Toggle Listeners ────────────────────────────────────────────────
 $('toggleCodyBarrier').addEventListener('change', function() {
   handleEngineToggle('CODY_BARRIER', this.checked);
+});
+$('toggleMarkov').addEventListener('change', function() {
+  handleEngineToggle('MARKOV_DIFFERS', this.checked);
 });
 
 
