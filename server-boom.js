@@ -331,6 +331,39 @@ function calcEntropy(hist, range) {
 }
 
 /**
+ * Calcula la ventaja de Markov (Markov Edge) para el historial de dígitos actual.
+ * Ventaja (Edge) = 10.0% (Probabilidad aleatoria esperada) - Probabilidad del dígito de transición menos probable.
+ */
+function calcMarkovEdge(hist) {
+    if (!hist || hist.length < 100) return 0;
+    
+    let matrix = Array(10).fill(0).map(() => Array(10).fill(0));
+    let counts = Array(10).fill(0);
+
+    for (let i = 1; i < hist.length; i++) {
+        let prev = hist[i - 1];
+        let curr = hist[i];
+        matrix[prev][curr]++;
+        counts[prev]++;
+    }
+
+    const currentDigit = hist[hist.length - 1];
+    let lowestProb = 100;
+
+    for (let target = 0; target <= 9; target++) {
+        if (counts[currentDigit] > 0) {
+            let prob = (matrix[currentDigit][target] / counts[currentDigit]) * 100;
+            if (prob < lowestProb) {
+                lowestProb = prob;
+            }
+        }
+    }
+    
+    const edge = Math.max(0, 10.0 - lowestProb);
+    return parseFloat(edge.toFixed(1));
+}
+
+/**
  * Extrae de forma precisa el último dígito de una cotización
  */
 function getDigitFromQuote(quote) {
@@ -1973,6 +2006,7 @@ app.post('/api/switch-market', (req, res) => {
         botState.shannonEntropy = mState.shannonEntropy;
         botState.hotDigit = mState.hotDigit;
         botState.hotDigitFreq = mState.hotDigitFreq;
+        botState.markovEdge = calcMarkovEdge(mState.digitHistory);
     }
     
     saveState();
@@ -2359,6 +2393,7 @@ function connectDeriv() {
                     botState.shannonEntropy = mState.shannonEntropy;
                     botState.hotDigit = mState.hotDigit;
                     botState.hotDigitFreq = mState.hotDigitFreq;
+                    botState.markovEdge = calcMarkovEdge(mState.digitHistory);
                 }
                 
                 console.log(`🔥 KRAKEN CARGADO [${sym}]: Historial inicializado con ${mState.totalTicksProcessed} ticks históricos.`);
@@ -2486,6 +2521,7 @@ function connectDeriv() {
                     botState.shannonEntropy = mState.shannonEntropy;
                     botState.hotDigit = mState.hotDigit;
                     botState.hotDigitFreq = mState.hotDigitFreq;
+                    botState.markovEdge = calcMarkovEdge(mState.digitHistory);
                 }
                 
                 tryFireTrade();
