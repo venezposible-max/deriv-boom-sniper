@@ -762,10 +762,17 @@ function evaluateMarkovDiffers() {
         let bestTarget = -1;
         let lowestProb = 100;
 
+        let activeThreshold = botState.markovThreshold || 4.0;
+        let isRecovery = botState.martingaleStep > 0;
+        if (isRecovery) {
+            // 🛡️ Martingala Markov Filtrada Dinámica (Cobertura Ultra-Segura máx 2.0%)
+            activeThreshold = Math.min(2.0, activeThreshold * 0.5);
+        }
+
         for (let target = 0; target <= 9; target++) {
             if (counts[currentDigit] > 0) {
                 let prob = (matrix[currentDigit][target] / counts[currentDigit]) * 100;
-                if (prob > 0 && prob <= (botState.markovThreshold || 4.0)) {
+                if (prob > 0 && prob <= activeThreshold) {
                     if (prob < lowestProb) {
                         lowestProb = prob;
                         bestTarget = target;
@@ -782,7 +789,9 @@ function evaluateMarkovDiffers() {
                 symbol: sym, // <--- Esto le dice al bot en qué mercado exacto disparar
                 barrier: String(bestTarget),
                 ticksRemaining: 1,
-                reason: `Markov ${sym} Prob ${lowestProb.toFixed(1)}%`
+                reason: isRecovery 
+                    ? `🛡️ COBERTURA SEGURA: Markov ${sym} Prob ${lowestProb.toFixed(1)}% (Umbral estricto: ${activeThreshold.toFixed(1)}%)`
+                    : `Markov ${sym} Prob ${lowestProb.toFixed(1)}%`
             };
         }
     }
