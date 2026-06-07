@@ -1044,10 +1044,17 @@ function tryFireTrade() {
             currentCooldown = Math.max(currentCooldown, minQuirurgicoCooldown);
         }
         
+        // Retraso de 60 segundos tras pérdida en operaciones reales para evitar pérdidas seguidas rápidas
+        if (botState.martingaleStep > 0) {
+            const recoveryCooldown = 60000; // 60 segundos
+            currentCooldown = Math.max(currentCooldown, recoveryCooldown);
+        }
+        
         if ((now - botState.lastTradeTime) < currentCooldown) {
-            // Loguear de forma no intrusiva cada 30 segundos si está en Modo Quirúrgico
-            if (botState.quirurgicoMode && (now % 30000 < 1500)) {
-                const secsRemaining = Math.ceil((currentCooldown - (now - botState.lastTradeTime)) / 1000);
+            const secsRemaining = Math.ceil((currentCooldown - (now - botState.lastTradeTime)) / 1000);
+            if (botState.martingaleStep > 0 && (now % 10000 < 1000)) {
+                console.log(`⏳ COBERTURA EN ESPERA: Retraso de seguridad activo tras pérdida (${secsRemaining}s restantes)...`);
+            } else if (botState.quirurgicoMode && (now % 30000 < 1500)) {
                 console.log(`⏳ MODO QUIRÚRGICO: Bloqueando nuevas señales por cooldown de ventana deslizante (${secsRemaining}s restantes)...`);
             }
             return;
