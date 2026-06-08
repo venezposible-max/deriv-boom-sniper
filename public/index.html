@@ -1831,7 +1831,7 @@ function formatMoney(val) {
   const curr = state.currency || 'USD';
   const absVal = Math.abs(val).toFixed(2);
   if (curr === 'USD') {
-    return (val >= 0 ? '+' : '') + '$' + absVal;
+    return (val >= 0 ? '+' : '-') + '$' + absVal;
   }
   return sign + absVal + ' ' + curr;
 }

@@ -1512,7 +1512,7 @@ function animateBalance(target) {
 
 // ── Format helpers ─────────────────────────────────────────────────────────
 function formatMoney(val) {
-  const sign = val >= 0 ? '+' : '';
+  const sign = val >= 0 ? '+' : '-';
   return sign + '$' + Math.abs(val).toFixed(2);
 }
 
