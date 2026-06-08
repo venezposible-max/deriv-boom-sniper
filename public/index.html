@@ -1318,8 +1318,8 @@ body::before {
       <div class="engine-header">
         <div class="engine-info-wrap">
             <div class="engine-icon">🧠</div>
-            <div class="engine-name">MARKOV DIFFERS</div>
-            <div class="engine-subtitle">R_50 Statistical Sniper</div>
+            <div class="engine-name" id="engineNameMarkov">MARKOV DIFFERS</div>
+            <div class="engine-subtitle" id="engineSubtitleMarkov">R_50 Statistical Sniper</div>
         </div>
         <label class="switch">
           <input type="checkbox" id="toggleMarkov">
@@ -1469,6 +1469,14 @@ body::before {
       <div class="control-group">
         <label>Take Profit ($)</label>
         <input type="number" id="inputTakeProfit" value="15" min="1" max="1000" step="1" onchange="handleConfigChange()" onblur="handleConfigChange()">
+      </div>
+
+      <div class="control-group">
+        <label title="Estrategia del Sniper Differ: Markov (Estadístico) o HFR (Racha de alta frecuencia)">Estrategia Differ</label>
+        <select id="selectDifferStrategy" onchange="handleConfigChange()">
+          <option value="MARKOV">🧠 Markov</option>
+          <option value="HFR">⚡ HFR</option>
+        </select>
       </div>
 
       <div class="control-group">
@@ -1890,6 +1898,15 @@ function updateUI(data) {
   updateEngineCard('engineCardCodyBarrier', 'statusCodyBarrier', data.engineCodyBarrier, data.isRunning, data.currentEngine === 'CODY_BARRIER');
   updateEngineCard('engineCardMarkov', 'statusMarkov', data.engineMarkovDiffers, data.isRunning, data.currentEngine === 'MARKOV_DIFFERS');
 
+  const engineNameMarkov = $('engineNameMarkov');
+  if (engineNameMarkov) {
+    engineNameMarkov.textContent = data.differStrategy === 'HFR' ? 'HFR DIFFERS' : 'MARKOV DIFFERS';
+  }
+  const engineSubtitleMarkov = $('engineSubtitleMarkov');
+  if (engineSubtitleMarkov) {
+    engineSubtitleMarkov.textContent = data.differStrategy === 'HFR' ? 'High-Frequency Streak Sniper' : 'R_50 Statistical Sniper';
+  }
+
   // Engine stats
   if (data.engineStats.CODY_BARRIER) updateEngineStats('cody', data.engineStats.CODY_BARRIER);
   if (data.engineStats.MARKOV_DIFFERS) updateEngineStats('markov', data.engineStats.MARKOV_DIFFERS);
@@ -1933,7 +1950,15 @@ function updateUI(data) {
 
   // Digit metrics
   $('shannonValue').textContent = parseFloat(data.shannonEntropy || 0).toFixed(3);
-  $('markovValue').textContent = parseFloat(data.markovEdge || 0).toFixed(1) + '%';
+  const markovLabel = $('markovValue').previousElementSibling;
+  if (markovLabel) {
+    markovLabel.textContent = data.differStrategy === 'HFR' ? 'Racha Máxima' : 'Markov Edge';
+  }
+  if (data.differStrategy === 'HFR') {
+    $('markovValue').textContent = (data.markovEdge || 0).toFixed(0);
+  } else {
+    $('markovValue').textContent = parseFloat(data.markovEdge || 0).toFixed(1) + '%';
+  }
   $('hotDigitValue').textContent = data.hotDigit !== null ? data.hotDigit + ' (' + (data.hotDigitFreq || 0) + ')' : '—';
 
   // Buttons state
@@ -1962,6 +1987,7 @@ function updateUI(data) {
   if (document.activeElement !== $('inputMaxLoss')) $('inputMaxLoss').value = data.maxDailyLoss;
   if (document.activeElement !== $('inputTakeProfit')) $('inputTakeProfit').value = data.takeProfit;
   if (document.activeElement !== $('inputMarkovThreshold')) $('inputMarkovThreshold').value = data.markovThreshold !== undefined ? data.markovThreshold : 4.0;
+  if (document.activeElement !== $('selectDifferStrategy')) $('selectDifferStrategy').value = data.differStrategy || 'MARKOV';
 
   if (document.activeElement !== $('inputCodyMultiplier')) $('inputCodyMultiplier').value = data.codyMultiplier || 1.8;
 
@@ -2404,11 +2430,12 @@ function handleConfigChange() {
     const codyMultiplier = parseFloat($('inputCodyMultiplier').value) || 1.8;
     const codyPayoutFilterMargin = (parseFloat($('inputCodyPayoutFilterMargin').value) || 0) / 100;
     const markovThreshold = parseFloat($('inputMarkovThreshold').value) || 4.0;
+    const differStrategy = $('selectDifferStrategy').value || 'MARKOV';
     try {
       await fetch('/api/config', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ stake, maxDailyLoss, takeProfit, codyMultiplier, codyPayoutFilterMargin, markovThreshold })
+        body: JSON.stringify({ stake, maxDailyLoss, takeProfit, codyMultiplier, codyPayoutFilterMargin, markovThreshold, differStrategy })
       });
       showToast('Configuración actualizada', 'success');
     } catch (e) {

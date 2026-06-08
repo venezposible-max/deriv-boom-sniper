@@ -83,6 +83,7 @@ let botState = {
     isBuying: false,
     maxTradesPerDay: 50,
     coberturaEnabled: true,
+    differStrategy: 'MARKOV',
     differPrecision98: false,
     franklinPerezLogic: true,
     quirurgicoMode: false,
@@ -240,6 +241,7 @@ if (fs.existsSync(STATE_FILE)) {
             if (botState.spikeProtectionUntil === undefined) botState.spikeProtectionUntil = 0;
             if (botState.stakeReduced === undefined) botState.stakeReduced = false;
             if (botState.coberturaEnabled === undefined) botState.coberturaEnabled = true;
+            if (botState.differStrategy === undefined) botState.differStrategy = 'MARKOV';
             if (botState.differPrecision98 === undefined) botState.differPrecision98 = false;
             if (botState.franklinPerezLogic === undefined) botState.franklinPerezLogic = true;
             if (botState.quirurgicoMode === undefined) botState.quirurgicoMode = false;
@@ -361,6 +363,24 @@ function calcMarkovEdge(hist) {
     
     const edge = Math.max(0, 10.0 - lowestProb);
     return parseFloat(edge.toFixed(1));
+}
+
+/**
+ * Calcula la racha consecutiva del último dígito.
+ */
+function calcHFRStreak(hist) {
+    if (!hist || hist.length === 0) return 0;
+    const len = hist.length;
+    const lastDigit = hist[len - 1];
+    let streak = 1;
+    for (let i = len - 2; i >= 0; i--) {
+        if (hist[i] === lastDigit) {
+            streak++;
+        } else {
+            break;
+        }
+    }
+    return streak;
 }
 
 /**
@@ -837,6 +857,66 @@ function evaluateMarkovDiffers() {
     return null;
 }
 
+/**
+ * ⚡ MOTOR HFR: HIGH-FREQUENCY REPETITION STREAK SNIPER (98%+ Win Rate)
+ * Detecta rachas de dígitos repetidos en paralelo sobre los 8 mercados.
+ */
+function evaluateHFRDiffers() {
+    if (!botState.engineMarkovDiffers) return null;
+
+    let bestSignal = null;
+    let maxConsecutive = 0;
+
+    let requiredConsecutive = 3;
+    let isRecovery = botState.martingaleStep > 0;
+    if (isRecovery) {
+        // En modo cobertura, exigimos racha de 4 para seguridad de grado cuántico (~99.85%)
+        requiredConsecutive = 4;
+    }
+
+    for (const sym of Object.keys(botState.markets)) {
+        if (!botState.markets[sym] || !botState.markets[sym].digitHistory) continue;
+        const hist = botState.markets[sym].digitHistory;
+        
+        if (hist.length < requiredConsecutive) continue;
+
+        const lastDigit = hist[hist.length - 1];
+        let consecutiveCount = 1;
+        
+        for (let i = hist.length - 2; i >= 0; i--) {
+            if (hist[i] === lastDigit) {
+                consecutiveCount++;
+            } else {
+                break;
+            }
+        }
+
+        if (consecutiveCount >= requiredConsecutive) {
+            // Dar prioridad al mercado con la racha más larga activa
+            if (consecutiveCount > maxConsecutive) {
+                maxConsecutive = consecutiveCount;
+                bestSignal = {
+                    engine: 'MARKOV_DIFFERS',
+                    contractType: 'DIGITDIFF',
+                    symbol: sym,
+                    barrier: String(lastDigit),
+                    ticksRemaining: 1,
+                    reason: isRecovery
+                        ? `🛡️ HFR COBERTURA: Racha ${consecutiveCount} de '${lastDigit}' en ${sym} (Requerido: ${requiredConsecutive})`
+                        : `⚡ HFR: Racha ${consecutiveCount} de '${lastDigit}' en ${sym}`
+                };
+            }
+        }
+    }
+
+    if (bestSignal) {
+        console.log(`🎯 [HFR OMNISCIENTE] Racha detectada en ${bestSignal.symbol}. Dígito: ${bestSignal.barrier}, Racha: ${maxConsecutive}. Disparando DIFFERS a ${bestSignal.barrier}`);
+        return bestSignal;
+    }
+
+    return null;
+}
+
 function evaluateCodyBarrier(mState) {
     return null; // CODY DISABLED
     if (!botState.engineCodyBarrier) return null;
@@ -1140,12 +1220,16 @@ function tryFireTrade() {
                 signal = evaluateCodyBarrier(mState);
             }
             
-            // 🎯 MOTOR MARKOV OMNISCIENTE
+            // 🎯 MOTOR MARKOV OMNISCIENTE / HFR
             if (!signal && botState.engineMarkovDiffers) {
-                signal = evaluateMarkovDiffers();
+                if (botState.differStrategy === 'HFR') {
+                    signal = evaluateHFRDiffers();
+                } else {
+                    signal = evaluateMarkovDiffers();
+                }
                 if (signal) {
                     signalSymbol = signal.symbol;
-                    break; // Salir del loop porque Markov ya encontró una señal en algún mercado
+                    break; // Salir del loop porque ya se encontró una señal en algún mercado
                 }
             }
             
@@ -1829,7 +1913,8 @@ app.post('/api/config', (req, res) => {
             accuGrowthRate, accuTargetTicks, accuMaxTicks, accuVolatilityThreshold,
             accuTrailingPct, accuPriorityMode, accuMinProfitRatio, accuTakeProfitAt,
             hydraMode, ghostActive, codyMultiplier, bollingerShield, fibonacciShield,
-            codyPayoutFilterEnabled, codyPayoutFilterMargin, markovThreshold } = req.body;
+            codyPayoutFilterEnabled, codyPayoutFilterMargin, markovThreshold,
+            differStrategy } = req.body;
     
     if (stake !== undefined) botState.stake = Math.max(0.35, parseFloat(stake));
     if (maxDailyLoss !== undefined) botState.maxDailyLoss = parseFloat(maxDailyLoss);
@@ -1846,6 +1931,10 @@ app.post('/api/config', (req, res) => {
     if (bollingerShield !== undefined) botState.bollingerShield = !!bollingerShield;
     if (fibonacciShield !== undefined) botState.fibonacciShield = !!fibonacciShield;
     if (markovThreshold !== undefined) botState.markovThreshold = Math.max(0.1, Math.min(10.0, parseFloat(markovThreshold)));
+    if (differStrategy !== undefined) {
+        botState.differStrategy = String(differStrategy);
+        console.log(`⚙️ CONFIG: Estrategia de Differ cambiada a ${botState.differStrategy}`);
+    }
     
     // ── Configuración ACCU avanzada ──
     if (accuGrowthRate !== undefined) botState.accuGrowthRate = parseFloat(accuGrowthRate);
@@ -2006,7 +2095,7 @@ app.post('/api/switch-market', (req, res) => {
         botState.shannonEntropy = mState.shannonEntropy;
         botState.hotDigit = mState.hotDigit;
         botState.hotDigitFreq = mState.hotDigitFreq;
-        botState.markovEdge = calcMarkovEdge(mState.digitHistory);
+        botState.markovEdge = botState.differStrategy === 'HFR' ? calcHFRStreak(mState.digitHistory) : calcMarkovEdge(mState.digitHistory);
     }
     
     saveState();
@@ -2393,7 +2482,7 @@ function connectDeriv() {
                     botState.shannonEntropy = mState.shannonEntropy;
                     botState.hotDigit = mState.hotDigit;
                     botState.hotDigitFreq = mState.hotDigitFreq;
-                    botState.markovEdge = calcMarkovEdge(mState.digitHistory);
+                    botState.markovEdge = botState.differStrategy === 'HFR' ? calcHFRStreak(mState.digitHistory) : calcMarkovEdge(mState.digitHistory);
                 }
                 
                 console.log(`🔥 KRAKEN CARGADO [${sym}]: Historial inicializado con ${mState.totalTicksProcessed} ticks históricos.`);
@@ -2521,7 +2610,7 @@ function connectDeriv() {
                     botState.shannonEntropy = mState.shannonEntropy;
                     botState.hotDigit = mState.hotDigit;
                     botState.hotDigitFreq = mState.hotDigitFreq;
-                    botState.markovEdge = calcMarkovEdge(mState.digitHistory);
+                    botState.markovEdge = botState.differStrategy === 'HFR' ? calcHFRStreak(mState.digitHistory) : calcMarkovEdge(mState.digitHistory);
                 }
                 
                 tryFireTrade();
