@@ -1350,6 +1350,43 @@ body::before {
       </div>
     </div>
 
+    <!-- ACUMULADORES (MOTOR 5) -->
+    <div class="engine-card glass engine-accumulator" id="engineCardAccumulator">
+      <div class="engine-header">
+        <div class="engine-info-wrap">
+            <div class="engine-icon">📈</div>
+            <div class="engine-name">ACUMULADORES</div>
+            <div class="engine-subtitle">Volatility Compounder</div>
+        </div>
+        <label class="switch">
+          <input type="checkbox" id="toggleAccumulator">
+          <span class="slider round"></span>
+        </label>
+      </div>
+      <div class="engine-status">
+        <span class="status-dot disabled" id="dotAccumulator"></span>
+        <span class="engine-status-text disabled" id="statusAccumulator">En espera</span>
+      </div>
+      <div class="engine-stats">
+        <div class="es-box">
+          <span class="es-label">GANADAS</span>
+          <span class="es-value positive" id="accWins">0</span>
+        </div>
+        <div class="es-box">
+          <span class="es-label">PERDIDAS</span>
+          <span class="es-value negative" id="accLosses">0</span>
+        </div>
+        <div class="es-box">
+          <span class="es-label">PNL</span>
+          <span class="es-value neutral" id="accPnl">$0.00</span>
+        </div>
+        <div class="es-box">
+          <span class="es-label">WIN RATE</span>
+          <span class="es-value neutral" id="accWinRate">0.0%</span>
+        </div>
+      </div>
+    </div>
+
     <!-- CODY BARRIER (MOTOR 6) -->
     <div class="engine-card glass engine-codybarrier" id="engineCardCodyBarrier" style="display: none;">
       <div class="engine-header">
@@ -1489,6 +1526,33 @@ body::before {
       <div class="control-group">
         <label><span style="display:none;">Cody: Mult. Desv.</label>
         <input type="number" id="inputCodyMultiplier" style="display:none;" value="1.8" min="0.5" max="5.0" step="0.1" onchange="handleConfigChange()" onblur="handleConfigChange()">
+      </div>
+
+      <div class="control-group">
+        <label title="Multiplicador de crecimiento del acumulador (1%, 2% o 5%)">Accu Multiplicador</label>
+        <select id="selectAccuGrowthRate" onchange="handleConfigChange()">
+          <option value="0.01">📈 1% Growth</option>
+          <option value="0.02">📈 2% Growth</option>
+          <option value="0.05">📈 5% Growth</option>
+        </select>
+      </div>
+
+      <div class="control-group">
+        <label title="Modo de salida: Autónomo (optimización de ticks por Browniano) o Manual (ticks fijos)">Accu Ticks</label>
+        <select id="selectAccuTicksMode" onchange="handleAccuTicksModeChange()">
+          <option value="AUTO">🤖 Autónomo (Óptimo)</option>
+          <option value="MANUAL">👤 Manual (Fijo)</option>
+        </select>
+      </div>
+
+      <div class="control-group" id="groupAccuSafetyFactor">
+        <label title="Factor de seguridad/agresividad sobre el óptimo matemático (0.5=conservador, 1.0=óptimo, 1.5=agresivo)">Accu Agresividad</label>
+        <input type="number" id="inputAccuSafetyFactor" value="1.0" min="0.5" max="1.5" step="0.1" onchange="handleConfigChange()" onblur="handleConfigChange()">
+      </div>
+
+      <div class="control-group" id="groupAccuManualTicks" style="display:none;">
+        <label title="Número fijo de ticks para cerrar el acumulador en modo manual">Accu Ticks Fijo</label>
+        <input type="number" id="inputAccuTargetTicks" value="3" min="1" max="50" step="1" onchange="handleConfigChange()" onblur="handleConfigChange()">
       </div>
 
       <div class="control-separator"></div>
@@ -1897,6 +1961,12 @@ function updateUI(data) {
   // Engine cards active state
   updateEngineCard('engineCardCodyBarrier', 'statusCodyBarrier', data.engineCodyBarrier, data.isRunning, data.currentEngine === 'CODY_BARRIER');
   updateEngineCard('engineCardMarkov', 'statusMarkov', data.engineMarkovDiffers, data.isRunning, data.currentEngine === 'MARKOV_DIFFERS');
+  updateEngineCard('engineCardAccumulator', 'statusAccumulator', data.engineAccumulator, data.isRunning, data.currentEngine === 'ACCUMULATOR');
+
+  const toggleAccumulator = $('toggleAccumulator');
+  if (toggleAccumulator) {
+    toggleAccumulator.checked = !!data.engineAccumulator;
+  }
 
   const engineNameMarkov = $('engineNameMarkov');
   if (engineNameMarkov) {
@@ -1910,6 +1980,7 @@ function updateUI(data) {
   // Engine stats
   if (data.engineStats.CODY_BARRIER) updateEngineStats('cody', data.engineStats.CODY_BARRIER);
   if (data.engineStats.MARKOV_DIFFERS) updateEngineStats('markov', data.engineStats.MARKOV_DIFFERS);
+  if (data.engineStats.ACCUMULATOR) updateEngineStats('acc', data.engineStats.ACCUMULATOR);
 
   // Darwin mode badges toggling
   ['EVEN_ODD', 'OVER_UNDER', 'ACCUMULATOR', 'CODY_BARRIER'].forEach(eng => {
@@ -1988,6 +2059,20 @@ function updateUI(data) {
   if (document.activeElement !== $('inputTakeProfit')) $('inputTakeProfit').value = data.takeProfit;
   if (document.activeElement !== $('inputMarkovThreshold')) $('inputMarkovThreshold').value = data.markovThreshold !== undefined ? data.markovThreshold : 4.0;
   if (document.activeElement !== $('selectDifferStrategy')) $('selectDifferStrategy').value = data.differStrategy || 'MARKOV';
+  
+  if (document.activeElement !== $('selectAccuGrowthRate')) $('selectAccuGrowthRate').value = data.accuGrowthRate || 0.01;
+  if (document.activeElement !== $('selectAccuTicksMode')) {
+    $('selectAccuTicksMode').value = data.accuDynamicTicks ? 'AUTO' : 'MANUAL';
+    if (data.accuDynamicTicks) {
+      $('groupAccuSafetyFactor').style.display = 'flex';
+      $('groupAccuManualTicks').style.display = 'none';
+    } else {
+      $('groupAccuSafetyFactor').style.display = 'none';
+      $('groupAccuManualTicks').style.display = 'flex';
+    }
+  }
+  if (document.activeElement !== $('inputAccuSafetyFactor')) $('inputAccuSafetyFactor').value = data.accuSafetyFactor !== undefined ? data.accuSafetyFactor : 1.0;
+  if (document.activeElement !== $('inputAccuTargetTicks')) $('inputAccuTargetTicks').value = data.accuTargetTicks || 3;
 
   if (document.activeElement !== $('inputCodyMultiplier')) $('inputCodyMultiplier').value = data.codyMultiplier || 1.8;
 
@@ -2421,6 +2506,18 @@ async function switchMarketFocus(symbol) {
   }
 }
 
+function handleAccuTicksModeChange() {
+  const mode = $('selectAccuTicksMode').value;
+  if (mode === 'AUTO') {
+    $('groupAccuSafetyFactor').style.display = 'flex';
+    $('groupAccuManualTicks').style.display = 'none';
+  } else {
+    $('groupAccuSafetyFactor').style.display = 'none';
+    $('groupAccuManualTicks').style.display = 'flex';
+  }
+  handleConfigChange();
+}
+
 function handleConfigChange() {
   clearTimeout(configDebounce);
   configDebounce = setTimeout(async () => {
@@ -2431,11 +2528,21 @@ function handleConfigChange() {
     const codyPayoutFilterMargin = (parseFloat($('inputCodyPayoutFilterMargin').value) || 0) / 100;
     const markovThreshold = parseFloat($('inputMarkovThreshold').value) || 4.0;
     const differStrategy = $('selectDifferStrategy').value || 'MARKOV';
+    
+    const accuGrowthRate = parseFloat($('selectAccuGrowthRate').value) || 0.01;
+    const accuDynamicTicks = $('selectAccuTicksMode').value === 'AUTO';
+    const accuSafetyFactor = parseFloat($('inputAccuSafetyFactor').value) || 1.0;
+    const accuTargetTicks = parseInt($('inputAccuTargetTicks').value) || 3;
+    
     try {
       await fetch('/api/config', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ stake, maxDailyLoss, takeProfit, codyMultiplier, codyPayoutFilterMargin, markovThreshold, differStrategy })
+        body: JSON.stringify({ 
+          stake, maxDailyLoss, takeProfit, codyMultiplier, codyPayoutFilterMargin, 
+          markovThreshold, differStrategy,
+          accuGrowthRate, accuDynamicTicks, accuSafetyFactor, accuTargetTicks
+        })
       });
       showToast('Configuración actualizada', 'success');
     } catch (e) {
@@ -2451,6 +2558,9 @@ $('toggleCodyBarrier').addEventListener('change', function() {
 });
 $('toggleMarkov').addEventListener('change', function() {
   handleEngineToggle('MARKOV_DIFFERS', this.checked);
+});
+$('toggleAccumulator').addEventListener('change', function() {
+  handleEngineToggle('ACCUMULATOR', this.checked);
 });
 
 

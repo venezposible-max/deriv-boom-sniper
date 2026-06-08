@@ -105,7 +105,7 @@ let botState = {
     // ─── Interruptores de motores
     engineEvenOdd: false,
     engineOverUnder: false,
-    engineAccumulator: true,
+    engineAccumulator: false,
     engineCodyBarrier: false,
     engineMarkovDiffers: true,
     markovThreshold: 4.0,
@@ -116,20 +116,22 @@ let botState = {
     codyPayoutFilterMargin: 0.0,    // Margen por defecto de 0% (>= totalStake)
     
     // ─── HYDRA MODE: ACCU Puro (desactiva EVEN/ODD y OVER/UNDER) ───
-    hydraMode: true,              // 🐍 Cuando true: SOLO ACCU, cero otros motores
+    hydraMode: false,              // 🐍 Cuando true: SOLO ACCU, cero otros motores
     hydraSoloSymbols: ['R_10', '1HZ10V'], // Solo los 2 mercados más estables para ACCU
     
     // ─── Configuraciones Acumulador ───
     accuGrowthRate: 0.01,          // 🔴 1% = BARRERA MÁS ANCHA = menos knockouts
-    accuTargetTicks: 2,            // 🔴 Cierre rápido a los 2 ticks
-    accuMaxTicks: 3,               // 🔴 Cierre máximo a los 3 ticks
+    accuDynamicTicks: true,        // Decisión autónoma de ticks vía Browniano
+    accuSafetyFactor: 1.0,         // Factor de agresividad sobre k*
+    accuTargetTicks: 3,            // Ticks objetivo si no es dinámico (Manual)
+    accuMaxTicks: 4,               // Ticks máximo si no es dinámico (Manual)
     accuVolatilityThreshold: 0.018, // Coeficiente de variación
     accuTrailingPct: 0.85,         // Trailing: vender si profit cae al 85% del pico
     accuCurrentPeak: 0,            // Pico de profit actual del contrato ACCU en curso
     accuPriorityMode: true,        // Evaluar ACCU primero cuando mercado está calmado
     accuMinProfitRatio: 0.0,       // No salir sin mínimo 0% del stake (cierre inmediato)
     accuKnockoutCooldownMs: 30000, // 30 segundos de cooldown por knockout ACCU
-    accuTakeProfitAt: 0.02,        // Salida automática cuando profit >= 2% del stake
+    accuTakeProfitAt: 2.0,        // Salida automática cuando profit >= 2x stake (Take Profit)
     
     // ─── Variables del Escudo de Trade Fantasma (Ghost Shield) ───
     ghostActive: false,
@@ -249,22 +251,24 @@ if (fs.existsSync(STATE_FILE)) {
             if (botState.fibonacciShield === undefined) botState.fibonacciShield = false;
             if (botState.markovThreshold === undefined) botState.markovThreshold = 4.0;
             
-            botState.engineAccumulator = true;
-            botState.engineCodyBarrier = false;
-            botState.hydraMode = true;
-            botState.engineEvenOdd = false;
-            botState.engineOverUnder = false;
-            botState.hydraSoloSymbols = ['R_10', '1HZ10V'];
-            botState.accuGrowthRate = 0.01;
-            botState.accuTargetTicks = 2;
-            botState.accuMaxTicks = 3;
-            botState.accuVolatilityThreshold = 0.018;
-            botState.accuTrailingPct = 0.85;
-            botState.accuCurrentPeak = 0;
-            botState.accuPriorityMode = true;
-            botState.accuMinProfitRatio = 0.0;
-            botState.accuKnockoutCooldownMs = 30000;
-            botState.accuTakeProfitAt = 0.02;
+            if (botState.engineAccumulator === undefined) botState.engineAccumulator = false;
+            if (botState.engineCodyBarrier === undefined) botState.engineCodyBarrier = false;
+            if (botState.hydraMode === undefined) botState.hydraMode = false;
+            if (botState.engineEvenOdd === undefined) botState.engineEvenOdd = false;
+            if (botState.engineOverUnder === undefined) botState.engineOverUnder = false;
+            if (botState.hydraSoloSymbols === undefined) botState.hydraSoloSymbols = ['R_10', '1HZ10V'];
+            if (botState.accuGrowthRate === undefined) botState.accuGrowthRate = 0.01;
+            if (botState.accuDynamicTicks === undefined) botState.accuDynamicTicks = true;
+            if (botState.accuSafetyFactor === undefined) botState.accuSafetyFactor = 1.0;
+            if (botState.accuTargetTicks === undefined) botState.accuTargetTicks = 3;
+            if (botState.accuMaxTicks === undefined) botState.accuMaxTicks = 4;
+            if (botState.accuVolatilityThreshold === undefined) botState.accuVolatilityThreshold = 0.018;
+            if (botState.accuTrailingPct === undefined) botState.accuTrailingPct = 0.85;
+            if (botState.accuCurrentPeak === undefined) botState.accuCurrentPeak = 0;
+            if (botState.accuPriorityMode === undefined) botState.accuPriorityMode = true;
+            if (botState.accuMinProfitRatio === undefined) botState.accuMinProfitRatio = 0.0;
+            if (botState.accuKnockoutCooldownMs === undefined) botState.accuKnockoutCooldownMs = 30000;
+            if (botState.accuTakeProfitAt === undefined) botState.accuTakeProfitAt = 2.0;
             if (botState.codyMultiplier === undefined) botState.codyMultiplier = 1.8;
             if (botState.codyPayoutFilterEnabled === undefined) botState.codyPayoutFilterEnabled = true;
             if (botState.codyPayoutFilterMargin === undefined) botState.codyPayoutFilterMargin = 0.0;
@@ -1081,13 +1085,27 @@ function evaluateAccumulator(mState) {
     // Growth rate adaptivo según la volatilidad del símbolo
     const optimalGrowthRate = getAccuGrowthRateForSymbol(mState.symbol);
     
+    // Calcular ticks óptimos dinámicos si la opción está activa
+    let targetTicks = botState.accuTargetTicks || 3;
+    let maxTicks = botState.accuMaxTicks || 4;
+    
+    if (botState.accuDynamicTicks) {
+        const safetyFactor = botState.accuSafetyFactor !== undefined ? botState.accuSafetyFactor : 1.0;
+        const r = optimalGrowthRate; 
+        const rawTicks = 0.00015 / (vol * r); 
+        targetTicks = Math.max(2, Math.min(15, Math.round(rawTicks * safetyFactor)));
+        maxTicks = targetTicks + 1; // Un tick más como límite máximo absoluto
+    }
+    
     return {
         engine: 'ACCUMULATOR',
         contractType: 'ACCU',
         barrier: null,
         stakeMultiplier: 1.0,
         accuGrowthRateOverride: optimalGrowthRate, // Growth rate específico para este símbolo
-        reason: `ACCU ✅ Vol:${(vol * 100).toFixed(3)}%<${(maxVol*100).toFixed(1)}% | Growth:${(optimalGrowthRate*100).toFixed(0)}% | Objetivo:${botState.accuTargetTicks}-${botState.accuMaxTicks}t | MinProfit:${((botState.accuMinProfitRatio||0.4)*100).toFixed(0)}%`,
+        accuTargetTicksOverride: targetTicks,
+        accuMaxTicksOverride: maxTicks,
+        reason: `ACCU ✅ Vol:${(vol * 100).toFixed(3)}%<${(maxVol*100).toFixed(1)}% | Growth:${(optimalGrowthRate*100).toFixed(0)}% | Objetivo:${targetTicks}-${maxTicks}t | MinProfit:${((botState.accuMinProfitRatio||0.0)*100).toFixed(0)}%`,
         entropy: parseFloat(mState.shannonEntropy)
     };
 }
@@ -1233,8 +1251,14 @@ function tryFireTrade() {
                 }
             }
             
-                    // Los motores de dígito y Accumulator fueron eliminados a petición del usuario.
-                    // Ahora el bot opera exclusivamente como Cody Barrier Sniper.
+            // 🎯 MOTOR ACUMULADORES (Dinamismo de Volatilidad Browniana)
+            if (!signal && botState.engineAccumulator) {
+                signal = evaluateAccumulator(mState);
+                if (signal) {
+                    signalSymbol = sym;
+                    break; // Salir del loop porque ya se encontró una señal en algún mercado
+                }
+            }
             
             if (signal) {
                 signalSymbol = sym;
@@ -1405,11 +1429,18 @@ function tryFireTrade() {
     
     if (signal.contractType === 'ACCU') {
         botState.accuCurrentPeak = 0; // Resetear pico de profit al abrir nuevo ACCU
-        // Usar growth rate específico del símbolo si la señal lo provee
+        
+        // Registrar overrides dinámicos en botState para que el monitor de ticks los lea
+        botState.accuTargetTicksOverride = signal.accuTargetTicksOverride || null;
+        botState.accuMaxTicksOverride = signal.accuMaxTicksOverride || null;
+        
         const growthRate = signal.accuGrowthRateOverride || botState.accuGrowthRate || 0.02;
         buyRequest.parameters.growth_rate = growthRate;
         botState.accuCurrentGrowthRate = growthRate; // Guardar para cálculos de salida
-        console.log(`💰 ACCU Config: growth_rate=${(growthRate*100).toFixed(0)}% | MinTicks=${botState.accuTargetTicks} | MaxTicks=${botState.accuMaxTicks} | MinProfit=${((botState.accuMinProfitRatio||0.4)*100).toFixed(0)}% del stake`);
+        
+        const targetTicks = botState.accuTargetTicksOverride || botState.accuTargetTicks || 3;
+        const maxTicks = botState.accuMaxTicksOverride || botState.accuMaxTicks || 4;
+        console.log(`💰 ACCU Config: growth_rate=${(growthRate*100).toFixed(0)}% | MinTicks=${targetTicks} | MaxTicks=${maxTicks} | MinProfit=${((botState.accuMinProfitRatio||0.0)*100).toFixed(0)}% del stake`);
     } else if (signal.engine === 'CODY_BARRIER') {
         buyRequest.parameters.duration = 7;
         buyRequest.parameters.duration_unit = 't';
@@ -1912,6 +1943,7 @@ app.post('/api/config', (req, res) => {
             coberturaEnabled, differPrecision98, quirurgicoMode, accountMode, demoToken, realToken,
             accuGrowthRate, accuTargetTicks, accuMaxTicks, accuVolatilityThreshold,
             accuTrailingPct, accuPriorityMode, accuMinProfitRatio, accuTakeProfitAt,
+            accuDynamicTicks, accuSafetyFactor,
             hydraMode, ghostActive, codyMultiplier, bollingerShield, fibonacciShield,
             codyPayoutFilterEnabled, codyPayoutFilterMargin, markovThreshold,
             differStrategy } = req.body;
@@ -1938,6 +1970,8 @@ app.post('/api/config', (req, res) => {
     
     // ── Configuración ACCU avanzada ──
     if (accuGrowthRate !== undefined) botState.accuGrowthRate = parseFloat(accuGrowthRate);
+    if (accuDynamicTicks !== undefined) botState.accuDynamicTicks = !!accuDynamicTicks;
+    if (accuSafetyFactor !== undefined) botState.accuSafetyFactor = parseFloat(accuSafetyFactor);
     if (accuTargetTicks !== undefined) botState.accuTargetTicks = Math.max(1, parseInt(accuTargetTicks));
     if (accuMaxTicks !== undefined) botState.accuMaxTicks = Math.max(botState.accuTargetTicks || 30, parseInt(accuMaxTicks));
     if (accuVolatilityThreshold !== undefined) botState.accuVolatilityThreshold = Math.max(0.001, Math.min(0.5, parseFloat(accuVolatilityThreshold)));
@@ -2695,8 +2729,8 @@ function connectDeriv() {
                 const currentProfit = parseFloat(c.profit || 0);
                 const currentPeak = botState.accuCurrentPeak || 0;
                 const trailingPct = botState.accuTrailingPct || 0.80;
-                const minTicks = botState.accuTargetTicks || 20;
-                const maxTicks = botState.accuMaxTicks || 40;
+                const minTicks = botState.accuTargetTicksOverride || botState.accuTargetTicks || 3;
+                const maxTicks = botState.accuMaxTicksOverride || botState.accuMaxTicks || 4;
                 const stake = botState.currentStake || botState.stake || 1;
                 const minProfitRatio = botState.accuMinProfitRatio || 0.40;
                 const minProfitRequired = stake * minProfitRatio;
