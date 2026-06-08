@@ -125,7 +125,7 @@ let botState = {
     accuSafetyFactor: 1.0,         // Factor de agresividad sobre k*
     accuTargetTicks: 3,            // Ticks objetivo si no es dinámico (Manual)
     accuMaxTicks: 4,               // Ticks máximo si no es dinámico (Manual)
-    accuVolatilityThreshold: 0.018, // Coeficiente de variación
+    accuVolatilityThreshold: 0.0035, // Coeficiente de variación estricto (0.35%)
     accuTrailingPct: 0.85,         // Trailing: vender si profit cae al 85% del pico
     accuCurrentPeak: 0,            // Pico de profit actual del contrato ACCU en curso
     accuPriorityMode: true,        // Evaluar ACCU primero cuando mercado está calmado
@@ -262,7 +262,7 @@ if (fs.existsSync(STATE_FILE)) {
             if (botState.accuSafetyFactor === undefined) botState.accuSafetyFactor = 1.0;
             if (botState.accuTargetTicks === undefined) botState.accuTargetTicks = 3;
             if (botState.accuMaxTicks === undefined) botState.accuMaxTicks = 4;
-            if (botState.accuVolatilityThreshold === undefined) botState.accuVolatilityThreshold = 0.018;
+            if (botState.accuVolatilityThreshold === undefined) botState.accuVolatilityThreshold = 0.0035;
             if (botState.accuTrailingPct === undefined) botState.accuTrailingPct = 0.85;
             if (botState.accuCurrentPeak === undefined) botState.accuCurrentPeak = 0;
             if (botState.accuPriorityMode === undefined) botState.accuPriorityMode = true;
@@ -1054,30 +1054,45 @@ function evaluateAccumulator(mState) {
         return null;
     }
     
-    // ── Filtro 3: Volatilidad estricta (CV < 1.8%) ──
+    // ── Filtro 3: Volatilidad estricta (CV < Umbral) ──
     const vol = calcRecentVolatility(mState.recentPrices, 20);
-    const maxVol = botState.accuVolatilityThreshold || 0.018;
+    const maxVol = botState.accuVolatilityThreshold || 0.0035;
     if (vol > maxVol) {
         return null; // ❌ Mercado volátil — riesgo de knockout
     }
     
-    // ── Filtro 4: Spike Radar en últimos 5 ticks (más estricto) ──
-    const last5 = mState.recentPrices.slice(-5);
-    const hasSpike = last5.some((p, i) => {
-        if (i === 0) return false;
-        return Math.abs((p - last5[i - 1]) / last5[i - 1]) > 0.0002; // 0.02% spike
-    });
-    if (hasSpike) return null; // ❌ Spike reciente
+    // ── Filtro 4: RSI Neutral Zone Filter (40 - 60) ──
+    const rsi = calculateRSI(mState.recentPrices, 14);
+    if (rsi !== null && (rsi > 60 || rsi < 40)) {
+        if (Date.now() % 15000 < 500) {
+            console.log(`🛡️ [FILTRO RSI NEUTRAL] ${mState.symbol} bloqueado por RSI fuera de rango neutral: ${rsi.toFixed(1)}`);
+        }
+        return null; // ❌ Sobrecompra/Sobrevendida - riesgo de reversión/spike
+    }
     
-    // ── Filtro 5: Squeeze de Canal Horizontal (Evitar Tendencias Fuertes de Jared Laos) ──
+    // ── Filtro 5: Spike Radar en últimos 12 ticks (más estricto) ──
+    const last12 = mState.recentPrices.slice(-12);
+    const hasSpike = last12.some((p, i) => {
+        if (i === 0) return false;
+        const change = Math.abs((p - last12[i - 1]) / last12[i - 1]);
+        return change > 0.00015; // 0.015% spike en 1 tick
+    });
+    if (hasSpike) {
+        if (Date.now() % 15000 < 500) {
+            console.log(`🛡️ [FILTRO SPIKE RADAR] ${mState.symbol} bloqueado por spike reciente en últimos 12 ticks.`);
+        }
+        return null; // ❌ Spike reciente
+    }
+    
+    // ── Filtro 6: Squeeze de Canal Horizontal (Evitar Tendencias Fuertes de Jared Laos) ──
     const prices = mState.recentPrices;
     const sma15 = prices.slice(-15).reduce((a, b) => a + b, 0) / 15;
     const sma5 = prices.slice(-5).reduce((a, b) => a + b, 0) / 5;
     const slope = Math.abs(sma5 - sma15) / sma15;
-    const maxSlope = 0.0001; // Pendiente máxima permitida (0.01%)
+    const maxSlope = 0.00005; // Pendiente máxima permitida (0.005%)
     if (slope > maxSlope) {
         if (Date.now() % 15000 < 500) {
-            console.log(`🛡️ [FILTRO JARED LAOS] ${mState.symbol} bloqueado por tendencia activa: Slope ${(slope * 100).toFixed(4)}% > ${(maxSlope * 100).toFixed(2)}%`);
+            console.log(`🛡️ [FILTRO JARED LAOS] ${mState.symbol} bloqueado por tendencia activa: Slope ${(slope * 100).toFixed(4)}% > ${(maxSlope * 100).toFixed(4)}%`);
         }
         return null; // ❌ Pendiente activa detectada — Evitamos operar tendencias expansivas
     }
@@ -1092,7 +1107,7 @@ function evaluateAccumulator(mState) {
     if (botState.accuDynamicTicks) {
         const safetyFactor = botState.accuSafetyFactor !== undefined ? botState.accuSafetyFactor : 1.0;
         const r = optimalGrowthRate; 
-        const rawTicks = 0.00015 / (vol * r); 
+        const rawTicks = 0.00010 / (vol * r); 
         targetTicks = Math.max(2, Math.min(15, Math.round(rawTicks * safetyFactor)));
         maxTicks = targetTicks + 1; // Un tick más como límite máximo absoluto
     }
@@ -2749,13 +2764,30 @@ function connectDeriv() {
                 let sellReason = '';
                 let shouldSell = false;
                 
+                // 🔴 SALIDA DE EMERGENCIA POR SPIKE RECIENTE DURANTE LA OPERACIÓN
+                const tradeSymbol = c.underlying || c.symbol || SYMBOL;
+                const mState = botState.markets[tradeSymbol];
+                let recentSpikeDuringTrade = false;
+                let spikeValStr = '';
+                if (mState && mState.recentPrices && mState.recentPrices.length >= 2) {
+                    const lastPrices = mState.recentPrices.slice(-2);
+                    const lastChange = Math.abs((lastPrices[1] - lastPrices[0]) / lastPrices[0]);
+                    if (lastChange > 0.00015) { // 0.015%
+                        recentSpikeDuringTrade = true;
+                        spikeValStr = `${(lastChange * 100).toFixed(4)}%`;
+                    }
+                }
+                
                 // 🔴 TOMA DE GANANCIAS AUTOMÁTICA: profit >= accuTakeProfitAt x stake (ej: 2x stake = $2 en $1)
                 const takeProfitTarget = stake * (botState.accuTakeProfitAt || 2.0);
                 const takeProfitReached = currentProfit >= takeProfitTarget;
                 // Salida de emergencia absoluta: profit >= 3x stake
                 const absoluteExit = currentProfit >= stake * 3;
                 
-                if ((absoluteExit || takeProfitReached || maxTicksReached) && c.is_valid_to_sell) {
+                if (recentSpikeDuringTrade && c.is_valid_to_sell) {
+                    shouldSell = true;
+                    sellReason = `🚨 SPK EMERGENCY: Spike en vivo de ${spikeValStr}`;
+                } else if ((absoluteExit || takeProfitReached || maxTicksReached) && c.is_valid_to_sell) {
                     shouldSell = true;
                     if (absoluteExit && !takeProfitReached) {
                         sellReason = `🚨 SALIDA ABSOLUTA: $${currentProfit.toFixed(3)} >= 3x stake`;
