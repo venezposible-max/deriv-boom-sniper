@@ -1515,25 +1515,20 @@ function finalizeTrade(c) {
         botState.martingaleStep = 0;
     } else {
         if (botState.coberturaEnabled) {
-            if (botState.pnlSession < 0) {
-                botState.martingaleStep++;
-                let localMaxSteps = botState.maxMartingaleSteps;
-                let multiplierMsg = `(Progresión Lineal D'Alembert) (Multiplicador: x${1 + botState.martingaleStep})`;
-                
-                if (engine === 'MARKOV_DIFFERS') {
-                    localMaxSteps = 1; // Solo un intento de recuperación x11
-                    multiplierMsg = `(Recuperación Agresiva Única) (Multiplicador: x11)`;
-                }
-                
-                if (botState.martingaleStep > localMaxSteps) {
-                    console.log(`💀 COBERTURA CUÁNTICA: Límite máximo de pasos (${localMaxSteps}) superado con PnL sesión negativo ($${botState.pnlSession.toFixed(2)}). Asumiendo pérdida completa y reiniciando stake base.`);
-                    botState.martingaleStep = 0;
-                } else {
-                    console.log(`📈 COBERTURA CUÁNTICA: Pérdida real con PnL sesión negativo ($${botState.pnlSession.toFixed(2)}). Escalando Cobertura a Nivel ${botState.martingaleStep} ${multiplierMsg}`);
-                }
-            } else {
+            botState.martingaleStep++;
+            let localMaxSteps = botState.maxMartingaleSteps;
+            let multiplierMsg = `(Progresión Lineal D'Alembert) (Multiplicador: x${1 + botState.martingaleStep})`;
+            
+            if (engine === 'MARKOV_DIFFERS') {
+                localMaxSteps = 1; // Solo un intento de recuperación x11
+                multiplierMsg = `(Recuperación Agresiva Única) (Multiplicador: x11)`;
+            }
+            
+            if (botState.martingaleStep > localMaxSteps) {
+                console.log(`💀 COBERTURA CUÁNTICA: Límite máximo de pasos (${localMaxSteps}) superado. Asumiendo pérdida completa y reiniciando stake base para proteger la cuenta.`);
                 botState.martingaleStep = 0;
-                console.log(`🛡️ COBERTURA PREVENTIVA: Pérdida absorbida. PnL sesión sigue en positivo ($${botState.pnlSession.toFixed(2)}). Manteniendo/volviendo a Stake Base.`);
+            } else {
+                console.log(`📈 COBERTURA CUÁNTICA: Pérdida real. Escalando Cobertura a Nivel ${botState.martingaleStep} ${multiplierMsg}`);
             }
         }
     }
@@ -1666,17 +1661,11 @@ function finalizeDualTrade(tradeSymbol = SYMBOL) {
         botState.martingaleStep = 0;
     } else {
         if (botState.coberturaEnabled) {
-            if (botState.pnlSession < 0) {
-                botState.martingaleStep++;
-                if (botState.martingaleStep > botState.maxMartingaleSteps) {
-                    botState.martingaleStep = 0;
-                    console.log(`💀 COBERTURA CUÁNTICA DUAL: Límite máximo superado con PnL sesión negativo ($${botState.pnlSession.toFixed(2)}). Reiniciando a stake base.`);
-                } else {
-                    console.log(`📈 COBERTURA CUÁNTICA: Pérdida real en Dual con PnL sesión negativo ($${botState.pnlSession.toFixed(2)}). Escalando Cobertura a Nivel ${botState.martingaleStep} (Multiplicador: x${1 + botState.martingaleStep})`);
-                }
-            } else {
+            botState.martingaleStep++;
+            if (botState.martingaleStep > botState.maxMartingaleSteps) {
                 botState.martingaleStep = 0;
-                console.log(`🛡️ COBERTURA PREVENTIVA DUAL: Pérdida absorbida. PnL sesión sigue en positivo ($${botState.pnlSession.toFixed(2)}). Manteniendo/volviendo a Stake Base.`);
+            } else {
+                console.log(`📈 COBERTURA CUÁNTICA: Pérdida real en Dual. Escalando Cobertura (Progresión Lineal D'Alembert) a Nivel ${botState.martingaleStep} (Multiplicador: x${1 + botState.martingaleStep})`);
             }
         }
     }
