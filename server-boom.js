@@ -1753,7 +1753,7 @@ function finalizeTrade(c) {
         botState.engineStats[statsEngine].pnl += profit;
         
         // DARWIN MODE: Auto-desactivar motores inviables estadísticamente
-        const stats = botState.engineStats[engine];
+        const stats = botState.engineStats[statsEngine];
         const totalTrades = stats.wins + stats.losses;
         if (totalTrades >= 10 && !stats.autoDisabled) {
             const wr = (stats.wins / totalTrades) * 100;
