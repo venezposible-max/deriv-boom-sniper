@@ -1887,18 +1887,7 @@ function updateUI(data) {
   }
   const levelDisplay = $('martingaleLevelDisplay');
   if (levelDisplay) {
-    if (data.matchRecovery && data.matchRecovery.active) {
-      if (data.matchRecovery.realStep === 0) {
-        levelDisplay.textContent = 'Fantasma: ' + data.matchRecovery.virtualLosses + '/8';
-        levelDisplay.style.color = '#a78bfa'; // Purple
-      } else {
-        levelDisplay.textContent = 'Real: ' + data.matchRecovery.realStep + '/15';
-        levelDisplay.style.color = 'var(--accent-red)'; // Red
-      }
-    } else {
-      levelDisplay.textContent = 'Paso: ' + (data.martingaleStep || 0);
-      levelDisplay.style.color = '';
-    }
+    levelDisplay.textContent = 'Paso: ' + (data.martingaleStep || 0);
   }
 
   // Ghost Shield sync

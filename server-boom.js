@@ -166,14 +166,6 @@ let botState = {
     // ─── Martingala Segura (Recuperación x2.1) ───
     martingaleStep: 0,         // Nivel actual de martingala (0 = stake base)
     maxMartingaleSteps: 4, // Reducido a 4 porque el Ghost Trading evita el primer nivel de pérdida     // Límite máximo para evitar quemar cuenta
-    matchRecovery: {
-        active: false,
-        symbol: null,
-        targetDigit: null,
-        virtualLosses: 0,
-        realStep: 0,
-        accumulatedLoss: 0.0
-    },
     
     // ─── Enfriamiento inteligente y re-evaluación post-pérdida ───
     lossPauseUntil: null,
@@ -307,16 +299,6 @@ if (fs.existsSync(STATE_FILE)) {
             if (botState.lossPauseUntil === undefined) botState.lossPauseUntil = null;
             if (botState.lossPauseTicksProcessed === undefined) botState.lossPauseTicksProcessed = 0;
             if (botState.lastLossBarrier === undefined) botState.lastLossBarrier = null;
-            if (botState.matchRecovery === undefined) {
-                botState.matchRecovery = {
-                    active: false,
-                    symbol: null,
-                    targetDigit: null,
-                    virtualLosses: 0,
-                    realStep: 0,
-                    accumulatedLoss: 0.0
-                };
-            }
             
             // Forzar estados de arranque seguros
             botState.isRunning = false;
@@ -880,40 +862,6 @@ function evaluateMarkovDiffers() {
 }
 
 /**
- * Obtiene el dígito con mayor probabilidad de transición según la matriz de Markov
- */
-function getMarkovHottestDigit(mState) {
-    const hist = mState.digitHistory;
-    if (hist.length < 2000) return null;
-
-    let matrix = Array(10).fill(0).map(() => Array(10).fill(0));
-    let counts = Array(10).fill(0);
-
-    for (let i = 1; i < hist.length; i++) {
-        let prev = hist[i - 1];
-        let curr = hist[i];
-        matrix[prev][curr]++;
-        counts[prev]++;
-    }
-
-    const currentDigit = hist[hist.length - 1];
-    let bestTarget = -1;
-    let highestProb = 0;
-
-    for (let target = 0; target <= 9; target++) {
-        if (counts[currentDigit] > 0) {
-            let prob = (matrix[currentDigit][target] / counts[currentDigit]) * 100;
-            if (prob > highestProb) {
-                highestProb = prob;
-                bestTarget = target;
-            }
-        }
-    }
-
-    return bestTarget !== -1 ? { digit: bestTarget, prob: highestProb } : null;
-}
-
-/**
  * ⚡ MOTOR HFR: HIGH-FREQUENCY REPETITION STREAK SNIPER (98%+ Win Rate)
  * Detecta rachas de dígitos repetidos en paralelo sobre los 8 mercados.
  */
@@ -1185,7 +1133,7 @@ function evaluateAccumulator(mState) {
 //  ORQUESTADOR & FINALIZADOR
 // ════════════════════════════════════════════════════════════════
 
-function tryFireTrade(tickSymbol) {
+function tryFireTrade() {
     if (!botState.isRunning) return;
     
     const now = Date.now();
@@ -1219,81 +1167,6 @@ function tryFireTrade(tickSymbol) {
     }
     
     if (botState.isBuying || botState.activeContractId || (botState.activeContractIds && botState.activeContractIds.length > 0)) return;
-    
-    // ─── COBERTURA "EL INFIERNO Y DE REGRESO" (HELL & BACK MATCH Recovery - Variante 2) ───
-    if (botState.matchRecovery && botState.matchRecovery.active) {
-        if (tickSymbol !== botState.matchRecovery.symbol) return;
-        
-        const sym = botState.matchRecovery.symbol;
-        const mState = botState.markets[sym];
-        if (!mState || mState.digitHistory.length < 50) return;
-        
-        if (mState.lockedUntil && now < mState.lockedUntil) return;
-        
-        const hot = getMarkovHottestDigit(mState);
-        if (!hot) return;
-        
-        // Si estamos en Modo Fantasma (realStep === 0)
-        if (botState.matchRecovery.realStep === 0) {
-            if (botState.matchRecovery.targetDigit !== null) {
-                const won = (mState.lastDigit === botState.matchRecovery.targetDigit);
-                if (won) {
-                    botState.matchRecovery.virtualLosses = 0;
-                    console.log(`👻 GHOST RECOVERY [${sym}]: ¡Acierto virtual! El dígito fue ${mState.lastDigit} (esperado ${botState.matchRecovery.targetDigit}). Reseteando pérdidas virtuales a 0.`);
-                } else {
-                    botState.matchRecovery.virtualLosses++;
-                    console.log(`👻 GHOST RECOVERY [${sym}]: Pérdida virtual número ${botState.matchRecovery.virtualLosses}/8 (dígito fue ${mState.lastDigit}, esperado ${botState.matchRecovery.targetDigit}).`);
-                }
-            }
-            
-            botState.matchRecovery.targetDigit = hot.digit;
-            
-            if (botState.matchRecovery.virtualLosses >= 8) {
-                botState.matchRecovery.realStep = 1;
-                console.log(`🔥 GHOST SHIELD: 8 pérdidas virtuales completadas en MATCH. Activando modo REAL en Paso 1.`);
-            } else {
-                saveState();
-                return;
-            }
-        }
-        
-        // Si estamos en Modo Real (realStep >= 1)
-        if (botState.matchRecovery.realStep >= 1) {
-            botState.matchRecovery.targetDigit = hot.digit;
-            
-            const targetProfit = Math.max(0.10, botState.matchRecovery.accumulatedLoss * 0.10);
-            const calculated = (botState.matchRecovery.accumulatedLoss + targetProfit) / 9;
-            const stake = Math.max(0.35, Math.ceil(calculated * 20) / 20);
-            
-            const buyRequest = {
-                buy: 1,
-                price: stake,
-                parameters: {
-                    amount: stake,
-                    basis: 'stake',
-                    contract_type: 'DIGITMATCH',
-                    currency: botState.currency || 'USD',
-                    symbol: sym,
-                    duration: 1,
-                    duration_unit: 't',
-                    barrier: String(botState.matchRecovery.targetDigit)
-                }
-            };
-            
-            botState.isBuying = true;
-            botState.lastTradeTime = now;
-            botState.currentEngine = 'HELL_AND_BACK';
-            botState.currentContractType = 'DIGITMATCH';
-            botState.currentBarrier = String(botState.matchRecovery.targetDigit);
-            botState.currentStake = stake;
-            
-            console.log(`🔥 DISPARO COBERTURA REAL [${sym} - HELL & BACK] | DIGITMATCH B:${botState.matchRecovery.targetDigit} | Stake: $${stake.toFixed(2)} | Paso Real ${botState.matchRecovery.realStep} | Prob Markov: ${hot.prob.toFixed(1)}%`);
-            ws.send(JSON.stringify(buyRequest));
-            saveState();
-            return;
-        }
-        return;
-    }
     
     // Control de límite de pérdidas diarias estricto basado en el PnL de la sesión
     if (botState.pnlSession <= -botState.maxDailyLoss) {
@@ -1682,75 +1555,35 @@ function finalizeTrade(c) {
     
     // ─── ACTUALIZACIÓN DE ESTADO DE COBERTURA CUÁNTICA ───
     if (isWin) {
-        if (engine === 'HELL_AND_BACK') {
-            console.log(`🛡️ COBERTURA EXCELSA: ¡Recuperación exitosa en el Paso Real ${botState.matchRecovery ? botState.matchRecovery.realStep : 0}! Volviendo a stake base.`);
-            botState.matchRecovery = {
-                active: false,
-                symbol: null,
-                targetDigit: null,
-                virtualLosses: 0,
-                realStep: 0,
-                accumulatedLoss: 0.0
-            };
-            botState.martingaleStep = 0;
-        } else {
-            if (botState.martingaleStep > 0) {
-                console.log(`🛡️ COBERTURA CUÁNTICA: ¡Recuperación exitosa! Cobertura completada en nivel ${botState.martingaleStep}. Volviendo a stake base.`);
-            }
-            botState.martingaleStep = 0;
+        if (botState.martingaleStep > 0) {
+            console.log(`🛡️ COBERTURA CUÁNTICA: ¡Recuperación exitosa! Cobertura completada en nivel ${botState.martingaleStep}. Volviendo a stake base.`);
         }
+        botState.martingaleStep = 0;
     } else {
         if (botState.coberturaEnabled) {
-            if (engine === 'HELL_AND_BACK') {
-                botState.matchRecovery.accumulatedLoss += Math.abs(profit);
-                botState.matchRecovery.realStep++;
-                if (botState.matchRecovery.realStep > 15) {
-                    console.log(`💀 COBERTURA CATÁSTROFE: Se fallaron los 15 pasos reales de recuperación. Asumiendo pérdida completa y reiniciando stake base.`);
-                    botState.matchRecovery = {
-                        active: false,
-                        symbol: null,
-                        targetDigit: null,
-                        virtualLosses: 0,
-                        realStep: 0,
-                        accumulatedLoss: 0.0
-                    };
-                    botState.martingaleStep = 0;
-                } else {
-                    console.log(`📈 COBERTURA HELL & BACK: Pérdida real en Paso ${botState.matchRecovery.realStep - 1}. Escalando al Paso Real ${botState.matchRecovery.realStep}. Pérdida acumulada: $${botState.matchRecovery.accumulatedLoss.toFixed(2)}.`);
-                }
-            } else if (engine === 'MARKOV_DIFFERS') {
-                // Iniciar la cobertura "El Infierno y de Regreso" (HELL & BACK MATCH Recovery - Variante 2)
-                botState.matchRecovery = {
-                    active: true,
-                    symbol: tradeSymbol,
-                    targetDigit: null,
-                    virtualLosses: 0,
-                    realStep: 0,
-                    accumulatedLoss: Math.abs(profit)
-                };
-                botState.martingaleStep = 1;
-                console.log(`🛡️ INICIANDO COBERTURA "EL INFIERNO Y DE REGRESO" (HELL & BACK MATCH Recovery - Variante 2) en ${tradeSymbol}. Pérdida inicial: $${Math.abs(profit).toFixed(2)}. Entrando en Modo Fantasma para esperar 8 pérdidas consecutivas.`);
+            botState.martingaleStep++;
+            let localMaxSteps = botState.maxMartingaleSteps;
+            let multiplierMsg = `(Progresión Lineal D'Alembert) (Multiplicador: x${1 + botState.martingaleStep})`;
+            
+            if (engine === 'MARKOV_DIFFERS') {
+                localMaxSteps = 1; // Solo un intento de recuperación x11
+                multiplierMsg = `(Recuperación Agresiva Única) (Multiplicador: x11)`;
+            }
+            
+            if (botState.martingaleStep > localMaxSteps) {
+                console.log(`💀 COBERTURA CUÁNTICA: Límite máximo de pasos (${localMaxSteps}) superado. Asumiendo pérdida completa y reiniciando stake base para proteger la cuenta.`);
+                botState.martingaleStep = 0;
             } else {
-                botState.martingaleStep++;
-                let localMaxSteps = botState.maxMartingaleSteps;
-                let multiplierMsg = `(Progresión Lineal D'Alembert) (Multiplicador: x${1 + botState.martingaleStep})`;
-                
-                if (botState.martingaleStep > localMaxSteps) {
-                    console.log(`💀 COBERTURA CUÁNTICA: Límite máximo de pasos (${localMaxSteps}) superado. Asumiendo pérdida completa y reiniciando stake base para proteger la cuenta.`);
-                    botState.martingaleStep = 0;
-                } else {
-                    console.log(`📈 COBERTURA CUÁNTICA: Pérdida real. Escalando Cobertura a Nivel ${botState.martingaleStep} ${multiplierMsg}`);
-                }
+                console.log(`📈 COBERTURA CUÁNTICA: Pérdida real. Escalando Cobertura a Nivel ${botState.martingaleStep} ${multiplierMsg}`);
             }
         }
     }
     
     // Actualizar estadísticas por motor
-    const statsEngine = engine === 'HELL_AND_BACK' ? 'MARKOV_DIFFERS' : engine;
-    if (botState.engineStats[statsEngine]) {
-        if (isWin) botState.engineStats[statsEngine].wins++;
-        else botState.engineStats[statsEngine].losses++;
-        botState.engineStats[statsEngine].pnl += profit;
+    if (botState.engineStats[engine]) {
+        if (isWin) botState.engineStats[engine].wins++;
+        else botState.engineStats[engine].losses++;
+        botState.engineStats[engine].pnl += profit;
         
         // DARWIN MODE: Auto-desactivar motores inviables estadísticamente
         const stats = botState.engineStats[engine];
@@ -2829,7 +2662,7 @@ function connectDeriv() {
                     botState.markovEdge = botState.differStrategy === 'HFR' ? calcHFRStreak(mState.digitHistory) : calcMarkovEdge(mState.digitHistory);
                 }
                 
-                tryFireTrade(sym);
+                tryFireTrade();
             }
         }
         
