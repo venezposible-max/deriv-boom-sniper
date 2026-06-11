@@ -835,7 +835,14 @@ function evaluateMarkovDiffers() {
         let activeThreshold = botState.markovThreshold || 4.0;
         let isRecovery = botState.martingaleStep > 0;
         if (isRecovery) {
-            // 🛡️ Martingala Markov Filtrada Dinámica (Cobertura más estricta con piso de 3.8%)
+            // 🛡️ Filtro de Entropía Estricto en Cobertura: Evitar mercados muy caóticos para recuperar capital
+            if (entropyVal >= 3.22) {
+                if (Date.now() % 30000 < 1500) {
+                    console.log(`🛡️ [KRAKEN SHIELD] ${sym} ignorado para cobertura por alta entropía (${entropyVal.toFixed(3)} >= 3.22)`);
+                }
+                continue; // Saltar este mercado porque está muy ruidoso/caótico
+            }
+            // Martingala Markov Filtrada Dinámica (Cobertura más estricta con piso de 3.8%)
             activeThreshold = Math.max(3.8, activeThreshold * 0.8);
         }
 
@@ -893,6 +900,12 @@ function evaluateHFRDiffers() {
 
     for (const sym of Object.keys(botState.markets)) {
         if (!botState.markets[sym] || !botState.markets[sym].digitHistory) continue;
+        
+        if (isRecovery) {
+            const entropyVal = parseFloat(botState.markets[sym].shannonEntropy || 3.322);
+            if (entropyVal >= 3.22) continue; // Evitar mercados caóticos para cobertura
+        }
+        
         const hist = botState.markets[sym].digitHistory;
         
         if (hist.length < requiredConsecutive) continue;
