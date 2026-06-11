@@ -793,7 +793,7 @@ function tryFireTrade() {
             amount: finalStake,
             basis: 'stake',
             contract_type: signal.contractType,
-            currency: 'USD',
+            currency: botState.currency || 'USD',
             symbol: SYMBOL,
             duration: 1,
             duration_unit: 't'
@@ -1295,8 +1295,9 @@ function connectDeriv() {
         }
         
         if (msg.msg_type === 'authorize' && msg.authorize) {
-            console.log(`✅ Autenticación exitosa en KRAKEN: ${msg.authorize.email}`);
+            console.log(`✅ Autenticación exitosa en KRAKEN: ${msg.authorize.email} [Moneda: ${msg.authorize.currency || 'USD'}]`);
             botState.isConnectedToDeriv = true;
+            botState.currency = msg.authorize.currency || 'USD';
             
             ws.send(JSON.stringify({ forget_all: 'ticks' }));
             ws.send(JSON.stringify({ forget_all: 'proposal_open_contract' }));
