@@ -25,6 +25,80 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 // ════════════════════════════════════════════════════════════════
+//  GLOBAL LOG RATE LIMITER & DEDUPLICATOR (Anti-Spam Shield)
+// ════════════════════════════════════════════════════════════════
+const originalLog = console.log;
+const originalError = console.error;
+const originalWarn = console.warn;
+
+const logCounts = new Map();
+let globalLogHistory = [];
+const MAX_GLOBAL_LOGS_PER_SECOND = 25;
+const DEDUPLICATION_WINDOW_MS = 3000;
+
+function formatLogKey(args) {
+    return args.map(arg => typeof arg === 'object' ? JSON.stringify(arg) : String(arg)).join(' ');
+}
+
+function shouldLog(args) {
+    const now = Date.now();
+    
+    // Limpiar historial global de más de 1 segundo
+    globalLogHistory = globalLogHistory.filter(t => now - t < 1000);
+    if (globalLogHistory.length >= MAX_GLOBAL_LOGS_PER_SECOND) {
+        if (globalLogHistory.length === MAX_GLOBAL_LOGS_PER_SECOND) {
+            globalLogHistory.push(now);
+            originalWarn.call(console, `⚠️ [LOG LIMITER] Límite de logs alcanzado (> ${MAX_GLOBAL_LOGS_PER_SECOND} logs/seg). Silenciando logs por este segundo para evitar rebasar límites de Railway.`);
+        }
+        return false;
+    }
+    
+    // Control de duplicidad de logs
+    const key = formatLogKey(args);
+    const lastSeen = logCounts.get(key);
+    if (lastSeen && (now - lastSeen.time < DEDUPLICATION_WINDOW_MS)) {
+        lastSeen.count++;
+        if (lastSeen.count === 5) {
+            originalWarn.call(console, `⚠️ [LOG LIMITER] Silenciando mensajes duplicados adicionales (visto ${lastSeen.count} veces en los últimos ${DEDUPLICATION_WINDOW_MS}ms): "${key.substring(0, 100)}..."`);
+        }
+        return false;
+    }
+    
+    logCounts.set(key, { time: now, count: 1 });
+    globalLogHistory.push(now);
+    
+    // Prevenir fugas de memoria
+    if (logCounts.size > 200) {
+        for (const [k, v] of logCounts.entries()) {
+            if (now - v.time > DEDUPLICATION_WINDOW_MS) {
+                logCounts.delete(k);
+            }
+        }
+    }
+    
+    return true;
+}
+
+console.log = function(...args) {
+    if (shouldLog(args)) {
+        originalLog.apply(console, args);
+    }
+};
+
+console.error = function(...args) {
+    if (shouldLog(args)) {
+        originalError.apply(console, args);
+    }
+};
+
+console.warn = function(...args) {
+    if (shouldLog(args)) {
+        originalWarn.apply(console, args);
+    }
+};
+
+
+// ════════════════════════════════════════════════════════════════
 //  CONFIGURACIÓN CENTRAL
 // ════════════════════════════════════════════════════════════════
 const APP_ID = process.env.DERIV_APP_ID || '36544';
