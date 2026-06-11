@@ -176,6 +176,7 @@ let botState = {
     demoToken: '',             // Token virtual configurado
     realToken: '',             // Token real de USDT
     currency: 'USD',            // Divisa actual ('USD' | 'USDT' | etc.)
+    lastMeasuredLatency: null,  // Latencia medida de red (RTT)
     
     // Alias para compatibilidad universal
     derivTokenDemo: process.env.DERIV_TOKEN || 'PMIt2RhEjEDbcLD',
@@ -802,15 +803,27 @@ function evaluateMarkovDiffers() {
         if (!botState.markets[sym] || !botState.markets[sym].digitHistory) continue;
         const hist = botState.markets[sym].digitHistory;
         
-        // Wait until we have 2000 ticks for this specific market
+        // Wait until we have 2000 ticks for this specific market to ensure full history
         if (hist.length < 2000) continue;
+
+        // Determinar ventana de entrenamiento adaptativa según la Entropía de Shannon (Medida de Caos)
+        const entropyVal = parseFloat(botState.markets[sym].shannonEntropy || 3.322);
+        let adaptiveWindow = 2000;
+        if (entropyVal < 3.10) {
+            adaptiveWindow = 500; // Alta estructura: ventana corta para capturar la anomalía transitoria
+        } else if (entropyVal < 3.25) {
+            adaptiveWindow = 1000; // Estructura media
+        }
+
+        const sliceStart = Math.max(0, hist.length - adaptiveWindow);
+        const trainingHist = hist.slice(sliceStart);
 
         let matrix = Array(10).fill(0).map(() => Array(10).fill(0));
         let counts = Array(10).fill(0);
 
-        for (let i = 1; i < hist.length; i++) {
-            let prev = hist[i - 1];
-            let curr = hist[i];
+        for (let i = 1; i < trainingHist.length; i++) {
+            let prev = trainingHist[i - 1];
+            let curr = trainingHist[i];
             matrix[prev][curr]++;
             counts[prev]++;
         }
@@ -1166,7 +1179,16 @@ function tryFireTrade() {
         botState.pendingPayoutCheck = null;
     }
     
-    if (botState.isBuying || botState.activeContractId || (botState.activeContractIds && botState.activeContractIds.length > 0)) return;
+    // Filtro de Latencia Crítica (RTT > 250ms): Pausar operaciones de inmediato
+    if (botState.lastMeasuredLatency && botState.lastMeasuredLatency > 250) {
+        if (now % 30000 < 1500) {
+            console.log(`⏳ FILTRO LATENCIA: Operaciones en pausa por alta latencia de red (${botState.lastMeasuredLatency}ms > 250ms).`);
+        }
+        return;
+    }
+
+    // Prevención de operaciones simultáneas correlacionadas (Anti-Correlación)
+    if (botState.isBuying || botState.activeContractId || (botState.activeContractIds && botState.activeContractIds.length > 0) || botState.pendingPayoutCheck) return;
     
     // Control de límite de pérdidas diarias estricto basado en el PnL de la sesión
     if (botState.pnlSession <= -botState.maxDailyLoss) {
@@ -2235,13 +2257,14 @@ function connectDeriv() {
             }
         }
         
-        // CANAL DE DATOS ULTRA-CALIENTE: Enviar Pings de calentamiento cada 30s (óptimo para mantener caliente la conexión sin saturar el límite de tasa de Deriv)
+        // CANAL DE DATOS ULTRA-CALIENTE: Enviar Pings de calentamiento cada 10s y medir latencia de red (RTT)
         if (heartbeatInterval) clearInterval(heartbeatInterval);
         heartbeatInterval = setInterval(() => {
             if (ws && ws.readyState === WebSocket.OPEN) {
-                ws.send(JSON.stringify({ ping: 1 }));
+                const pingStart = Date.now();
+                ws.send(JSON.stringify({ ping: 1, req_id: pingStart }));
             }
-        }, 30000);
+        }, 10000);
         
         setTimeout(() => {
             if (ws && ws.readyState === WebSocket.OPEN) {
@@ -2259,7 +2282,14 @@ function connectDeriv() {
         let msg;
         try { msg = JSON.parse(raw); } catch (e) { return; }
         
-        if (msg.ping || msg.msg_type === 'ping') {
+        if (msg.msg_type === 'ping') {
+            if (msg.req_id) {
+                const latency = Date.now() - msg.req_id;
+                botState.lastMeasuredLatency = latency;
+            }
+            return;
+        }
+        if (msg.ping) {
             ws.send(JSON.stringify({ ping: 1 }));
             return;
         }
