@@ -2020,8 +2020,14 @@ app.post('/api/config', (req, res) => {
         botState.codyPayoutFilterMargin = Math.max(0.0, Math.min(0.5, parseFloat(codyPayoutFilterMargin)));
     }
     
-    if (demoToken !== undefined) botState.demoToken = demoToken;
-    if (realToken !== undefined) botState.realToken = realToken;
+    if (demoToken !== undefined) {
+        botState.demoToken = demoToken;
+        botState.derivTokenDemo = demoToken || process.env.DERIV_TOKEN || 'PMIt2RhEjEDbcLD';
+    }
+    if (realToken !== undefined) {
+        botState.realToken = realToken;
+        botState.derivTokenReal = realToken || process.env.DERIV_TOKEN_REAL || '';
+    }
     
     let reconnectNeeded = false;
     if (accountMode !== undefined && accountMode !== botState.accountMode) {
@@ -2032,13 +2038,23 @@ app.post('/api/config', (req, res) => {
     saveState();
     
     if (reconnectNeeded) {
-        console.log(`🔄 CAMBIO DE MODO DE CUENTA DETECTADO (${accountMode.toUpperCase()}). Reconectando WebSocket...`);
+        console.log(`🔄 CAMBIO DE MODO DE CUENTA DETECTADO (${accountMode.toUpperCase()}). Reconectando WebSocket de forma segura...`);
         botState.isConnectedToDeriv = false;
-        if (ws) { try { ws.close(); } catch (e) {} }
+        botState.isBuying = false;
+        if (ws) {
+            ws.removeAllListeners();
+            try { ws.terminate(); } catch (e) {}
+            ws = null;
+        }
+        if (reconnectTimeout) {
+            clearTimeout(reconnectTimeout);
+            reconnectTimeout = null;
+        }
+        setTimeout(connectDeriv, 1000);
     }
     
-    console.log(`⚙️ CONFIGURACIóN KRAKEN MODIFICADA.`);
-    return res.json({ success: true, message: 'Parámetros actualizados con éxito.' });
+    console.log(`⚙️ CONFIGURACIÓN KRAKEN MODIFICADA.`);
+    return res.json({ success: true, reconnectTriggered: reconnectNeeded, message: 'Parámetros actualizados con éxito.' });
 });
 
 // 🐍 HYDRA MODE — Activar/desactivar modo ACCU puro con un click
@@ -2256,6 +2272,14 @@ function connectDeriv() {
             ws.send(JSON.stringify({ forget_all: 'ticks' }));
             ws.send(JSON.stringify({ forget_all: 'proposal_open_contract' }));
             
+            // Suscripción al balance (se activa 1 segundo después de autenticar)
+            setTimeout(() => {
+                if (ws && ws.readyState === WebSocket.OPEN) {
+                    ws.send(JSON.stringify({ balance: 1, subscribe: 1 }));
+                    console.log(`💰 Suscripción balance activada.`);
+                }
+            }, 1000);
+            
             // Si hay un contrato activo en memoria, re-suscribirse tras limpiar
             if (botState.activeContractId) {
                 console.log(`🔄 [RECONEXIÓN] Re-suscribiendo al contrato activo: ID ${botState.activeContractId}`);
@@ -2308,14 +2332,6 @@ function connectDeriv() {
                     });
                 }
             }, 15000); // Iniciado tras terminar la carga de historiales (Aumentado para evitar colisión con historiales)
-            /*
-            setTimeout(() => {
-                if (ws && ws.readyState === WebSocket.OPEN) {
-                    ws.send(JSON.stringify({ balance: 1 }));
-                    console.log(`💰 Suscripción balance activada.`);
-                }
-            }, 18000);
-            */
         }
         
         if (msg.error) {
