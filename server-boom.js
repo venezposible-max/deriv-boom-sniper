@@ -808,6 +808,13 @@ function evaluateMarkovDiffers() {
 
         // Determinar ventana de entrenamiento adaptativa según la Entropía de Shannon (Medida de Caos)
         const entropyVal = parseFloat(botState.markets[sym].shannonEntropy || 3.322);
+        let isRecovery = botState.martingaleStep > 0;
+
+        // 🎁 Birthday Shield: Filtro de Entropía Absoluto para operaciones base (Límite 3.25)
+        if (!isRecovery && entropyVal >= 3.25) {
+            continue; // Saltar mercados muy caóticos para operaciones base
+        }
+
         let adaptiveWindow = 2000;
         if (entropyVal < 3.10) {
             adaptiveWindow = 500; // Alta estructura: ventana corta para capturar la anomalía transitoria
@@ -829,11 +836,16 @@ function evaluateMarkovDiffers() {
         }
 
         const currentDigit = hist[hist.length - 1];
+
+        // 🎁 Birthday Shield: Muestra Mínima Significativa (Mínimo 20 ocurrencias en la ventana activa)
+        if (counts[currentDigit] < 20) {
+            continue; // Evitar disparar con estadísticas inestables
+        }
+
         let bestTarget = -1;
         let lowestProb = 100;
 
         let activeThreshold = botState.markovThreshold || 4.0;
-        let isRecovery = botState.martingaleStep > 0;
         if (isRecovery) {
             // 🛡️ Filtro de Entropía Estricto en Cobertura: Evitar mercados muy caóticos para recuperar capital
             if (entropyVal >= 3.22) {
@@ -901,8 +913,14 @@ function evaluateHFRDiffers() {
     for (const sym of Object.keys(botState.markets)) {
         if (!botState.markets[sym] || !botState.markets[sym].digitHistory) continue;
         
+        const entropyVal = parseFloat(botState.markets[sym].shannonEntropy || 3.322);
+        
+        // 🎁 Birthday Shield: Filtro de Entropía Absoluto para operaciones base (Límite 3.25)
+        if (!isRecovery && entropyVal >= 3.25) {
+            continue; // Saltar mercados muy caóticos para operaciones base
+        }
+        
         if (isRecovery) {
-            const entropyVal = parseFloat(botState.markets[sym].shannonEntropy || 3.322);
             if (entropyVal >= 3.22) continue; // Evitar mercados caóticos para cobertura
         }
         
@@ -1238,6 +1256,12 @@ function tryFireTrade() {
         if (botState.martingaleStep > 0) {
             const recoveryCooldown = 60000; // 60 segundos
             currentCooldown = Math.max(currentCooldown, recoveryCooldown);
+        }
+        
+        // 🎁 Birthday Shield: Retraso de 12 segundos tras victoria para evitar re-entradas correlacionadas
+        if (botState.consecutiveWins > 0) {
+            const winCooldown = 12000; // 12 segundos
+            currentCooldown = Math.max(currentCooldown, winCooldown);
         }
         
         if ((now - botState.lastTradeTime) < currentCooldown) {
