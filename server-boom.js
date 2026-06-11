@@ -239,6 +239,7 @@ let botState = {
     
     // ─── Martingala Segura (Recuperación x2.1) ───
     martingaleStep: 0,         // Nivel actual de martingala (0 = stake base)
+    debtQueue: 0,              // Cola de deuda acumulada para Split Recovery (Tercera Vía)
     maxMartingaleSteps: 4, // Reducido a 4 porque el Ghost Trading evita el primer nivel de pérdida     // Límite máximo para evitar quemar cuenta
     
     // ─── Enfriamiento inteligente y re-evaluación post-pérdida ───
@@ -613,17 +614,19 @@ function getDynamicCooldown() {
 function getAdjustedStake(baseStake, engineMultiplier) {
     let adjusted = (baseStake || 1) * (engineMultiplier || 1.0);
     
-    // Aplicar Cobertura Cuántica
-    if (botState.martingaleStep > 0 && botState.coberturaEnabled) {
-        if (botState.lastEngineFired === 'MARKOV_DIFFERS') {
-            // Para DIGITDIFF: Multiplicador agresivo x11 para recuperar de un solo golpe
-            if (botState.martingaleStep === 1) {
-                adjusted = adjusted * 11;
-            } else {
-                botState.martingaleStep = 0; // Failsafe
-            }
-        } else {
-            // Motores normales: Progresión Lineal D'Alembert (+1x, +2x, +3x)
+    // Aplicar Cobertura Híbrida (Tridente de Cobertura Híbrida)
+    if (botState.coberturaEnabled) {
+        if (botState.debtQueue > 0) {
+            // Nivel 2: Split Recovery (Tope de seguridad de $5.00 por cada $1.00 de baseStake)
+            const targetPart = botState.debtQueue / 4; // Dividir deuda en 4 partes
+            const rawRecoveryStake = targetPart / 0.0909; // Stake necesario para ganar targetPart con 9%
+            const maxStakeCap = 5.0 * (baseStake / 1.0); // Tope de seguridad proporcional al baseStake
+            adjusted = Math.min(rawRecoveryStake, maxStakeCap);
+        } else if (botState.martingaleStep === 1 && botState.lastEngineFired === 'MARKOV_DIFFERS') {
+            // Nivel 1: Martingala x11
+            adjusted = baseStake * 11;
+        } else if (botState.martingaleStep > 0) {
+            // Otros motores (D'Alembert)
             const steps = Math.min(botState.martingaleStep, botState.maxMartingaleSteps || 6);
             adjusted = adjusted * (1 + steps);
         }
@@ -882,7 +885,7 @@ function evaluateMarkovDiffers() {
 
         // Determinar ventana de entrenamiento adaptativa según la Entropía de Shannon (Medida de Caos)
         const entropyVal = parseFloat(botState.markets[sym].shannonEntropy || 3.322);
-        let isRecovery = botState.martingaleStep > 0;
+        let isRecovery = botState.martingaleStep > 0 || botState.debtQueue > 0;
 
         // 🎁 Birthday Shield: Filtro de Entropía Absoluto para operaciones base (Límite 3.25)
         if (!isRecovery && entropyVal >= 3.25) {
@@ -978,7 +981,7 @@ function evaluateHFRDiffers() {
     let maxConsecutive = 0;
 
     let requiredConsecutive = 3;
-    let isRecovery = botState.martingaleStep > 0;
+    let isRecovery = botState.martingaleStep > 0 || botState.debtQueue > 0;
     if (isRecovery) {
         // En modo cobertura, exigimos racha de 4 para seguridad de grado cuántico (~99.85%)
         requiredConsecutive = 4;
@@ -1327,7 +1330,7 @@ function tryFireTrade() {
         }
         
         // Retraso de 60 segundos tras pérdida en operaciones reales para evitar pérdidas seguidas rápidas
-        if (botState.martingaleStep > 0) {
+        if (botState.martingaleStep > 0 || botState.debtQueue > 0) {
             const recoveryCooldown = 60000; // 60 segundos
             currentCooldown = Math.max(currentCooldown, recoveryCooldown);
         }
@@ -1340,7 +1343,7 @@ function tryFireTrade() {
         
         if ((now - botState.lastTradeTime) < currentCooldown) {
             const secsRemaining = Math.ceil((currentCooldown - (now - botState.lastTradeTime)) / 1000);
-            if (botState.martingaleStep > 0) {
+            if (botState.martingaleStep > 0 || botState.debtQueue > 0) {
                 if (!botState.lastCooldownLogTime || (now - botState.lastCooldownLogTime) >= 10000) {
                     console.log(`⏳ COBERTURA EN ESPERA: Retraso de seguridad activo tras pérdida (${secsRemaining}s restantes)...`);
                     botState.lastCooldownLogTime = now;
@@ -1692,30 +1695,65 @@ function finalizeTrade(c) {
         console.log(`❌ LOSS -$${Math.abs(profit).toFixed(2)} [${tradeSymbol} - ${name}] | ${cType}${barrier ? ` B:${barrier}` : ''} | Racha: ${botState.consecutiveLosses} | PnL: $${botState.pnlSession.toFixed(2)}`);
     }
     
-    // ─── ACTUALIZACIÓN DE ESTADO DE COBERTURA CUÁNTICA ───
-    if (isWin) {
-        if (botState.martingaleStep > 0) {
-            console.log(`🛡️ COBERTURA CUÁNTICA: ¡Recuperación exitosa! Cobertura completada en nivel ${botState.martingaleStep}. Volviendo a stake base.`);
-        }
-        botState.martingaleStep = 0;
-    } else {
-        if (botState.coberturaEnabled) {
-            botState.martingaleStep++;
-            let localMaxSteps = botState.maxMartingaleSteps;
-            let multiplierMsg = `(Progresión Lineal D'Alembert) (Multiplicador: x${1 + botState.martingaleStep})`;
-            
-            if (engine === 'MARKOV_DIFFERS') {
-                localMaxSteps = 1; // Solo un intento de recuperación x11
-                multiplierMsg = `(Recuperación Agresiva Única) (Multiplicador: x11)`;
-            }
-            
-            if (botState.martingaleStep > localMaxSteps) {
-                console.log(`💀 COBERTURA CUÁNTICA: Límite máximo de pasos (${localMaxSteps}) superado. Asumiendo pérdida completa y reiniciando stake base para proteger la cuenta.`);
+    // ─── ACTUALIZACIÓN DE ESTADO DE COBERTURA CUÁNTICA HÍBRIDA ───
+    if (botState.coberturaEnabled) {
+        if (isWin) {
+            if (botState.debtQueue > 0) {
+                // Nivel 2: Split Recovery activo
+                botState.debtQueue -= profit;
+                if (botState.debtQueue <= 0.01) {
+                    botState.debtQueue = 0;
+                    botState.martingaleStep = 0;
+                    console.log(`🛡️ COBERTURA SEGURA: ¡Deuda completamente saldada en Nivel 2! Volviendo a stake base.`);
+                } else {
+                    console.log(`📈 COBERTURA SEGURA: Victoria en Nivel 2. Deuda restante: $${botState.debtQueue.toFixed(2)}`);
+                }
+            } else if (botState.martingaleStep > 0) {
+                // Nivel 1 u otros motores ganaron
+                console.log(`🛡️ COBERTURA CUÁNTICA: ¡Recuperación exitosa! Cobertura completada en nivel ${botState.martingaleStep}. Volviendo a stake base.`);
                 botState.martingaleStep = 0;
+            }
+        } else {
+            // Caso de pérdida
+            if (engine === 'MARKOV_DIFFERS') {
+                if (botState.debtQueue > 0) {
+                    // Ya estábamos en Nivel 2 (Split Recovery) y volvimos a perder
+                    botState.debtQueue += Math.abs(profit);
+                    console.log(`🚨 FALLO EN NIVEL 2: Nueva pérdida acumulada. Deuda total incrementada a $${botState.debtQueue.toFixed(2)}`);
+                    
+                    // Fusible de seguridad (Stop-Loss absoluto de la cola de deuda)
+                    const absoluteDebtCap = 24.0 * (botState.stake / 1.0);
+                    if (botState.debtQueue > absoluteDebtCap) {
+                        console.log(`💀 CORTAFUEGOS DE DEUDA: Límite de deuda superado ($${botState.debtQueue.toFixed(2)} > $${absoluteDebtCap.toFixed(2)}). Aceptando pérdida y reiniciando a stake base.`);
+                        botState.debtQueue = 0;
+                        botState.martingaleStep = 0;
+                    }
+                } else if (botState.martingaleStep === 1) {
+                    // Estábamos en Nivel 1 (Martingala x11) y perdimos
+                    botState.debtQueue = Math.abs(profit) + botState.stake; // ej. $11.00 + $1.00 = $12.00
+                    botState.martingaleStep = 0; // Apagar nivel 1
+                    console.log(`🚨 CORTAFUEGOS DE MARTINGALA: Falló el primer nivel de cobertura. Transicionando a Nivel 2 (Split Recovery) con deuda inicial de $${botState.debtQueue.toFixed(2)}`);
+                } else {
+                    // Estábamos en base y perdimos
+                    botState.martingaleStep = 1;
+                    console.log(`📈 COBERTURA CUÁNTICA: Pérdida en base. Escalando Cobertura a Nivel 1 (Recuperación Única x11)`);
+                }
             } else {
-                console.log(`📈 COBERTURA CUÁNTICA: Pérdida real. Escalando Cobertura a Nivel ${botState.martingaleStep} ${multiplierMsg}`);
+                // Otros motores tradicionales (D'Alembert regular)
+                botState.martingaleStep++;
+                const localMaxSteps = botState.maxMartingaleSteps || 6;
+                if (botState.martingaleStep > localMaxSteps) {
+                    console.log(`💀 COBERTURA CUÁNTICA: Límite máximo de pasos (${localMaxSteps}) superado. Reiniciando a stake base.`);
+                    botState.martingaleStep = 0;
+                } else {
+                    console.log(`📈 COBERTURA CUÁNTICA: Pérdida real. Escalando Cobertura (D'Alembert) a Nivel ${botState.martingaleStep} (Multiplicador: x${1 + botState.martingaleStep})`);
+                }
             }
         }
+    } else {
+        // Cobertura desactivada, resetear estados por seguridad
+        botState.martingaleStep = 0;
+        botState.debtQueue = 0;
     }
     
     // Actualizar estadísticas por motor
@@ -3035,7 +3073,8 @@ setInterval(() => {
         })
         .join(' | ');
         
-    console.log(`📊 [KRAKEN SUMMARY] PnL: $${botState.pnlSession.toFixed(2)} | WR: ${wr}% | Trades: ${botState.totalTradesSession} | Shield Lvl: ${botState.momentumShieldLevel} | Peak: $${botState.profitPeak.toFixed(2)} | Piso: $${botState.profitFloor.toFixed(2)}`);
+    const debtStr = botState.debtQueue > 0 ? ` | Deuda: $${botState.debtQueue.toFixed(2)}` : '';
+    console.log(`📊 [KRAKEN SUMMARY] PnL: $${botState.pnlSession.toFixed(2)} | WR: ${wr}% | Trades: ${botState.totalTradesSession} | Shield Lvl: ${botState.momentumShieldLevel} | Peak: $${botState.profitPeak.toFixed(2)} | Piso: $${botState.profitFloor.toFixed(2)}${debtStr}`);
     console.log(`   Motores: ${metrics}`);
 }, 60000);
 
