@@ -1372,6 +1372,10 @@ function connectDeriv() {
         if (msg.msg_type === 'proposal_open_contract') {
             const c = msg.proposal_open_contract;
             if (!c || !c.is_sold) return;
+            if (c.contract_id !== botState.activeContractId) {
+                console.log(`📡 [KRAKEN] Ignorando contrato finalizado externo o duplicado: ID ${c.contract_id}`);
+                return;
+            }
             finalizeTrade(c);
         }
     });

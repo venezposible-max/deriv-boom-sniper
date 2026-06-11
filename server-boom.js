@@ -2878,6 +2878,13 @@ function connectDeriv() {
             }
             
             if (!c.is_sold) return;
+            
+            // 🛡️ Solo procesar la finalización si es el contrato que el bot está rastreando activamente
+            if (c.contract_id !== botState.activeContractId) {
+                console.log(`📡 [KRAKEN] Ignorando contrato finalizado externo o duplicado: ID ${c.contract_id}`);
+                return;
+            }
+            
             botState.isSellingAccumulator = null;
             finalizeTrade(c);
         }
