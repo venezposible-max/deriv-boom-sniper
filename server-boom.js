@@ -632,6 +632,10 @@ function getAdjustedStake(baseStake, engineMultiplier) {
         }
     }
     
+    if (adjusted > 0 && adjusted < 0.35) {
+        adjusted = 0.35;
+    }
+    
     return parseFloat(adjusted.toFixed(2));
 }
 
