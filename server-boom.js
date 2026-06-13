@@ -263,6 +263,13 @@ let botState = {
 // ════════════════════════════════════════════════════════════════
 // Inicializar digitFrequency de cada mercado
 const SCAN_SYMBOLS = ['R_50', 'R_75'];
+
+// ─── Pesos de decaimiento exponencial para Markov Ponderado ───
+const DECAY_FACTOR = 0.998;
+const DECAY_WEIGHTS = [];
+for (let i = 0; i <= 3000; i++) {
+    DECAY_WEIGHTS.push(Math.pow(DECAY_FACTOR, i));
+}
 SCAN_SYMBOLS.forEach(sym => {
     const m = botState.markets[sym];
     if (m && m.digitFrequency) {
@@ -612,126 +619,124 @@ const TRAINING_WINDOW = 2000;
 const THRESHOLD_PERCENT = 2.0;
 // Using mState.digitHistory instead
 
-function evaluateMarkovDiffers() {
+function evaluateMarkovDiffers(sym) {
     if (!botState.engineMarkovDiffers) return null;
     
-    let bestSignal = null;
-    let absoluteLowestProb = 100;
-
     const now = Date.now();
-    for (const sym of Object.keys(botState.markets)) {
-        if (!SCAN_SYMBOLS.includes(sym)) continue;
-        const mState = botState.markets[sym];
-        if (!mState || !mState.digitHistory) continue;
-        if (mState.lockedUntil && now < mState.lockedUntil) continue;
-        const hist = mState.digitHistory;
+    const mState = botState.markets[sym];
+    if (!mState || !mState.digitHistory) return null;
+    if (mState.lockedUntil && now < mState.lockedUntil) return null;
+    const hist = mState.digitHistory;
+    
+    // Wait until we have 2000 ticks for this specific market to ensure full history
+    if (hist.length < 2000) return null;
+
+    // Determinar ventana de entrenamiento adaptativa según la Entropía de Shannon (Medida de Caos)
+    const entropyVal = parseFloat(mState.shannonEntropy || 3.322);
+    let isRecovery = botState.martingaleStep > 0 || botState.debtQueue > 0;
+
+    // 🎁 Birthday Shield: Filtro de Entropía Absoluto para operaciones base (Límite 3.25)
+    if (!isRecovery && entropyVal >= 3.25) {
+        return null; // Saltar mercados muy caóticos para operaciones base
+    }
+
+    let adaptiveWindow = 2000;
+    if (entropyVal < 3.10) {
+        adaptiveWindow = 500; // Alta estructura: ventana corta para capturar la anomalía transitoria
+    } else if (entropyVal < 3.25) {
+        adaptiveWindow = 1000; // Estructura media
+    }
+
+    const sliceStart = Math.max(0, hist.length - adaptiveWindow);
+    const trainingHist = hist.slice(sliceStart);
+
+    let matrix = Array(10).fill(0).map(() => Array(10).fill(0));
+    let weightedCounts = Array(10).fill(0);
+    let rawCounts = Array(10).fill(0);
+
+    const N = trainingHist.length;
+
+    // Construir matriz de transición ponderada
+    for (let i = 1; i < N; i++) {
+        let prev = trainingHist[i - 1];
+        let curr = trainingHist[i];
         
-        // Wait until we have 2000 ticks for this specific market to ensure full history
-        if (hist.length < 2000) continue;
+        let age = N - 1 - i;
+        let weight = DECAY_WEIGHTS[age] || Math.pow(DECAY_FACTOR, age);
+        
+        matrix[prev][curr] += weight;
+        weightedCounts[prev] += weight;
+        rawCounts[prev]++;
+    }
 
-        // Determinar ventana de entrenamiento adaptativa según la Entropía de Shannon (Medida de Caos)
-        const entropyVal = parseFloat(botState.markets[sym].shannonEntropy || 3.322);
-        let isRecovery = botState.martingaleStep > 0 || botState.debtQueue > 0;
+    const currentDigit = hist[hist.length - 1];
 
-        // 🎁 Birthday Shield: Filtro de Entropía Absoluto para operaciones base (Límite 3.25)
-        if (!isRecovery && entropyVal >= 3.25) {
-            continue; // Saltar mercados muy caóticos para operaciones base
-        }
+    // 🎁 Birthday Shield: Muestra Mínima Significativa (Mínimo 40 ocurrencias en la ventana activa)
+    if (rawCounts[currentDigit] < 40) {
+        return null; // Evitar disparar con estadísticas inestables
+    }
 
-        let adaptiveWindow = 2000;
-        if (entropyVal < 3.10) {
-            adaptiveWindow = 500; // Alta estructura: ventana corta para capturar la anomalía transitoria
-        } else if (entropyVal < 3.25) {
-            adaptiveWindow = 1000; // Estructura media
-        }
+    // Determinar Umbral Markov Dinámico según la Entropía de Shannon (Medida de Caos)
+    let activeThreshold = 4.0;
+    if (entropyVal < 3.10) {
+        activeThreshold = 4.2; // Alta predictibilidad (entropía baja) -> Umbral flexible de 4.2%
+    } else if (entropyVal < 3.20) {
+        activeThreshold = 3.5; // Caos medio -> Umbral moderado de 3.5%
+    } else {
+        activeThreshold = 2.5; // Caos alto (entropía cercana a 3.25) -> Umbral estricto de 2.5%
+    }
 
-        const sliceStart = Math.max(0, hist.length - adaptiveWindow);
-        const trainingHist = hist.slice(sliceStart);
+    // Guardar el umbral dinámico actual en el estado del mercado para visibilidad
+    mState.activeThreshold = activeThreshold;
 
-        let matrix = Array(10).fill(0).map(() => Array(10).fill(0));
-        let counts = Array(10).fill(0);
-
-        for (let i = 1; i < trainingHist.length; i++) {
-            let prev = trainingHist[i - 1];
-            let curr = trainingHist[i];
-            matrix[prev][curr]++;
-            counts[prev]++;
-        }
-
-        const currentDigit = hist[hist.length - 1];
-
-        // 🎁 Birthday Shield: Muestra Mínima Significativa (Mínimo 40 ocurrencias en la ventana activa)
-        if (counts[currentDigit] < 40) {
-            continue; // Evitar disparar con estadísticas inestables
-        }
-
-        let bestTarget = -1;
-        let lowestProb = 100;
-
-        // Determinar Umbral Markov Dinámico según la Entropía de Shannon (Medida de Caos)
-        let activeThreshold = 4.0;
-        if (entropyVal < 3.10) {
-            activeThreshold = 4.2; // Alta predictibilidad (entropía baja) -> Umbral flexible de 4.2%
-        } else if (entropyVal < 3.20) {
-            activeThreshold = 3.5; // Caos medio -> Umbral moderado de 3.5%
-        } else {
-            activeThreshold = 2.5; // Caos alto (entropía cercana a 3.25) -> Umbral estricto de 2.5%
-        }
-
-        // Guardar el umbral dinámico actual en el estado del mercado para visibilidad
-        mState.activeThreshold = activeThreshold;
-
-        if (isRecovery) {
-            // 🛡️ Filtro de Entropía Estricto en Cobertura: Evitar mercados muy caóticos para recuperar capital
-            if (entropyVal >= 3.22) {
-                if (Date.now() % 30000 < 1500) {
-                    console.log(`🛡️ [KRAKEN SHIELD] ${sym} ignorado para cobertura por alta entropía (${entropyVal.toFixed(3)} >= 3.22)`);
-                }
-                continue; // Saltar este mercado porque está muy ruidoso/caótico
+    if (isRecovery) {
+        // 🛡️ Filtro de Entropía Estricto en Cobertura: Evitar mercados muy caóticos para recuperar capital
+        if (entropyVal >= 3.22) {
+            if (Date.now() % 30000 < 1500) {
+                console.log(`🛡️ [KRAKEN SHIELD] ${sym} ignorado para cobertura por alta entropía (${entropyVal.toFixed(3)} >= 3.22)`);
             }
-            // Martingala Markov Filtrada Dinámica (Cobertura más estricta reducida un 20%)
-            activeThreshold = parseFloat((activeThreshold * 0.8).toFixed(2));
+            return null; // Saltar este mercado porque está muy ruidoso/caótico
         }
+        // Martingala Markov Filtrada Dinámica (Cobertura más estricta reducida un 20%)
+        activeThreshold = parseFloat((activeThreshold * 0.8).toFixed(2));
+    }
 
-        for (let target = 0; target <= 9; target++) {
-            if (counts[currentDigit] > 0) {
-                let prob = (matrix[currentDigit][target] / counts[currentDigit]) * 100;
-                if (prob > 0 && prob <= activeThreshold) {
-                    // 🛡️ Filtro de Micro-Rachas (Anti-Repetición / Anti-Coiling)
-                    // Si el dígito target ha salido 2 o más veces en los últimos 8 ticks, se ignora
-                    const last8Ticks = hist.slice(-8);
-                    const occurrences = last8Ticks.filter(d => d === target).length;
-                    if (occurrences >= 2) {
-                        continue; // Evitar usar como barrera un dígito que ya se está repitiendo en el corto plazo
-                    }
-                    if (prob < lowestProb) {
-                        lowestProb = prob;
-                        bestTarget = target;
-                    }
+    let bestTarget = -1;
+    let lowestProb = 100;
+
+    for (let target = 0; target <= 9; target++) {
+        if (weightedCounts[currentDigit] > 0) {
+            let prob = (matrix[currentDigit][target] / weightedCounts[currentDigit]) * 100;
+            if (prob > 0 && prob <= activeThreshold) {
+                // 🛡️ Filtro de Micro-Rachas (Anti-Repetición / Anti-Coiling)
+                // Si el dígito target ha salido 2 o más veces en los últimos 8 ticks, se ignora
+                const last8Ticks = hist.slice(-8);
+                const occurrences = last8Ticks.filter(d => d === target).length;
+                if (occurrences >= 2) {
+                    continue; // Evitar usar como barrera un dígito que ya se está repitiendo en el corto plazo
+                }
+                if (prob < lowestProb) {
+                    lowestProb = prob;
+                    bestTarget = target;
                 }
             }
         }
+    }
 
-        if (bestTarget !== -1 && lowestProb < absoluteLowestProb) {
-            absoluteLowestProb = lowestProb;
-            bestSignal = {
-                engine: 'MARKOV_DIFFERS',
-                contractType: 'DIGITDIFF',
-                symbol: sym, // <--- Esto le dice al bot en qué mercado exacto disparar
-                barrier: String(bestTarget),
-                ticksRemaining: 1,
-                reason: isRecovery 
-                    ? `🛡️ COBERTURA SEGURA: Markov ${sym} Prob ${lowestProb.toFixed(1)}% (Umbral estricto: ${activeThreshold.toFixed(1)}%)`
-                    : `Markov ${sym} Prob ${lowestProb.toFixed(1)}% (Umbral dinámico: ${activeThreshold.toFixed(1)}%)`
-            };
-        }
+    if (bestTarget !== -1) {
+        console.log(`🎯 [MARKOV OMNISCIENTE] Anomalía detectada en ${sym}. Probabilidad de riesgo: ${lowestProb.toFixed(2)}%. Disparando DIFFERS a ${bestTarget}`);
+        return {
+            engine: 'MARKOV_DIFFERS',
+            contractType: 'DIGITDIFF',
+            symbol: sym,
+            barrier: String(bestTarget),
+            ticksRemaining: 1,
+            reason: isRecovery 
+                ? `🛡️ COBERTURA SEGURA: Markov ${sym} Prob ${lowestProb.toFixed(1)}% (Umbral estricto: ${activeThreshold.toFixed(1)}%)`
+                : `Markov ${sym} Prob ${lowestProb.toFixed(1)}% (Umbral dinámico: ${activeThreshold.toFixed(1)}%)`
+        };
     }
-    
-    if (bestSignal) {
-        console.log(`🎯 [MARKOV OMNISCIENTE] Anomalía detectada en ${bestSignal.symbol}. Probabilidad de riesgo: ${absoluteLowestProb.toFixed(2)}%. Disparando DIFFERS a ${bestSignal.barrier}`);
-        return bestSignal;
-    }
-    
+
     return null;
 }
 
@@ -739,11 +744,8 @@ function evaluateMarkovDiffers() {
  * ⚡ MOTOR HFR: HIGH-FREQUENCY REPETITION STREAK SNIPER (98%+ Win Rate)
  * Detecta rachas de dígitos repetidos en paralelo sobre los 8 mercados.
  */
-function evaluateHFRDiffers() {
+function evaluateHFRDiffers(sym) {
     if (!botState.engineMarkovDiffers) return null;
-
-    let bestSignal = null;
-    let maxConsecutive = 0;
 
     let requiredConsecutive = 3;
     let isRecovery = botState.martingaleStep > 0 || botState.debtQueue > 0;
@@ -753,59 +755,48 @@ function evaluateHFRDiffers() {
     }
 
     const now = Date.now();
-    for (const sym of Object.keys(botState.markets)) {
-        if (!SCAN_SYMBOLS.includes(sym)) continue;
-        const mState = botState.markets[sym];
-        if (!mState || !mState.digitHistory) continue;
-        if (mState.lockedUntil && now < mState.lockedUntil) continue;
-        
-        const entropyVal = parseFloat(mState.shannonEntropy || 3.322);
-        
-        // 🎁 Birthday Shield: Filtro de Entropía Absoluto para operaciones base (Límite 3.25)
-        if (!isRecovery && entropyVal >= 3.25) {
-            continue; // Saltar mercados muy caóticos para operaciones base
-        }
-        
-        if (isRecovery) {
-            if (entropyVal >= 3.22) continue; // Evitar mercados caóticos para cobertura
-        }
-        
-        const hist = mState.digitHistory;
-        
-        if (hist.length < requiredConsecutive) continue;
+    const mState = botState.markets[sym];
+    if (!mState || !mState.digitHistory) return null;
+    if (mState.lockedUntil && now < mState.lockedUntil) return null;
+    
+    const entropyVal = parseFloat(mState.shannonEntropy || 3.322);
+    
+    // 🎁 Birthday Shield: Filtro de Entropía Absoluto para operaciones base (Límite 3.25)
+    if (!isRecovery && entropyVal >= 3.25) {
+        return null; // Saltar mercados muy caóticos para operaciones base
+    }
+    
+    if (isRecovery) {
+        if (entropyVal >= 3.22) return null; // Evitar mercados caóticos para cobertura
+    }
+    
+    const hist = mState.digitHistory;
+    
+    if (hist.length < requiredConsecutive) return null;
 
-        const lastDigit = hist[hist.length - 1];
-        let consecutiveCount = 1;
-        
-        for (let i = hist.length - 2; i >= 0; i--) {
-            if (hist[i] === lastDigit) {
-                consecutiveCount++;
-            } else {
-                break;
-            }
-        }
-
-        if (consecutiveCount >= requiredConsecutive) {
-            // Dar prioridad al mercado con la racha más larga activa
-            if (consecutiveCount > maxConsecutive) {
-                maxConsecutive = consecutiveCount;
-                bestSignal = {
-                    engine: 'MARKOV_DIFFERS',
-                    contractType: 'DIGITDIFF',
-                    symbol: sym,
-                    barrier: String(lastDigit),
-                    ticksRemaining: 1,
-                    reason: isRecovery
-                        ? `🛡️ HFR COBERTURA: Racha ${consecutiveCount} de '${lastDigit}' en ${sym} (Requerido: ${requiredConsecutive})`
-                        : `⚡ HFR: Racha ${consecutiveCount} de '${lastDigit}' en ${sym}`
-                };
-            }
+    const lastDigit = hist[hist.length - 1];
+    let consecutiveCount = 1;
+    
+    for (let i = hist.length - 2; i >= 0; i--) {
+        if (hist[i] === lastDigit) {
+            consecutiveCount++;
+        } else {
+            break;
         }
     }
 
-    if (bestSignal) {
-        console.log(`🎯 [HFR OMNISCIENTE] Racha detectada en ${bestSignal.symbol}. Dígito: ${bestSignal.barrier}, Racha: ${maxConsecutive}. Disparando DIFFERS a ${bestSignal.barrier}`);
-        return bestSignal;
+    if (consecutiveCount >= requiredConsecutive) {
+        console.log(`🎯 [HFR OMNISCIENTE] Racha detectada en ${sym}. Dígito: ${lastDigit}, Racha: ${consecutiveCount}. Disparando DIFFERS a ${lastDigit}`);
+        return {
+            engine: 'MARKOV_DIFFERS',
+            contractType: 'DIGITDIFF',
+            symbol: sym,
+            barrier: String(lastDigit),
+            ticksRemaining: 1,
+            reason: isRecovery
+                ? `🛡️ HFR COBERTURA: Racha ${consecutiveCount} de '${lastDigit}' en ${sym} (Requerido: ${requiredConsecutive})`
+                : `⚡ HFR: Racha ${consecutiveCount} de '${lastDigit}' en ${sym}`
+        };
     }
 
     return null;
@@ -960,9 +951,9 @@ function tryFireTrade() {
             // 🎯 MOTOR MARKOV OMNISCIENTE / HFR
             if (botState.engineMarkovDiffers) {
                 if (botState.differStrategy === 'HFR') {
-                    signal = evaluateHFRDiffers();
+                    signal = evaluateHFRDiffers(sym);
                 } else {
-                    signal = evaluateMarkovDiffers();
+                    signal = evaluateMarkovDiffers(sym);
                 }
                 if (signal) {
                     signalSymbol = signal.symbol;
