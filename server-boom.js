@@ -1422,7 +1422,7 @@ app.get('/api/status', (req, res) => {
     const currentVolatility = activeMState && activeMState.recentPrices && activeMState.recentPrices.length >= 10
         ? (calcRecentVolatility(activeMState.recentPrices, 15) * 100).toFixed(4) + '%'
         : 'N/A';
-    const marketIsCalm = activeMState ? checkMarketCalm(activeMState) : false;
+    const marketIsCalm = false;
     
     res.json({
         success: true,
