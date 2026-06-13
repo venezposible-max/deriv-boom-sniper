@@ -592,8 +592,9 @@ function getDynamicCooldown() {
 /**
  * Calcular Stake Ajustado según Escudo de Momentum y Martingala
  */
-function getAdjustedStake(baseStake, engineMultiplier) {
-    if (botState.currentEngine === 'MARKOV_MATCH') {
+function getAdjustedStake(baseStake, engineMultiplier, currentEngine) {
+    const activeEngine = currentEngine || botState.currentEngine;
+    if (activeEngine === 'MARKOV_MATCH') {
         const progression = [1, 1, 1, 1, 2, 2, 3, 4, 5, 7, 10, 14, 19, 26, 36];
         const step = Math.min(botState.martingaleStep, progression.length - 1);
         let adjusted = baseStake * progression[step];
@@ -1125,7 +1126,7 @@ function tryFireTrade() {
     // Si llegamos aquí, ghostNextTradeReal es TRUE. ¡Disparamos REAL!
     botState.ghostNextTradeReal = false; // Resetear el escudo
     
-    const finalStake = getAdjustedStake(botState.stake, signal.stakeMultiplier);
+    const finalStake = getAdjustedStake(botState.stake, signal.stakeMultiplier, signal.engine);
     if (finalStake <= 0) return;
     
     botState.currentEngine = signal.engine;
