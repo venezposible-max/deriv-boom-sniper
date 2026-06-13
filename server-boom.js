@@ -622,13 +622,9 @@ function getAdjustedStake(baseStake, engineMultiplier) {
             const rawRecoveryStake = targetPart / 0.0909; // Stake necesario para ganar targetPart con 9%
             const maxStakeCap = 5.0 * (baseStake / 1.0); // Tope de seguridad proporcional al baseStake
             adjusted = Math.min(rawRecoveryStake, maxStakeCap);
-        } else if (botState.martingaleStep === 1 && botState.lastEngineFired === 'MARKOV_DIFFERS') {
-            // Nivel 1: Martingala x11
-            adjusted = baseStake * 11;
         } else if (botState.martingaleStep > 0) {
-            // Otros motores (D'Alembert)
-            const steps = Math.min(botState.martingaleStep, botState.maxMartingaleSteps || 6);
-            adjusted = adjusted * (1 + steps);
+            // Nivel 1: Martingala x11 (todos los motores)
+            adjusted = baseStake * 11;
         }
     }
     
