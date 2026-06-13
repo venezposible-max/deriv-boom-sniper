@@ -974,14 +974,12 @@ function tryFireTrade() {
         botState.pendingPayoutCheck = null;
     }
     
-    // Filtro de Latencia Crítica (RTT > 800ms): Solo pausar en conexiones realmente degradadas
+    // Filtro de Latencia Crítica: Solo alertar en logs en conexiones muy lentas, no bloquear
     // Para DIGITDIFF, la latencia no afecta la predicción (predecimos el dígito del SIGUIENTE tick)
-    // Railway US → Deriv London tiene ~250-350ms naturalmente, eso es normal y aceptable.
-    if (botState.lastMeasuredLatency && botState.lastMeasuredLatency > 800) {
-        if (now % 30000 < 1500) {
-            console.log(`⏳ FILTRO LATENCIA: Operaciones en pausa por latencia extrema (${botState.lastMeasuredLatency}ms > 800ms).`);
+    if (botState.lastMeasuredLatency && botState.lastMeasuredLatency > 1500) {
+        if (now % 60000 < 1500) {
+            console.log(`⏳ [WARN] Latencia de red alta detectada (${botState.lastMeasuredLatency}ms). Operaciones continúan.`);
         }
-        return;
     }
 
     // 🔓 AUTO-CLEAR de deuda atrapada: Si hay deuda pero no se ha operado en 30 minutos,
