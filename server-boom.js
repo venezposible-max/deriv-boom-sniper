@@ -262,7 +262,7 @@ let botState = {
 //  CARGAR ESTADO PERSISTENTE
 // ════════════════════════════════════════════════════════════════
 // Inicializar digitFrequency de cada mercado
-const SCAN_SYMBOLS = ['R_10', 'R_25', 'R_50', 'R_75', 'R_100', '1HZ10V', '1HZ25V', '1HZ100V'];
+const SCAN_SYMBOLS = ['R_50', 'R_75', 'R_100', '1HZ10V', '1HZ25V', '1HZ100V'];
 SCAN_SYMBOLS.forEach(sym => {
     const m = botState.markets[sym];
     if (m && m.digitFrequency) {
@@ -914,8 +914,8 @@ function evaluateMarkovDiffers() {
 
         const currentDigit = hist[hist.length - 1];
 
-        // 🎁 Birthday Shield: Muestra Mínima Significativa (Mínimo 20 ocurrencias en la ventana activa)
-        if (counts[currentDigit] < 20) {
+        // 🎁 Birthday Shield: Muestra Mínima Significativa (Mínimo 35 ocurrencias en la ventana activa)
+        if (counts[currentDigit] < 35) {
             continue; // Evitar disparar con estadísticas inestables
         }
 
