@@ -829,7 +829,7 @@ function tryFireTrade() {
 
     
     // Failsafe de contrato colgado (15 segundos para normales, 120 segundos para ACCUMULATOR)
-    const failsafeTimeout = botState.currentContractType === 'ACCU' ? 120000 : 15000;
+    const failsafeTimeout = botState.currentContractType === 'ACCU' ? 120000 : 45000;
     if (botState.activeContractId && (now - botState.lastTradeTime) > failsafeTimeout) {
         console.log(`⚠️ FAILSAFE: Contrato ${botState.currentContractType || ''} ${botState.activeContractId} colgado. Liberando bot.`);
         botState.activeContractId = null;
