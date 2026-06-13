@@ -876,9 +876,13 @@ function evaluateMarkovDiffers() {
     let bestSignal = null;
     let absoluteLowestProb = 100;
 
+    const now = Date.now();
     for (const sym of Object.keys(botState.markets)) {
-        if (!botState.markets[sym] || !botState.markets[sym].digitHistory) continue;
-        const hist = botState.markets[sym].digitHistory;
+        if (!SCAN_SYMBOLS.includes(sym)) continue;
+        const mState = botState.markets[sym];
+        if (!mState || !mState.digitHistory) continue;
+        if (mState.lockedUntil && now < mState.lockedUntil) continue;
+        const hist = mState.digitHistory;
         
         // Wait until we have 2000 ticks for this specific market to ensure full history
         if (hist.length < 2000) continue;
@@ -914,8 +918,8 @@ function evaluateMarkovDiffers() {
 
         const currentDigit = hist[hist.length - 1];
 
-        // 🎁 Birthday Shield: Muestra Mínima Significativa (Mínimo 35 ocurrencias en la ventana activa)
-        if (counts[currentDigit] < 35) {
+        // 🎁 Birthday Shield: Muestra Mínima Significativa (Mínimo 40 ocurrencias en la ventana activa)
+        if (counts[currentDigit] < 40) {
             continue; // Evitar disparar con estadísticas inestables
         }
 
@@ -987,10 +991,14 @@ function evaluateHFRDiffers() {
         requiredConsecutive = 4;
     }
 
+    const now = Date.now();
     for (const sym of Object.keys(botState.markets)) {
-        if (!botState.markets[sym] || !botState.markets[sym].digitHistory) continue;
+        if (!SCAN_SYMBOLS.includes(sym)) continue;
+        const mState = botState.markets[sym];
+        if (!mState || !mState.digitHistory) continue;
+        if (mState.lockedUntil && now < mState.lockedUntil) continue;
         
-        const entropyVal = parseFloat(botState.markets[sym].shannonEntropy || 3.322);
+        const entropyVal = parseFloat(mState.shannonEntropy || 3.322);
         
         // 🎁 Birthday Shield: Filtro de Entropía Absoluto para operaciones base (Límite 3.25)
         if (!isRecovery && entropyVal >= 3.25) {
@@ -1001,7 +1009,7 @@ function evaluateHFRDiffers() {
             if (entropyVal >= 3.22) continue; // Evitar mercados caóticos para cobertura
         }
         
-        const hist = botState.markets[sym].digitHistory;
+        const hist = mState.digitHistory;
         
         if (hist.length < requiredConsecutive) continue;
 
