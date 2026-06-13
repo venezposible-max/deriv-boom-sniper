@@ -546,60 +546,7 @@ function calcEWMFrequency(hist, alpha = 0.05) {
     return normalized;
 }
 
-/**
- * Matriz de Markov
- */
-function buildMarkovMatrix(hist) {
-    const matrix = {};
-    for (let i = 0; i <= 9; i++) {
-        matrix[i] = {};
-        for (let j = 0; j <= 9; j++) matrix[i][j] = 0;
-    }
-    for (let k = 1; k < hist.length; k++) {
-        matrix[hist[k - 1]][hist[k]]++;
-    }
-    for (let i = 0; i <= 9; i++) {
-        const total = Object.values(matrix[i]).reduce((a, b) => a + b, 0);
-        if (total > 0) {
-            for (let j = 0; j <= 9; j++) matrix[i][j] = matrix[i][j] / total;
-        } else {
-            for (let j = 0; j <= 9; j++) matrix[i][j] = 0.1;
-        }
-    }
-    return matrix;
-}
 
-/**
- * Matriz de Markov de 2do Orden (Basada en los 2 últimos dígitos)
- */
-function build2ndOrderMarkovMatrix(hist) {
-    const matrix = {};
-    // Inicializar 100 estados posibles (00 a 99)
-    for (let i = 0; i <= 99; i++) {
-        matrix[i] = {};
-        for (let j = 0; j <= 9; j++) matrix[i][j] = 0;
-    }
-    
-    // Contar transiciones
-    for (let k = 2; k < hist.length; k++) {
-        const state = (hist[k - 2] * 10) + hist[k - 1]; // Ej: dígito 3 luego 7 = estado 37
-        const nextDigit = hist[k];
-        matrix[state][nextDigit]++;
-    }// ════════════════════════════════════════════════════════════════
-//  (Sección Quantum Edge eliminada por transición a Even/Odd)
-// ════════════════════════════════════════════════════════════════
-    
-    // Calcular probabilidades
-    for (let i = 0; i <= 99; i++) {
-        const total = Object.values(matrix[i]).reduce((a, b) => a + b, 0);
-        if (total > 0) {
-            for (let j = 0; j <= 9; j++) matrix[i][j] = matrix[i][j] / total;
-        } else {
-            for (let j = 0; j <= 9; j++) matrix[i][j] = 0.1; // fallback
-        }
-    }
-    return matrix;
-}
 
 /**
  * Cooldown Dinámico Basado en Caos (Entropía) y Momentum de Rachas
@@ -639,112 +586,7 @@ function getAdjustedStake(baseStake, engineMultiplier) {
 //  MOTORES DE PREMANTECEDENTES (ENGINES)
 // ════════════════════════════════════════════════════════════════
 
-/**
- * Motor 1: EVEN/ODD — "El Pan de Cada Día"
- * Consenso multi-ventana (10, 20, 40 ticks) y Chi-Cuadrado
- */
-function evaluateEvenOdd(mState) {
-    const hist = mState.digitHistory;
-    if (hist.length < 50) return null;
-    
-    // Chi-Cuadrado de última ventana (Estricto en modo Quirúrgico, relajado en modo Normal)
-    const chiTest = calcChiSquared(hist, 50);
-    const requiredChi = botState.quirurgicoMode ? 16.92 : 5.0;
-    if (chiTest.chi2 < requiredChi) return null; // Debe haber desbalance estadístico
-    
-    const sub10 = hist.slice(-10);
-    const sub20 = hist.slice(-20);
-    
-    let ev10 = 0, od10 = 0;
-    sub10.forEach(d => { if (d % 2 === 0) ev10++; else od10++; });
-    
-    let ev20 = 0, od20 = 0;
-    sub20.forEach(d => { if (d % 2 === 0) ev20++; else od20++; });
-    
-    // Señales por ventana (60% de consenso en M10 y 60% en M20)
-    const sigOdd10 = od10 >= 6;
-    const sigEven10 = ev10 >= 6;
-    
-    const sigOdd20 = od20 >= 12;
-    const sigEven20 = ev20 >= 12;
-    
-    if (sigOdd10 && sigOdd20) {
-        return {
-            engine: 'EVEN_ODD',
-            contractType: 'DIGITODD',
-            barrier: null,
-            stakeMultiplier: 1.0,
-            reason: `Consenso IMPAR [10:${od10}/10, 20:${od20}/20]`,
-            entropy: parseFloat(mState.shannonEntropy)
-        };
-    }
-    
-    if (sigEven10 && sigEven20) {
-        return {
-            engine: 'EVEN_ODD',
-            contractType: 'DIGITEVEN',
-            barrier: null,
-            stakeMultiplier: 1.0,
-            reason: `Consenso PAR [10:${ev10}/10, 20:${ev20}/20]`,
-            entropy: parseFloat(mState.shannonEntropy)
-        };
-    }
-    
-    return null;
-}
 
-/**
- * Motor 2: OVER/UNDER — "El Potenciador"
- * Markov de corto alcance (100 ticks), Chi-Cuadrado estricto y Validación Cruzada
- */
-function evaluateOverUnder(mState) {
-    const hist = mState.digitHistory;
-    if (hist.length < 100) return null;
-    
-    const chiTest = calcChiSquared(hist, 100);
-    // Filtro Chi-Cuadrado estricto en modo Quirúrgico, relajado en modo Normal
-    const requiredChi = botState.quirurgicoMode ? 16.92 : 5.0;
-    if (chiTest.chi2 < requiredChi) return null;
-    
-    const markovHist = hist.slice(-100);
-    const lastDigit = hist[hist.length - 1];
-    const penultDigit = hist[hist.length - 2];
-    const state = (penultDigit * 10) + lastDigit; // Estado compuesto por los 2 últimos dígitos (00-99)
-    
-    const matrix = build2ndOrderMarkovMatrix(markovHist);
-    const transitions = matrix[state];
-    
-    let probOver = 0;
-    for (let d = 5; d <= 9; d++) probOver += transitions[d] || 0;
-    let probUnder = 1 - probOver;
-    
-    // Probabilidad estricta (62% en Quirúrgico para máxima precisión, 60% en Normal)
-    const requiredProb = botState.quirurgicoMode ? 0.62 : 0.60;
-    
-    if (probOver >= requiredProb) {
-        return {
-            engine: 'OVER_UNDER',
-            contractType: 'DIGITOVER',
-            barrier: '4',
-            stakeMultiplier: 1.0,
-            reason: `Markov2da P(>4)=${(probOver * 100).toFixed(1)}% (Estado: ${state})`,
-            entropy: parseFloat(mState.shannonEntropy)
-        };
-    }
-    
-    if (probUnder >= requiredProb) {
-        return {
-            engine: 'OVER_UNDER',
-            contractType: 'DIGITUNDER',
-            barrier: '5',
-            stakeMultiplier: 1.0,
-            reason: `Markov2da P(<5)=${(probUnder * 100).toFixed(1)}% (Estado: ${state})`,
-            entropy: parseFloat(mState.shannonEntropy)
-        };
-    }
-    
-    return null;
-}
 
 /**
  * Calcula la volatilidad reciente de una lista de precios (desviación estándar normalizada)
@@ -758,107 +600,7 @@ function calcRecentVolatility(prices, window = 15) {
     return Math.sqrt(variance) / mean; // Coeficiente de variación (CV)
 }
 
-/**
- * Verifica si el mercado está en estado calmado (baja volatilidad, sin spikes recientes)
- * Retorna true si es ideal para ACCU
- */
-function checkMarketCalm(mState) {
-    if (!mState.recentPrices || mState.recentPrices.length < 10) return false;
-    const vol = calcRecentVolatility(mState.recentPrices, 20);
-    const threshold = botState.accuVolatilityThreshold || 0.018;
-    // Verificar ausencia de spikes en los últimos 5 precios (más estricto)
-    const last5 = mState.recentPrices.slice(-5);
-    const hasSpike = last5.some((p, i) => {
-        if (i === 0) return false;
-        return Math.abs((p - last5[i - 1]) / last5[i - 1]) > 0.0002; // 0.02% = spike (más estricto)
-    });
-    // Verificar cooldown de knockout ACCU en este símbolo
-    const accuKnockoutUntil = mState.accuKnockoutUntil || 0;
-    if (Date.now() < accuKnockoutUntil) return false;
-    return vol < threshold && !hasSpike;
-}
 
-/**
- * Calcula el RSI(14) sobre un arreglo de precios históricos.
- * Utiliza suavizado de Wilder para precisión cuantitativa.
- */
-function calculateRSI(prices, period = 14) {
-    if (!prices || prices.length < period + 1) return 50;
-    
-    let gains = [];
-    let losses = [];
-    
-    for (let i = 1; i < prices.length; i++) {
-        const diff = prices[i] - prices[i - 1];
-        if (diff > 0) {
-            gains.push(diff);
-            losses.push(0);
-        } else {
-            gains.push(0);
-            losses.push(-diff);
-        }
-    }
-    
-    let avgGain = gains.slice(0, period).reduce((a, b) => a + b, 0) / period;
-    let avgLoss = losses.slice(0, period).reduce((a, b) => a + b, 0) / period;
-    
-    for (let i = period; i < gains.length; i++) {
-        avgGain = (avgGain * (period - 1) + gains[i]) / period;
-        avgLoss = (avgLoss * (period - 1) + losses[i]) / period;
-    }
-    
-    if (avgLoss === 0) return 100;
-    const rs = avgGain / avgLoss;
-    return 100 - (100 / (1 + rs));
-}
-
-/**
- * Calcula la desviación estándar de un arreglo de precios sobre un período dado.
- */
-function calculateStdDev(prices, period = 30) {
-    const len = prices.length;
-    if (len < 2) return 0;
-    const n = Math.min(len, period);
-    const slice = prices.slice(-n);
-    const mean = slice.reduce((a, b) => a + b, 0) / n;
-    const variance = slice.reduce((sum, p) => sum + Math.pow(p - mean, 2), 0) / n;
-    return Math.sqrt(variance);
-}
-
-/**
- * Calcula las Bandas de Bollinger de un arreglo de precios.
- */
-function calculateBollingerBands(prices, period = 20, multiplier = 2) {
-    if (prices.length < period) return null;
-    const slice = prices.slice(-period);
-    const mean = slice.reduce((a, b) => a + b, 0) / period;
-    const variance = slice.reduce((sum, p) => sum + Math.pow(p - mean, 2), 0) / period;
-    const stdDev = Math.sqrt(variance);
-    return {
-        upper: mean + (stdDev * multiplier),
-        middle: mean,
-        lower: mean - (stdDev * multiplier)
-    };
-}
-
-/**
- * Calcula las Zonas Doradas de Fibonacci de los últimos N ticks.
- */
-function calculateFibonacciZones(prices, period = 100) {
-    if (prices.length < period) return null;
-    const slice = prices.slice(-period);
-    const max = Math.max(...slice);
-    const min = Math.min(...slice);
-    const diff = max - min;
-    
-    if (diff === 0) return null;
-    
-    return {
-        fib382: min + diff * 0.618,
-        fib500: min + diff * 0.500,
-        fib618: min + diff * 0.382
-    };
-}
 
 /**
  * MOTOR 6: Francotirador de Barreras Cody Trader (Higher/Lower)
@@ -955,6 +697,13 @@ function evaluateMarkovDiffers() {
             if (counts[currentDigit] > 0) {
                 let prob = (matrix[currentDigit][target] / counts[currentDigit]) * 100;
                 if (prob > 0 && prob <= activeThreshold) {
+                    // 🛡️ Filtro de Micro-Rachas (Anti-Repetición / Anti-Coiling)
+                    // Si el dígito target ha salido 2 o más veces en los últimos 8 ticks, se ignora
+                    const last8Ticks = hist.slice(-8);
+                    const occurrences = last8Ticks.filter(d => d === target).length;
+                    if (occurrences >= 2) {
+                        continue; // Evitar usar como barrera un dígito que ya se está repitiendo en el corto plazo
+                    }
                     if (prob < lowestProb) {
                         lowestProb = prob;
                         bestTarget = target;
@@ -1062,209 +811,7 @@ function evaluateHFRDiffers() {
     return null;
 }
 
-function evaluateCodyBarrier(mState) {
-    return null; // CODY DISABLED
-    if (!botState.engineCodyBarrier) return null;
-    
-    const prices = mState.recentPrices;
-    if (!prices || prices.length < 30) return null;
-    
-    const stdDev = calculateStdDev(prices, 30);
-    const rsi = calculateRSI(prices, 14);
-    const currentPrice = mState.lastTickPrice || prices[prices.length - 1];
-    
-    // B = codyMultiplier * StdDev
-    const mult = botState.codyMultiplier || 1.8;
-    let offset = mult * stdDev;
-    
-    // Margen de seguridad mínimo
-    const minOffset = currentPrice * 0.00005;
-    if (offset < minOffset) {
-        offset = minOffset;
-    }
-    
-    const decimals = mState.symbolDecimals || 2;
-    const formattedOffset = parseFloat(offset.toFixed(decimals));
-    const finalOffset = formattedOffset > 0 ? formattedOffset : Math.pow(10, -decimals);
-    
-    // En el canal de Cody, disparamos AMBOS lados simultáneamente (Hedged Double Sniper)
-    // para cosechar doble ganancia si queda en el canal, o mitigar pérdida si rompe un lado.
-    if (rsi >= 75 || rsi <= 25) {
-        // ─── FILTRO DE BARRERA MÁXIMA ELIMINADO ────────────────────────────────
-        // Al invertir las barreras para cazar rompimientos (Long Volatility), 
-        // los contratos ahora ofrecen altos retornos (ej. $3.00), por lo que 
-        // Deriv NUNCA los rechazará por "This contract offers no return".
-        // El límite fijo de 0.70 ya no es necesario ni correcto para símbolos de alta volatilidad.
-        // OPCIÓN C: Sniper Clásico (Sin Barrera)
-        // Ya que las barreras duales pierden mucho y las de seguridad pagan centavos,
-        // usamos el contrato clásico Rise/Fall (CALL/PUT) que paga ~95.3%.
-        // 1 Win recupera 1 Loss. El RSI extremo nos da el Edge estadístico (>50% Win Rate).
-        if (rsi >= 75) {
-            if (botState.bollingerShield) {
-                const bb = calculateBollingerBands(prices, 20, 2);
-                if (bb && currentPrice < bb.upper) return null;
-            }
-            if (botState.fibonacciShield) {
-                const fib = calculateFibonacciZones(prices, 100);
-                if (fib) {
-                    const margin = stdDev * 0.25;
-                    const near382 = Math.abs(currentPrice - fib.fib382) <= margin;
-                    const near500 = Math.abs(currentPrice - fib.fib500) <= margin;
-                    const near618 = Math.abs(currentPrice - fib.fib618) <= margin;
-                    if (!near382 && !near500 && !near618) return null;
-                }
-            }
-            return {
-                engine: 'CODY_BARRIER',
-                contractType: 'PUT',
-                barrier: null,
-                stakeMultiplier: 1.0,
-                reason: `Sniper Clásico (Sin Barrera) por Sobrecompra RSI:${rsi.toFixed(1)}${botState.bollingerShield ? ' + BB Breakout' : ''}${botState.fibonacciShield ? ' + Fib Golden Zone' : ''}`,
-                entropy: parseFloat(mState.shannonEntropy)
-            };
-        } else if (rsi <= 25) {
-            if (botState.bollingerShield) {
-                const bb = calculateBollingerBands(prices, 20, 2);
-                if (bb && currentPrice > bb.lower) return null;
-            }
-            if (botState.fibonacciShield) {
-                const fib = calculateFibonacciZones(prices, 100);
-                if (fib) {
-                    const margin = stdDev * 0.25;
-                    const near382 = Math.abs(currentPrice - fib.fib382) <= margin;
-                    const near500 = Math.abs(currentPrice - fib.fib500) <= margin;
-                    const near618 = Math.abs(currentPrice - fib.fib618) <= margin;
-                    if (!near382 && !near500 && !near618) return null;
-                }
-            }
-            return {
-                engine: 'CODY_BARRIER',
-                contractType: 'CALL',
-                barrier: null,
-                stakeMultiplier: 1.0,
-                reason: `Sniper Clásico (Sin Barrera) por Sobrevendido RSI:${rsi.toFixed(1)}${botState.bollingerShield ? ' + BB Breakdown' : ''}${botState.fibonacciShield ? ' + Fib Golden Zone' : ''}`,
-                entropy: parseFloat(mState.shannonEntropy)
-            };
-        }
-    }
-    
-    return null;
-}
 
-/**
- * Retorna el growth rate óptimo para cada símbolo.
- * Con growth_rate 1% obtenemos la BARRERA MÁS ANCHA en todos los símbolos
- * = menos knockouts = más ticks = más profit.
- * Solo R_10 y 1HZ10V tienen 1% (los más estables).
- * El resto usa 1% también en HYDRA mode para máxima supervivencia.
- */
-function getAccuGrowthRateForSymbol(symbol) {
-    if (botState.hydraMode) {
-        return 0.01; // HYDRA: 1% para todos = máxima barrera
-    }
-    const rates = {
-        'R_10':    0.01, // 1% — V10 más estable
-        '1HZ10V':  0.01,
-        'R_25':    0.01, // 1% también (cambio: antes 2%)
-        '1HZ25V':  0.01,
-        'R_50':    0.01, // 1% — más ancho
-        'R_75':    0.01,
-        'R_100':   0.01,
-        '1HZ100V': 0.01
-    };
-    return rates[symbol] || botState.accuGrowthRate || 0.01;
-}
-
-/**
- * Motor 5: ACUMULADORES — "El Compounder Pro"
- * Entra SÓLO cuando el mercado está calmado (baja volatilidad, sin spikes)
- * Salida inteligente: no vende hasta tener profit real (≥40% del stake)
- */
-function evaluateAccumulator(mState) {
-    const hist = mState.digitHistory;
-    if (hist.length < 30) return null;
-    
-    // ── Filtro 1: Necesitamos historial de precios reales ──
-    if (!mState.recentPrices || mState.recentPrices.length < 15) return null;
-    
-    // ── Filtro 2: Cooldown de knockout ACCU en este símbolo ──
-    const accuKnockoutUntil = mState.accuKnockoutUntil || 0;
-    if (Date.now() < accuKnockoutUntil) {
-        const secsLeft = Math.ceil((accuKnockoutUntil - Date.now()) / 1000);
-        if (Date.now() % 15000 < 1000) console.log(`🚫 ACCU KNOCKOUT COOLDOWN [${mState.symbol}]: ${secsLeft}s restantes. Buscando mercado más tranquilo.`);
-        return null;
-    }
-    
-    // ── Filtro 3: Volatilidad estricta (CV < Umbral) ──
-    const vol = calcRecentVolatility(mState.recentPrices, 20);
-    const maxVol = botState.accuVolatilityThreshold || 0.0035;
-    if (vol > maxVol) {
-        return null; // ❌ Mercado volátil — riesgo de knockout
-    }
-    
-    // ── Filtro 4: RSI Neutral Zone Filter (40 - 60) ──
-    const rsi = calculateRSI(mState.recentPrices, 14);
-    if (rsi !== null && (rsi > 60 || rsi < 40)) {
-        if (Date.now() % 15000 < 500) {
-            console.log(`🛡️ [FILTRO RSI NEUTRAL] ${mState.symbol} bloqueado por RSI fuera de rango neutral: ${rsi.toFixed(1)}`);
-        }
-        return null; // ❌ Sobrecompra/Sobrevendida - riesgo de reversión/spike
-    }
-    
-    // ── Filtro 5: Spike Radar en últimos 12 ticks (más estricto) ──
-    const last12 = mState.recentPrices.slice(-12);
-    const hasSpike = last12.some((p, i) => {
-        if (i === 0) return false;
-        const change = Math.abs((p - last12[i - 1]) / last12[i - 1]);
-        return change > 0.00015; // 0.015% spike en 1 tick
-    });
-    if (hasSpike) {
-        if (Date.now() % 15000 < 500) {
-            console.log(`🛡️ [FILTRO SPIKE RADAR] ${mState.symbol} bloqueado por spike reciente en últimos 12 ticks.`);
-        }
-        return null; // ❌ Spike reciente
-    }
-    
-    // ── Filtro 6: Squeeze de Canal Horizontal (Evitar Tendencias Fuertes de Jared Laos) ──
-    const prices = mState.recentPrices;
-    const sma15 = prices.slice(-15).reduce((a, b) => a + b, 0) / 15;
-    const sma5 = prices.slice(-5).reduce((a, b) => a + b, 0) / 5;
-    const slope = Math.abs(sma5 - sma15) / sma15;
-    const maxSlope = 0.00005; // Pendiente máxima permitida (0.005%)
-    if (slope > maxSlope) {
-        if (Date.now() % 15000 < 500) {
-            console.log(`🛡️ [FILTRO JARED LAOS] ${mState.symbol} bloqueado por tendencia activa: Slope ${(slope * 100).toFixed(4)}% > ${(maxSlope * 100).toFixed(4)}%`);
-        }
-        return null; // ❌ Pendiente activa detectada — Evitamos operar tendencias expansivas
-    }
-    
-    // Growth rate adaptivo según la volatilidad del símbolo
-    const optimalGrowthRate = getAccuGrowthRateForSymbol(mState.symbol);
-    
-    // Calcular ticks óptimos dinámicos si la opción está activa
-    let targetTicks = botState.accuTargetTicks || 3;
-    let maxTicks = botState.accuMaxTicks || 4;
-    
-    if (botState.accuDynamicTicks) {
-        const safetyFactor = botState.accuSafetyFactor !== undefined ? botState.accuSafetyFactor : 1.0;
-        const r = optimalGrowthRate; 
-        const rawTicks = 0.00010 / (vol * r); 
-        targetTicks = Math.max(2, Math.min(15, Math.round(rawTicks * safetyFactor)));
-        maxTicks = targetTicks + 1; // Un tick más como límite máximo absoluto
-    }
-    
-    return {
-        engine: 'ACCUMULATOR',
-        contractType: 'ACCU',
-        barrier: null,
-        stakeMultiplier: 1.0,
-        accuGrowthRateOverride: optimalGrowthRate, // Growth rate específico para este símbolo
-        accuTargetTicksOverride: targetTicks,
-        accuMaxTicksOverride: maxTicks,
-        reason: `ACCU ✅ Vol:${(vol * 100).toFixed(3)}%<${(maxVol*100).toFixed(1)}% | Growth:${(optimalGrowthRate*100).toFixed(0)}% | Objetivo:${targetTicks}-${maxTicks}t | MinProfit:${((botState.accuMinProfitRatio||0.0)*100).toFixed(0)}%`,
-        entropy: parseFloat(mState.shannonEntropy)
-    };
-}
 
 
 
@@ -1410,13 +957,8 @@ function tryFireTrade() {
                 continue;
             }
             
-            // 🎯 MOTOR 6: CODY BARRIER SNIPER (Prioridad Absoluta si está encendido)
-            if (botState.engineCodyBarrier) {
-                signal = evaluateCodyBarrier(mState);
-            }
-            
             // 🎯 MOTOR MARKOV OMNISCIENTE / HFR
-            if (!signal && botState.engineMarkovDiffers) {
+            if (botState.engineMarkovDiffers) {
                 if (botState.differStrategy === 'HFR') {
                     signal = evaluateHFRDiffers();
                 } else {
@@ -1426,20 +968,6 @@ function tryFireTrade() {
                     signalSymbol = signal.symbol;
                     break; // Salir del loop porque ya se encontró una señal en algún mercado
                 }
-            }
-            
-            // 🎯 MOTOR ACUMULADORES (Dinamismo de Volatilidad Browniana)
-            if (!signal && botState.engineAccumulator) {
-                signal = evaluateAccumulator(mState);
-                if (signal) {
-                    signalSymbol = sym;
-                    break; // Salir del loop porque ya se encontró una señal en algún mercado
-                }
-            }
-            
-            if (signal) {
-                signalSymbol = sym;
-                break;
             }
         }
     }
@@ -1482,115 +1010,8 @@ function tryFireTrade() {
     
     botState.currentEngine = signal.engine;
     botState.currentContractType = signal.contractType;
-    botState.currentBarrier = signal.contractType === 'DUAL' ? `${signal.barrierHigher}/${signal.barrierLower}` : signal.barrier;
+    botState.currentBarrier = signal.barrier;
     botState.currentStake = finalStake;
-    
-    // 🎯 MANEJO DISPARO SIMULTÁNEO DUAL (MOTOR 6)
-    if (signal.contractType === 'DUAL') {
-        const buyRequestHigher = {
-            buy: 1,
-            price: finalStake,
-            parameters: {
-                amount: finalStake,
-                basis: 'stake',
-                contract_type: 'CALL',
-                currency: botState.currency || 'USD',
-                symbol: activeSymbol,
-                duration: 5,
-                duration_unit: 't',
-                barrier: signal.barrierHigher
-            }
-        };
-        
-        const buyRequestLower = {
-            buy: 1,
-            price: finalStake,
-            parameters: {
-                amount: finalStake,
-                basis: 'stake',
-                contract_type: 'PUT',
-                currency: botState.currency || 'USD',
-                symbol: activeSymbol,
-                duration: 5,
-                duration_unit: 't',
-                barrier: signal.barrierLower
-            }
-        };
-        
-        // 🛡️ FILTRO DE SEGURIDAD FORZADO (Opción B requiere esto sí o sí)
-        if (true || botState.codyPayoutFilterEnabled) {
-            const reqIdHigher = Math.floor(Math.random() * 1000000) + 100000;
-            const reqIdLower = reqIdHigher + 1;
-            
-            botState.pendingPayoutCheck = {
-                timestamp: Date.now(),
-                activeSymbol: activeSymbol,
-                finalStake: finalStake,
-                signal: signal,
-                reqIdHigher: reqIdHigher,
-                reqIdLower: reqIdLower,
-                payoutHigher: null,
-                payoutLower: null,
-                buyRequestHigher: buyRequestHigher,
-                buyRequestLower: buyRequestLower
-            };
-            
-            const propRequestHigher = {
-                proposal: 1,
-                req_id: reqIdHigher,
-                amount: finalStake,
-                basis: 'stake',
-                contract_type: 'CALL',
-                currency: botState.currency || 'USD',
-                symbol: activeSymbol,
-                duration: 5,
-                duration_unit: 't',
-                barrier: signal.barrierHigher
-            };
-            
-            const propRequestLower = {
-                proposal: 1,
-                req_id: reqIdLower,
-                amount: finalStake,
-                basis: 'stake',
-                contract_type: 'PUT',
-                currency: botState.currency || 'USD',
-                symbol: activeSymbol,
-                duration: 5,
-                duration_unit: 't',
-                barrier: signal.barrierLower
-            };
-            
-            botState.isBuying = true;
-            botState.lastTradeTime = now;
-            
-            console.log(`🔍 [CODY FILTER] Consultando cotizaciones (proposals) a Deriv...`);
-            console.log(`   ⬆️ Proposal Higher con req_id: ${reqIdHigher} y barrera ${signal.barrierHigher}`);
-            console.log(`   ⬇️ Proposal Lower con req_id: ${reqIdLower} y barrera ${signal.barrierLower}`);
-            
-            ws.send(JSON.stringify(propRequestHigher));
-            ws.send(JSON.stringify(propRequestLower));
-            return;
-        }
-        
-        // Si no está habilitado el filtro de payout previo, disparar compra directa
-        botState.activeContractIds = [];
-        botState.dualContractsState = {
-            higher: { id: null, finalized: false, profit: 0, won: false },
-            lower: { id: null, finalized: false, profit: 0, won: false }
-        };
-        
-        botState.isBuying = true;
-        botState.lastTradeTime = now;
-        
-        console.log(`🎯 [DUAL SNIPER] DISPARANDO AMBOS LADOS SIMULTÁNEAMENTE [${activeSymbol}] | Stake: $${finalStake.toFixed(2)} c/u | 5 Ticks`);
-        console.log(`   ⬆️ HIGHER con barrera ${signal.barrierHigher}`);
-        console.log(`   ⬇️ LOWER con barrera ${signal.barrierLower}`);
-        
-        ws.send(JSON.stringify(buyRequestHigher));
-        ws.send(JSON.stringify(buyRequestLower));
-        return;
-    }
     
     const buyRequest = {
         buy: 1,
@@ -1600,33 +1021,13 @@ function tryFireTrade() {
             basis: 'stake',
             contract_type: signal.contractType,
             currency: botState.currency || 'USD',
-            symbol: activeSymbol
+            symbol: activeSymbol,
+            duration: 1,
+            duration_unit: 't'
         }
     };
     
-    if (signal.contractType === 'ACCU') {
-        botState.accuCurrentPeak = 0; // Resetear pico de profit al abrir nuevo ACCU
-        
-        // Registrar overrides dinámicos en botState para que el monitor de ticks los lea
-        botState.accuTargetTicksOverride = signal.accuTargetTicksOverride || null;
-        botState.accuMaxTicksOverride = signal.accuMaxTicksOverride || null;
-        
-        const growthRate = signal.accuGrowthRateOverride || botState.accuGrowthRate || 0.02;
-        buyRequest.parameters.growth_rate = growthRate;
-        botState.accuCurrentGrowthRate = growthRate; // Guardar para cálculos de salida
-        
-        const targetTicks = botState.accuTargetTicksOverride || botState.accuTargetTicks || 3;
-        const maxTicks = botState.accuMaxTicksOverride || botState.accuMaxTicks || 4;
-        console.log(`💰 ACCU Config: growth_rate=${(growthRate*100).toFixed(0)}% | MinTicks=${targetTicks} | MaxTicks=${maxTicks} | MinProfit=${((botState.accuMinProfitRatio||0.0)*100).toFixed(0)}% del stake`);
-    } else if (signal.engine === 'CODY_BARRIER') {
-        buyRequest.parameters.duration = 7;
-        buyRequest.parameters.duration_unit = 't';
-    } else {
-        buyRequest.parameters.duration = 1;
-        buyRequest.parameters.duration_unit = 't';
-    }
-    
-    if (signal.barrier !== null) {
+    if (signal.barrier !== null && signal.barrier !== undefined) {
         buyRequest.parameters.barrier = signal.barrier;
     }
     
