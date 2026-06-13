@@ -926,7 +926,19 @@ function evaluateMarkovDiffers() {
         let bestTarget = -1;
         let lowestProb = 100;
 
-        let activeThreshold = botState.markovThreshold || 4.0;
+        // Determinar Umbral Markov Dinámico según la Entropía de Shannon (Medida de Caos)
+        let activeThreshold = 4.0;
+        if (entropyVal < 3.10) {
+            activeThreshold = 4.2; // Alta predictibilidad (entropía baja) -> Umbral flexible de 4.2%
+        } else if (entropyVal < 3.20) {
+            activeThreshold = 3.5; // Caos medio -> Umbral moderado de 3.5%
+        } else {
+            activeThreshold = 2.5; // Caos alto (entropía cercana a 3.25) -> Umbral estricto de 2.5%
+        }
+
+        // Guardar el umbral dinámico actual en el estado del mercado para visibilidad
+        mState.activeThreshold = activeThreshold;
+
         if (isRecovery) {
             // 🛡️ Filtro de Entropía Estricto en Cobertura: Evitar mercados muy caóticos para recuperar capital
             if (entropyVal >= 3.22) {
@@ -935,8 +947,8 @@ function evaluateMarkovDiffers() {
                 }
                 continue; // Saltar este mercado porque está muy ruidoso/caótico
             }
-            // Martingala Markov Filtrada Dinámica (Cobertura más estricta con piso de 3.8%)
-            activeThreshold = Math.max(3.8, activeThreshold * 0.8);
+            // Martingala Markov Filtrada Dinámica (Cobertura más estricta reducida un 20%)
+            activeThreshold = parseFloat((activeThreshold * 0.8).toFixed(2));
         }
 
         for (let target = 0; target <= 9; target++) {
@@ -961,7 +973,7 @@ function evaluateMarkovDiffers() {
                 ticksRemaining: 1,
                 reason: isRecovery 
                     ? `🛡️ COBERTURA SEGURA: Markov ${sym} Prob ${lowestProb.toFixed(1)}% (Umbral estricto: ${activeThreshold.toFixed(1)}%)`
-                    : `Markov ${sym} Prob ${lowestProb.toFixed(1)}%`
+                    : `Markov ${sym} Prob ${lowestProb.toFixed(1)}% (Umbral dinámico: ${activeThreshold.toFixed(1)}%)`
             };
         }
     }
