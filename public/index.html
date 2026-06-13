@@ -1516,13 +1516,12 @@ body::before {
         <input type="number" id="inputTakeProfit" value="15" min="1" max="1000" step="1" onchange="handleConfigChange()" onblur="handleConfigChange()">
       </div>
 
-      <div class="control-group">
-        <label title="Estrategia del Sniper Differ: Markov (Estadístico) o HFR (Racha de alta frecuencia)">Estrategia Differ</label>
+        <label title="Estrategia del Sniper Differ: Markov (Estadístico), HFR (Racha de alta frecuencia) o Markov Match (EV+)">Estrategia Differ</label>
         <select id="selectDifferStrategy" onchange="handleConfigChange()">
           <option value="MARKOV">🧠 Markov</option>
           <option value="HFR">⚡ HFR</option>
+          <option value="MARKOV_MATCH">🎯 Markov Match (EV+)</option>
         </select>
-      </div>
 
       <div class="control-group" style="display: none;">
         <label title="Umbral de Probabilidad de Markov (Menor = Más preciso, Mayor = Más trades)">Umbral Markov (%)</label>
@@ -1978,16 +1977,19 @@ function updateUI(data) {
 
   const engineNameMarkov = $('engineNameMarkov');
   if (engineNameMarkov) {
-    engineNameMarkov.textContent = data.differStrategy === 'HFR' ? 'HFR DIFFERS' : 'MARKOV DIFFERS';
+    engineNameMarkov.textContent = data.differStrategy === 'HFR' ? 'HFR DIFFERS' : (data.differStrategy === 'MARKOV_MATCH' ? 'MARKOV MATCH' : 'MARKOV DIFFERS');
   }
   const engineSubtitleMarkov = $('engineSubtitleMarkov');
   if (engineSubtitleMarkov) {
-    engineSubtitleMarkov.textContent = data.differStrategy === 'HFR' ? 'High-Frequency Streak Sniper' : 'R_50 Statistical Sniper';
+    engineSubtitleMarkov.textContent = data.differStrategy === 'HFR' ? 'High-Frequency Streak Sniper' : (data.differStrategy === 'MARKOV_MATCH' ? 'Probability Edge MATCH' : 'R_50 Statistical Sniper');
   }
 
   // Engine stats
   if (data.engineStats.CODY_BARRIER) updateEngineStats('cody', data.engineStats.CODY_BARRIER);
-  if (data.engineStats.MARKOV_DIFFERS) updateEngineStats('markov', data.engineStats.MARKOV_DIFFERS);
+  if (data.engineStats.MARKOV_DIFFERS && data.engineStats.MARKOV_MATCH) {
+    const activeStats = data.differStrategy === 'MARKOV_MATCH' ? data.engineStats.MARKOV_MATCH : data.engineStats.MARKOV_DIFFERS;
+    updateEngineStats('markov', activeStats);
+  }
   if (data.engineStats.ACCUMULATOR) updateEngineStats('acc', data.engineStats.ACCUMULATOR);
 
   // Darwin mode badges toggling
@@ -2031,7 +2033,7 @@ function updateUI(data) {
   $('shannonValue').textContent = parseFloat(data.shannonEntropy || 0).toFixed(3);
   const markovLabel = $('markovValue').previousElementSibling;
   if (markovLabel) {
-    markovLabel.textContent = data.differStrategy === 'HFR' ? 'Racha Máxima' : 'Markov Edge';
+    markovLabel.textContent = data.differStrategy === 'HFR' ? 'Racha Máxima' : (data.differStrategy === 'MARKOV_MATCH' ? 'Match Prob' : 'Markov Edge');
   }
   if (data.differStrategy === 'HFR') {
     $('markovValue').textContent = (data.markovEdge || 0).toFixed(0);

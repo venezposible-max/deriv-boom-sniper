@@ -183,6 +183,7 @@ let botState = {
     engineCodyBarrier: false,
     engineMarkovDiffers: true,
     markovThreshold: 4.0,
+    markovMatchThreshold: 18.0,
     
     // Cody standard deviation multiplier
     codyMultiplier: 1.8,
@@ -227,7 +228,8 @@ let botState = {
         OVER_UNDER: { wins: 0, losses: 0, pnl: 0, autoDisabled: false },
         ACCUMULATOR: { wins: 0, losses: 0, pnl: 0, autoDisabled: false },
         CODY_BARRIER: { wins: 0, losses: 0, pnl: 0, autoDisabled: false },
-        MARKOV_DIFFERS: { wins: 0, losses: 0, pnl: 0, autoDisabled: false }
+        MARKOV_DIFFERS: { wins: 0, losses: 0, pnl: 0, autoDisabled: false },
+        MARKOV_MATCH: { wins: 0, losses: 0, pnl: 0, autoDisabled: false }
     },
     
     // ─── Analíticas ───
@@ -426,6 +428,31 @@ function calcEntropy(hist, range) {
 function calcMarkovEdge(hist) {
     if (!hist || hist.length < 100) return 0;
     
+    if (botState.differStrategy === 'MARKOV_MATCH') {
+        let matrix = Array(10).fill(0).map(() => Array(10).fill(0));
+        let counts = Array(10).fill(0);
+
+        for (let i = 1; i < hist.length; i++) {
+            let prev = hist[i - 1];
+            let curr = hist[i];
+            matrix[prev][curr]++;
+            counts[prev]++;
+        }
+
+        const currentDigit = hist[hist.length - 1];
+        let highestProb = 0;
+
+        for (let target = 0; target <= 9; target++) {
+            if (counts[currentDigit] > 0) {
+                let prob = (matrix[currentDigit][target] / counts[currentDigit]) * 100;
+                if (prob > highestProb) {
+                    highestProb = prob;
+                }
+            }
+        }
+        return parseFloat(highestProb.toFixed(1));
+    }
+    
     let matrix = Array(10).fill(0).map(() => Array(10).fill(0));
     let counts = Array(10).fill(0);
 
@@ -566,6 +593,16 @@ function getDynamicCooldown() {
  * Calcular Stake Ajustado según Escudo de Momentum y Martingala
  */
 function getAdjustedStake(baseStake, engineMultiplier) {
+    if (botState.currentEngine === 'MARKOV_MATCH') {
+        const progression = [1, 1, 1, 1, 2, 2, 3, 4, 5, 7, 10, 14, 19, 26, 36];
+        const step = Math.min(botState.martingaleStep, progression.length - 1);
+        let adjusted = baseStake * progression[step];
+        if (adjusted > 0 && adjusted < 0.35) {
+            adjusted = 0.35;
+        }
+        return parseFloat(adjusted.toFixed(2));
+    }
+
     let adjusted = (baseStake || 1) * (engineMultiplier || 1.0);
     
     // Aplicar Cobertura Híbrida (Tridente de Cobertura Híbrida)
@@ -734,6 +771,96 @@ function evaluateMarkovDiffers(sym) {
             reason: isRecovery 
                 ? `🛡️ COBERTURA SEGURA: Markov ${sym} Prob ${lowestProb.toFixed(1)}% (Umbral estricto: ${activeThreshold.toFixed(1)}%)`
                 : `Markov ${sym} Prob ${lowestProb.toFixed(1)}% (Umbral dinámico: ${activeThreshold.toFixed(1)}%)`
+        };
+    }
+
+    return null;
+}
+
+/**
+ * 🎯 MOTOR MARKOV MATCH: HIGH-FREQUENCY REPETITION STREAK MATCH SNIPER
+ * Compra DIGITMATCH cuando la probabilidad de transición estimada es muy alta.
+ */
+function evaluateMarkovMatch(sym) {
+    if (!botState.engineMarkovDiffers) return null;
+    
+    const now = Date.now();
+    const mState = botState.markets[sym];
+    if (!mState || !mState.digitHistory) return null;
+    if (mState.lockedUntil && now < mState.lockedUntil) return null;
+    const hist = mState.digitHistory;
+    
+    // Wait until we have 2000 ticks for this specific market to ensure full history
+    if (hist.length < 2000) return null;
+
+    // Determinar ventana de entrenamiento adaptativa según la Entropía de Shannon (Medida de Caos)
+    const entropyVal = parseFloat(mState.shannonEntropy || 3.322);
+    
+    // Para Match, requerimos alta predictibilidad, por lo que saltamos mercados muy caóticos
+    if (entropyVal >= 3.25) {
+        return null;
+    }
+
+    let adaptiveWindow = 2000;
+    if (entropyVal < 3.10) {
+        adaptiveWindow = 500; // Alta estructura: ventana corta para capturar la anomalía transitoria
+    } else if (entropyVal < 3.25) {
+        adaptiveWindow = 1000; // Estructura media
+    }
+
+    const sliceStart = Math.max(0, hist.length - adaptiveWindow);
+    const trainingHist = hist.slice(sliceStart);
+
+    let matrix = Array(10).fill(0).map(() => Array(10).fill(0));
+    let weightedCounts = Array(10).fill(0);
+    let rawCounts = Array(10).fill(0);
+
+    const N = trainingHist.length;
+
+    // Construir matriz de transición ponderada
+    for (let i = 1; i < N; i++) {
+        let prev = trainingHist[i - 1];
+        let curr = trainingHist[i];
+        
+        let age = N - 1 - i;
+        let weight = DECAY_WEIGHTS[age] || Math.pow(DECAY_FACTOR, age);
+        
+        matrix[prev][curr] += weight;
+        weightedCounts[prev] += weight;
+        rawCounts[prev]++;
+    }
+
+    const currentDigit = hist[hist.length - 1];
+
+    // Muestra Mínima Significativa (Mínimo 40 ocurrencias en la ventana activa)
+    if (rawCounts[currentDigit] < 40) {
+        return null;
+    }
+
+    let bestTarget = -1;
+    let highestProb = 0;
+
+    for (let target = 0; target <= 9; target++) {
+        if (weightedCounts[currentDigit] > 0) {
+            let prob = (matrix[currentDigit][target] / weightedCounts[currentDigit]) * 100;
+            if (prob > highestProb) {
+                highestProb = prob;
+                bestTarget = target;
+            }
+        }
+    }
+
+    const matchThreshold = botState.markovMatchThreshold || 18.0;
+
+    if (bestTarget !== -1 && highestProb >= matchThreshold) {
+        console.log(`🎯 [MARKOV MATCH] Anomalía detectada en ${sym}. Probabilidad de acierto: ${highestProb.toFixed(2)}%. Disparando MATCH a ${bestTarget}`);
+        return {
+            engine: 'MARKOV_MATCH',
+            contractType: 'DIGITMATCH',
+            symbol: sym,
+            barrier: String(bestTarget),
+            ticksRemaining: 1,
+            reason: `Markov Match ${sym} Prob ${highestProb.toFixed(1)}% (Umbral: ${matchThreshold}%)`
         };
     }
 
@@ -948,10 +1075,12 @@ function tryFireTrade() {
                 continue;
             }
             
-            // 🎯 MOTOR MARKOV OMNISCIENTE / HFR
+            // 🎯 MOTOR MARKOV OMNISCIENTE / HFR / MATCH
             if (botState.engineMarkovDiffers) {
                 if (botState.differStrategy === 'HFR') {
                     signal = evaluateHFRDiffers(sym);
+                } else if (botState.differStrategy === 'MARKOV_MATCH') {
+                    signal = evaluateMarkovMatch(sym);
                 } else {
                     signal = evaluateMarkovDiffers(sym);
                 }
@@ -1110,7 +1239,10 @@ function finalizeTrade(c) {
     // ─── ACTUALIZACIÓN DE ESTADO DE COBERTURA CUÁNTICA HÍBRIDA ───
     if (botState.coberturaEnabled) {
         if (isWin) {
-            if (botState.debtQueue > 0) {
+            if (engine === 'MARKOV_MATCH') {
+                console.log(`🛡️ MARKOV MATCH: ¡Victoria! Progresión reiniciada a base.`);
+                botState.martingaleStep = 0;
+            } else if (botState.debtQueue > 0) {
                 // Nivel 2: Split Recovery activo
                 botState.debtQueue -= profit;
                 if (botState.debtQueue <= 0.01) {
@@ -1127,7 +1259,16 @@ function finalizeTrade(c) {
             }
         } else {
             // Caso de pérdida
-            if (engine === 'MARKOV_DIFFERS') {
+            if (engine === 'MARKOV_MATCH') {
+                botState.martingaleStep++;
+                const maxSteps = 15;
+                if (botState.martingaleStep >= maxSteps) {
+                    console.log(`💀 MARKOV MATCH: Límite de progresión alcanzado. Reiniciando a base por seguridad.`);
+                    botState.martingaleStep = 0;
+                } else {
+                    console.log(`📈 MARKOV MATCH: Pérdida. Progresión Match a nivel ${botState.martingaleStep}`);
+                }
+            } else if (engine === 'MARKOV_DIFFERS') {
                 if (botState.debtQueue > 0) {
                     // Ya estábamos en Nivel 2 (Split Recovery) y volvimos a perder
                     botState.debtQueue += Math.abs(profit);
@@ -1499,7 +1640,8 @@ app.post('/api/control', (req, res) => {
             OVER_UNDER: { wins: 0, losses: 0, pnl: 0, autoDisabled: false },
             ACCUMULATOR: { wins: 0, losses: 0, pnl: 0, autoDisabled: false },
             CODY_BARRIER: { wins: 0, losses: 0, pnl: 0, autoDisabled: false },
-            MARKOV_DIFFERS: { wins: 0, losses: 0, pnl: 0, autoDisabled: false }
+            MARKOV_DIFFERS: { wins: 0, losses: 0, pnl: 0, autoDisabled: false },
+            MARKOV_MATCH: { wins: 0, losses: 0, pnl: 0, autoDisabled: false }
         };
         saveState();
         console.log('🔄 REGISTROS DE REINICIO DIARIO: Métricas restablecidas en KRAKEN.');
