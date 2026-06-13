@@ -586,7 +586,7 @@ function calcEWMFrequency(hist, alpha = 0.05) {
  * Cooldown Dinámico Basado en Caos (Entropía) y Momentum de Rachas
  */
 function getDynamicCooldown() {
-    return 1000; // Cooldown de 1 segundo para fluidez máxima y análisis rápido sin esperas
+    return 30000; // Cooldown de 30 segundos para máxima selectividad y calidad de señal
 }
 
 /**
@@ -673,15 +673,15 @@ function evaluateMarkovDiffers(sym) {
     const entropyVal = parseFloat(mState.shannonEntropy || 3.322);
     let isRecovery = botState.martingaleStep > 0 || botState.debtQueue > 0;
 
-    // 🎁 Birthday Shield: Filtro de Entropía Absoluto para operaciones base (Límite 3.25)
-    if (!isRecovery && entropyVal >= 3.25) {
-        return null; // Saltar mercados muy caóticos para operaciones base
+    // 🎁 Birthday Shield: Filtro de Entropía Absoluto para operaciones base (Límite 3.15)
+    if (!isRecovery && entropyVal >= 3.15) {
+        return null; // Saltar mercados caóticos para operaciones base
     }
 
     let adaptiveWindow = 2000;
-    if (entropyVal < 3.10) {
+    if (entropyVal < 3.05) {
         adaptiveWindow = 500; // Alta estructura: ventana corta para capturar la anomalía transitoria
-    } else if (entropyVal < 3.25) {
+    } else if (entropyVal < 3.15) {
         adaptiveWindow = 1000; // Estructura media
     }
 
@@ -715,25 +715,26 @@ function evaluateMarkovDiffers(sym) {
     }
 
     // Determinar Umbral Markov Dinámico según la Entropía de Shannon (Medida de Caos)
-    let activeThreshold = 4.0;
-    if (entropyVal < 3.10) {
-        activeThreshold = 4.2; // Alta predictibilidad (entropía baja) -> Umbral flexible de 4.2%
-    } else if (entropyVal < 3.20) {
-        activeThreshold = 3.5; // Caos medio -> Umbral moderado de 3.5%
+    // ULTRA-ESTRICTO: Solo disparar con anomalías extremadamente fuertes
+    let activeThreshold = 1.5;
+    if (entropyVal < 3.05) {
+        activeThreshold = 2.5; // Alta predictibilidad (entropía muy baja) -> Umbral de 2.5%
+    } else if (entropyVal < 3.10) {
+        activeThreshold = 2.0; // Estructura media -> Umbral de 2.0%
     } else {
-        activeThreshold = 2.5; // Caos alto (entropía cercana a 3.25) -> Umbral estricto de 2.5%
+        activeThreshold = 1.5; // Estructura baja (entropía cercana a 3.15) -> Umbral ultra-estricto de 1.5%
     }
 
     // Guardar el umbral dinámico actual en el estado del mercado para visibilidad
     mState.activeThreshold = activeThreshold;
 
     if (isRecovery) {
-        // 🛡️ Filtro de Entropía Estricto en Cobertura: Evitar mercados muy caóticos para recuperar capital
-        if (entropyVal >= 3.22) {
+        // 🛡️ Filtro de Entropía Estricto en Cobertura: Evitar mercados caóticos para recuperar capital
+        if (entropyVal >= 3.15) {
             if (Date.now() % 30000 < 1500) {
-                console.log(`🛡️ [KRAKEN SHIELD] ${sym} ignorado para cobertura por alta entropía (${entropyVal.toFixed(3)} >= 3.22)`);
+                console.log(`🛡️ [KRAKEN SHIELD] ${sym} ignorado para cobertura por alta entropía (${entropyVal.toFixed(3)} >= 3.15)`);
             }
-            return null; // Saltar este mercado porque está muy ruidoso/caótico
+            return null; // Saltar este mercado porque está ruidoso/caótico
         }
         // Martingala Markov Filtrada Dinámica (Cobertura más estricta reducida un 20%)
         activeThreshold = parseFloat((activeThreshold * 0.8).toFixed(2));
@@ -889,13 +890,13 @@ function evaluateHFRDiffers(sym) {
     
     const entropyVal = parseFloat(mState.shannonEntropy || 3.322);
     
-    // 🎁 Birthday Shield: Filtro de Entropía Absoluto para operaciones base (Límite 3.25)
-    if (!isRecovery && entropyVal >= 3.25) {
-        return null; // Saltar mercados muy caóticos para operaciones base
+    // 🎁 Birthday Shield: Filtro de Entropía Absoluto para operaciones base (Límite 3.15)
+    if (!isRecovery && entropyVal >= 3.15) {
+        return null; // Saltar mercados caóticos para operaciones base
     }
     
     if (isRecovery) {
-        if (entropyVal >= 3.22) return null; // Evitar mercados caóticos para cobertura
+        if (entropyVal >= 3.15) return null; // Evitar mercados caóticos para cobertura
     }
     
     const hist = mState.digitHistory;
@@ -979,6 +980,22 @@ function tryFireTrade() {
             console.log(`⏳ FILTRO LATENCIA: Operaciones en pausa por alta latencia de red (${botState.lastMeasuredLatency}ms > 250ms).`);
         }
         return;
+    }
+
+    // 🔓 AUTO-CLEAR de deuda atrapada: Si hay deuda pero no se ha operado en 30 minutos,
+    // liquidar la deuda como pérdida aceptada y reiniciar para no quedar congelado permanentemente.
+    if ((botState.debtQueue > 0 || botState.martingaleStep > 0) && botState.lastTradeTime > 0) {
+        const stuckMinutes = (now - botState.lastTradeTime) / 60000;
+        if (stuckMinutes >= 30) {
+            const clearedDebt = botState.debtQueue || 0;
+            console.log(`🔓 [AUTO-CLEAR] Deuda de $${clearedDebt.toFixed(2)} congelada por ${stuckMinutes.toFixed(0)} minutos. Liquidando como pérdida aceptada para reiniciar operaciones limpias.`);
+            botState.debtQueue = 0;
+            botState.martingaleStep = 0;
+            botState.baseStake = botState.baseStakeOriginal || 0.35;
+            botState.consecutiveWins = 0;
+            botState.lastTradeTime = now; // Reset para evitar re-trigger inmediato
+            saveState();
+        }
     }
 
     // Prevención de operaciones simultáneas correlacionadas (Anti-Correlación)
