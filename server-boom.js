@@ -262,7 +262,7 @@ let botState = {
 //  CARGAR ESTADO PERSISTENTE
 // ════════════════════════════════════════════════════════════════
 // Inicializar digitFrequency de cada mercado
-const SCAN_SYMBOLS = ['R_50', 'R_75', 'R_100', '1HZ10V', '1HZ25V', '1HZ100V'];
+const SCAN_SYMBOLS = ['R_50', 'R_75', 'R_100', '1HZ100V'];
 SCAN_SYMBOLS.forEach(sym => {
     const m = botState.markets[sym];
     if (m && m.digitFrequency) {
