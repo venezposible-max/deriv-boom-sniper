@@ -673,15 +673,15 @@ function evaluateMarkovDiffers(sym) {
     const entropyVal = parseFloat(mState.shannonEntropy || 3.322);
     let isRecovery = botState.martingaleStep > 0 || botState.debtQueue > 0;
 
-    // 🎁 Birthday Shield: Filtro de Entropía Absoluto para operaciones base (Límite 3.15)
-    if (!isRecovery && entropyVal >= 3.15) {
+    // 🎁 Birthday Shield: Filtro de Entropía Absoluto para operaciones base (Límite 3.26)
+    if (!isRecovery && entropyVal >= 3.26) {
         return null; // Saltar mercados caóticos para operaciones base
     }
 
     let adaptiveWindow = 2000;
-    if (entropyVal < 3.05) {
+    if (entropyVal < 3.10) {
         adaptiveWindow = 500; // Alta estructura: ventana corta para capturar la anomalía transitoria
-    } else if (entropyVal < 3.15) {
+    } else if (entropyVal < 3.26) {
         adaptiveWindow = 1000; // Estructura media
     }
 
@@ -715,14 +715,14 @@ function evaluateMarkovDiffers(sym) {
     }
 
     // Determinar Umbral Markov Dinámico según la Entropía de Shannon (Medida de Caos)
-    // ULTRA-ESTRICTO: Solo disparar con anomalías extremadamente fuertes
-    let activeThreshold = 1.5;
-    if (entropyVal < 3.05) {
-        activeThreshold = 2.5; // Alta predictibilidad (entropía muy baja) -> Umbral de 2.5%
-    } else if (entropyVal < 3.10) {
-        activeThreshold = 2.0; // Estructura media -> Umbral de 2.0%
+    // EQUILIBRADO: Ni muy calvo ni con dos pelucas.
+    let activeThreshold = 2.2;
+    if (entropyVal < 3.10) {
+        activeThreshold = 3.8; // Alta predictibilidad (entropía baja) -> Umbral de 3.8%
+    } else if (entropyVal < 3.20) {
+        activeThreshold = 3.0; // Estructura media -> Umbral de 3.0%
     } else {
-        activeThreshold = 1.5; // Estructura baja (entropía cercana a 3.15) -> Umbral ultra-estricto de 1.5%
+        activeThreshold = 2.2; // Estructura baja (entropía cercana a 3.26) -> Umbral equilibrado de 2.2%
     }
 
     // Guardar el umbral dinámico actual en el estado del mercado para visibilidad
@@ -730,9 +730,9 @@ function evaluateMarkovDiffers(sym) {
 
     if (isRecovery) {
         // 🛡️ Filtro de Entropía Estricto en Cobertura: Evitar mercados caóticos para recuperar capital
-        if (entropyVal >= 3.15) {
+        if (entropyVal >= 3.24) {
             if (Date.now() % 30000 < 1500) {
-                console.log(`🛡️ [KRAKEN SHIELD] ${sym} ignorado para cobertura por alta entropía (${entropyVal.toFixed(3)} >= 3.15)`);
+                console.log(`🛡️ [KRAKEN SHIELD] ${sym} ignorado para cobertura por alta entropía (${entropyVal.toFixed(3)} >= 3.24)`);
             }
             return null; // Saltar este mercado porque está ruidoso/caótico
         }
@@ -890,13 +890,13 @@ function evaluateHFRDiffers(sym) {
     
     const entropyVal = parseFloat(mState.shannonEntropy || 3.322);
     
-    // 🎁 Birthday Shield: Filtro de Entropía Absoluto para operaciones base (Límite 3.15)
-    if (!isRecovery && entropyVal >= 3.15) {
+    // 🎁 Birthday Shield: Filtro de Entropía Absoluto para operaciones base (Límite 3.26)
+    if (!isRecovery && entropyVal >= 3.26) {
         return null; // Saltar mercados caóticos para operaciones base
     }
     
     if (isRecovery) {
-        if (entropyVal >= 3.15) return null; // Evitar mercados caóticos para cobertura
+        if (entropyVal >= 3.24) return null; // Evitar mercados caóticos para cobertura
     }
     
     const hist = mState.digitHistory;
