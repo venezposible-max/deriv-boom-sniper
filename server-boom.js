@@ -732,9 +732,9 @@ function evaluateMarkovDiffers(sym) {
 
     if (isRecovery) {
         // 🛡️ Filtro de Entropía Estricto en Cobertura: Evitar mercados caóticos para recuperar capital
-        if (entropyVal >= 3.24) {
+        if (entropyVal >= 3.29) {
             if (Date.now() % 30000 < 1500) {
-                console.log(`🛡️ [KRAKEN SHIELD] ${sym} ignorado para cobertura por alta entropía (${entropyVal.toFixed(3)} >= 3.24)`);
+                console.log(`🛡️ [KRAKEN SHIELD] ${sym} ignorado para cobertura por alta entropía (${entropyVal.toFixed(3)} >= 3.29)`);
             }
             return null; // Saltar este mercado porque está ruidoso/caótico
         }
@@ -927,7 +927,7 @@ function evaluateHFRDiffers(sym) {
     }
     
     if (isRecovery) {
-        if (entropyVal >= 3.24) return null; // Evitar mercados caóticos para cobertura
+        if (entropyVal >= 3.29) return null; // Evitar mercados caóticos para cobertura
     }
     
     const hist = mState.digitHistory;
