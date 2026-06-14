@@ -689,12 +689,13 @@ function evaluateMarkovDiffers(sym) {
     const trainingHist = hist.slice(sliceStart);
 
     let matrix = Array(10).fill(0).map(() => Array(10).fill(0));
+    let matrixRaw = Array(10).fill(0).map(() => Array(10).fill(0)); // Matriz de transiciones raw (sin ponderar)
     let weightedCounts = Array(10).fill(0);
     let rawCounts = Array(10).fill(0);
 
     const N = trainingHist.length;
 
-    // Construir matriz de transición ponderada
+    // Construir matriz de transición ponderada y raw
     for (let i = 1; i < N; i++) {
         let prev = trainingHist[i - 1];
         let curr = trainingHist[i];
@@ -703,6 +704,7 @@ function evaluateMarkovDiffers(sym) {
         let weight = DECAY_WEIGHTS[age] || Math.pow(DECAY_FACTOR, age);
         
         matrix[prev][curr] += weight;
+        matrixRaw[prev][curr]++;
         weightedCounts[prev] += weight;
         rawCounts[prev]++;
     }
@@ -741,29 +743,58 @@ function evaluateMarkovDiffers(sym) {
     }
 
     let bestTarget = -1;
-    let lowestProb = 100;
+    let lowestZ = 0; // Buscamos el Z-score más negativo (anomalía más fría y estadísticamente significativa)
+    let bestProb = 100;
+
+    // Determinar Z-score dinámico según la Entropía de Shannon (Medida de Caos)
+    let zThreshold = -2.0; // Mínimo estadístico (2 desviaciones estándar)
+    if (entropyVal < 3.10) {
+        zThreshold = -1.8; // Alta estructura -> Admitimos anomalías ligeramente menores
+    } else if (entropyVal < 3.20) {
+        zThreshold = -2.2; // Estructura media
+    } else {
+        zThreshold = -2.5; // Estructura baja (caos alto) -> Exigimos anomalía de gran significación estadística
+    }
+
+    if (isRecovery) {
+        zThreshold -= 0.3; // Cobertura segura aún más exigente (ej: -2.5 -> -2.8)
+    }
 
     for (let target = 0; target <= 9; target++) {
-        if (weightedCounts[currentDigit] > 0) {
-            let prob = (matrix[currentDigit][target] / weightedCounts[currentDigit]) * 100;
-            if (prob > 0 && prob <= activeThreshold) {
+        if (rawCounts[currentDigit] >= 40) {
+            const totalRaw = rawCounts[currentDigit];
+            const observedRaw = matrixRaw[currentDigit][target];
+            
+            // Test de hipótesis: Ho = probabilidad es 10% (distribución uniforme)
+            const expected = totalRaw * 0.1;
+            const sd = Math.sqrt(totalRaw * 0.1 * 0.9);
+            const zScore = (observedRaw - expected) / sd;
+
+            if (zScore <= zThreshold) {
                 // 🛡️ Filtro de Micro-Rachas (Anti-Repetición / Anti-Coiling)
-                // Si el dígito target ha salido 2 o más veces en los últimos 8 ticks, se ignora
                 const last8Ticks = hist.slice(-8);
                 const occurrences = last8Ticks.filter(d => d === target).length;
                 if (occurrences >= 2) {
-                    continue; // Evitar usar como barrera un dígito que ya se está repitiendo en el corto plazo
+                    continue;
                 }
-                if (prob < lowestProb) {
-                    lowestProb = prob;
+
+                // 🛡️ Filtro de Barrera Consecutiva (Anti-Acomodamiento)
+                // Evitamos usar exactamente la misma barrera del último trade para diversificar riesgo
+                if (botState.lastBarrier !== undefined && String(target) === String(botState.lastBarrier)) {
+                    continue;
+                }
+
+                if (zScore < lowestZ) {
+                    lowestZ = zScore;
                     bestTarget = target;
+                    bestProb = (matrix[currentDigit][target] / weightedCounts[currentDigit]) * 100;
                 }
             }
         }
     }
 
     if (bestTarget !== -1) {
-        console.log(`🎯 [MARKOV OMNISCIENTE] Anomalía detectada en ${sym}. Probabilidad de riesgo: ${lowestProb.toFixed(2)}%. Disparando DIFFERS a ${bestTarget}`);
+        console.log(`🎯 [MARKOV OMNISCIENTE] Anomalía detectada en ${sym}. Z-score: ${lowestZ.toFixed(2)} | Prob: ${bestProb.toFixed(2)}%. Disparando DIFFERS a ${bestTarget}`);
         return {
             engine: 'MARKOV_DIFFERS',
             contractType: 'DIGITDIFF',
@@ -771,8 +802,8 @@ function evaluateMarkovDiffers(sym) {
             barrier: String(bestTarget),
             ticksRemaining: 1,
             reason: isRecovery 
-                ? `🛡️ COBERTURA SEGURA: Markov ${sym} Prob ${lowestProb.toFixed(1)}% (Umbral estricto: ${activeThreshold.toFixed(1)}%)`
-                : `Markov ${sym} Prob ${lowestProb.toFixed(1)}% (Umbral dinámico: ${activeThreshold.toFixed(1)}%)`
+                ? `🛡️ COBERTURA SEGURA: Markov ${sym} Z:${lowestZ.toFixed(1)} Prob ${bestProb.toFixed(1)}% (Umbral Z: ${zThreshold.toFixed(1)})`
+                : `Markov ${sym} Z:${lowestZ.toFixed(1)} Prob ${bestProb.toFixed(1)}% (Umbral Z: ${zThreshold.toFixed(1)})`
         };
     }
 
@@ -1135,6 +1166,9 @@ function tryFireTrade() {
                 entryTickPrice: mState ? mState.lastTickPrice : botState.lastTickPrice,
                 ticksRemaining: signal.engine === 'CODY_BARRIER' ? 5 : 1
             };
+            if (signal.barrier !== null && signal.barrier !== undefined) {
+                botState.lastBarrier = signal.barrier;
+            }
             botState.lastTradeTime = Date.now();
         }
         return;
@@ -1167,6 +1201,7 @@ function tryFireTrade() {
     
     if (signal.barrier !== null && signal.barrier !== undefined) {
         buyRequest.parameters.barrier = signal.barrier;
+        botState.lastBarrier = signal.barrier; // Registrar barrera del disparo real
     }
     
     botState.isBuying = true;
