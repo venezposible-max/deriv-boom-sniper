@@ -161,6 +161,7 @@ let botState = {
     differPrecision98: false,
     franklinPerezLogic: true,
     quirurgicoMode: false,
+    recoveryCooldownMs: 300000, // 5 minutos por defecto tras pérdida
     
     // ─── Momentum Shield ───
     consecutiveLosses: 0,
@@ -1054,9 +1055,9 @@ function tryFireTrade() {
             currentCooldown = Math.max(currentCooldown, minQuirurgicoCooldown);
         }
         
-        // Retraso de 60 segundos tras pérdida en operaciones reales para evitar pérdidas seguidas rápidas
+        // Retraso configurado tras pérdida en operaciones reales para evitar pérdidas seguidas rápidas
         if (botState.martingaleStep > 0 || botState.debtQueue > 0) {
-            const recoveryCooldown = 60000; // 60 segundos
+            const recoveryCooldown = botState.recoveryCooldownMs !== undefined ? botState.recoveryCooldownMs : 300000;
             currentCooldown = Math.max(currentCooldown, recoveryCooldown);
         }
         
@@ -1736,7 +1737,7 @@ app.post('/api/config', (req, res) => {
             accuDynamicTicks, accuSafetyFactor,
             hydraMode, ghostActive, codyMultiplier, bollingerShield, fibonacciShield,
             codyPayoutFilterEnabled, codyPayoutFilterMargin, markovThreshold,
-            differStrategy } = req.body;
+            differStrategy, recoveryCooldownMs } = req.body;
     
     if (stake !== undefined) botState.stake = Math.max(0.35, parseFloat(stake));
     if (maxDailyLoss !== undefined) botState.maxDailyLoss = parseFloat(maxDailyLoss);
@@ -1753,6 +1754,7 @@ app.post('/api/config', (req, res) => {
     if (bollingerShield !== undefined) botState.bollingerShield = !!bollingerShield;
     if (fibonacciShield !== undefined) botState.fibonacciShield = !!fibonacciShield;
     if (markovThreshold !== undefined) botState.markovThreshold = Math.max(0.1, Math.min(10.0, parseFloat(markovThreshold)));
+    if (recoveryCooldownMs !== undefined) botState.recoveryCooldownMs = Math.max(0, parseInt(recoveryCooldownMs));
     if (differStrategy !== undefined) {
         botState.differStrategy = String(differStrategy);
         console.log(`⚙️ CONFIG: Estrategia de Differ cambiada a ${botState.differStrategy}`);

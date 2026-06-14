@@ -1516,6 +1516,11 @@ body::before {
         <input type="number" id="inputTakeProfit" value="15" min="1" max="1000" step="1" onchange="handleConfigChange()" onblur="handleConfigChange()">
       </div>
 
+      <div class="control-group">
+        <label title="Tiempo de espera en segundos tras una pérdida antes de realizar la siguiente operación de recuperación (Martingala)">Enfriad. Pérdida (s)</label>
+        <input type="number" id="inputRecoveryCooldown" value="300" min="0" max="3600" step="10" onchange="handleConfigChange()" onblur="handleConfigChange()">
+      </div>
+
         <label title="Estrategia del Sniper Differ: Markov (Estadístico), HFR (Racha de alta frecuencia) o Markov Match (EV+)">Estrategia Differ</label>
         <select id="selectDifferStrategy" onchange="handleConfigChange()">
           <option value="MARKOV">🧠 Markov</option>
@@ -2067,6 +2072,7 @@ function updateUI(data) {
   if (document.activeElement !== $('inputStake')) $('inputStake').value = data.stake;
   if (document.activeElement !== $('inputMaxLoss')) $('inputMaxLoss').value = data.maxDailyLoss;
   if (document.activeElement !== $('inputTakeProfit')) $('inputTakeProfit').value = data.takeProfit;
+  if (document.activeElement !== $('inputRecoveryCooldown')) $('inputRecoveryCooldown').value = data.recoveryCooldownMs !== undefined ? Math.round(data.recoveryCooldownMs / 1000) : 300;
   if (document.activeElement !== $('inputMarkovThreshold')) $('inputMarkovThreshold').value = data.markovThreshold !== undefined ? data.markovThreshold : 4.0;
   if (document.activeElement !== $('selectDifferStrategy')) $('selectDifferStrategy').value = data.differStrategy || 'MARKOV';
   
@@ -2534,6 +2540,7 @@ function handleConfigChange() {
     const stake = parseFloat($('inputStake').value) || 1;
     const maxDailyLoss = parseFloat($('inputMaxLoss').value) || 20;
     const takeProfit = parseFloat($('inputTakeProfit').value) || 15;
+    const recoveryCooldownMs = (parseInt($('inputRecoveryCooldown').value) || 300) * 1000;
     const codyMultiplier = parseFloat($('inputCodyMultiplier').value) || 1.8;
     const codyPayoutFilterMargin = (parseFloat($('inputCodyPayoutFilterMargin').value) || 0) / 100;
     const markovThreshold = parseFloat($('inputMarkovThreshold').value) || 4.0;
@@ -2549,7 +2556,7 @@ function handleConfigChange() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
-          stake, maxDailyLoss, takeProfit, codyMultiplier, codyPayoutFilterMargin, 
+          stake, maxDailyLoss, takeProfit, recoveryCooldownMs, codyMultiplier, codyPayoutFilterMargin, 
           markovThreshold, differStrategy,
           accuGrowthRate, accuDynamicTicks, accuSafetyFactor, accuTargetTicks
         })
