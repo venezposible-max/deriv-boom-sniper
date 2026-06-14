@@ -731,13 +731,6 @@ function evaluateMarkovDiffers(sym) {
     mState.activeThreshold = activeThreshold;
 
     if (isRecovery) {
-        // 🛡️ Filtro de Entropía Estricto en Cobertura: Evitar mercados caóticos para recuperar capital
-        if (entropyVal >= 3.29) {
-            if (Date.now() % 30000 < 1500) {
-                console.log(`🛡️ [KRAKEN SHIELD] ${sym} ignorado para cobertura por alta entropía (${entropyVal.toFixed(3)} >= 3.29)`);
-            }
-            return null; // Saltar este mercado porque está ruidoso/caótico
-        }
         // Martingala Markov Filtrada Dinámica (Cobertura más estricta reducida un 20%)
         activeThreshold = parseFloat((activeThreshold * 0.8).toFixed(2));
     }
@@ -926,9 +919,7 @@ function evaluateHFRDiffers(sym) {
         return null; // Saltar mercados caóticos para operaciones base
     }
     
-    if (isRecovery) {
-        if (entropyVal >= 3.29) return null; // Evitar mercados caóticos para cobertura
-    }
+    // Cobertura HFR no utiliza límite de entropía manual (confía en racha y Z-score)
     
     const hist = mState.digitHistory;
     
