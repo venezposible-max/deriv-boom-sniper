@@ -2032,6 +2032,8 @@ async function connectDeriv() {
     }
 
     try {
+        const maskedToken = activeToken ? `${activeToken.substring(0, 6)}...${activeToken.substring(activeToken.length - 4)}` : 'VACÍO';
+        console.log(`🔑 [DEBUG] Usando APP_ID: "${APP_ID}" y Token: "${maskedToken}" (Largo: ${activeToken.length})`);
         console.log(`🔄 [OTP FLOW] Obteniendo cuentas de Deriv para el modo ${botState.accountMode.toUpperCase()}...`);
         const accountsRes = await fetch('https://api.derivws.com/trading/v1/options/accounts', {
             headers: {
