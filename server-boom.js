@@ -667,8 +667,8 @@ function evaluateMarkovDiffers(sym) {
     if (mState.lockedUntil && now < mState.lockedUntil) return null;
     const hist = mState.digitHistory;
     
-    // Wait until we have 2000 ticks for this specific market to ensure full history
-    if (hist.length < 2000) return null;
+    // Wait until we have 1000 ticks for this specific market to ensure full history
+    if (hist.length < 1000) return null;
 
     // Determinar ventana de entrenamiento adaptativa según la Entropía de Shannon (Medida de Caos)
     const entropyVal = parseFloat(mState.shannonEntropy || 3.322);
@@ -845,8 +845,8 @@ function evaluateMarkovMatch(sym) {
     if (mState.lockedUntil && now < mState.lockedUntil) return null;
     const hist = mState.digitHistory;
     
-    // Wait until we have 2000 ticks for this specific market to ensure full history
-    if (hist.length < 2000) return null;
+    // Wait until we have 1000 ticks for this specific market to ensure full history
+    if (hist.length < 1000) return null;
 
     // Determinar ventana de entrenamiento adaptativa según la Entropía de Shannon (Medida de Caos)
     const entropyVal = parseFloat(mState.shannonEntropy || 3.322);
