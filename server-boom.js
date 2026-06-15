@@ -265,7 +265,7 @@ let botState = {
 //  CARGAR ESTADO PERSISTENTE
 // ════════════════════════════════════════════════════════════════
 // Inicializar digitFrequency de cada mercado
-const SCAN_SYMBOLS = ['R_50', 'R_75'];
+const SCAN_SYMBOLS = ['R_10', 'R_25', 'R_50', 'R_75', 'R_100'];
 
 // ─── Pesos de decaimiento exponencial para Markov Ponderado ───
 const DECAY_FACTOR = 0.998;
