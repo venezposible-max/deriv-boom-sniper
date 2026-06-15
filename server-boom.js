@@ -1213,7 +1213,7 @@ function tryFireTrade() {
             basis: 'stake',
             contract_type: signal.contractType,
             currency: botState.currency || 'USD',
-            symbol: activeSymbol,
+            underlying_symbol: activeSymbol,
             duration: 1,
             duration_unit: 't'
         }
