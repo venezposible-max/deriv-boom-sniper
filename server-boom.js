@@ -2020,7 +2020,10 @@ async function connectDeriv() {
     }
 
     const tokenReal = botState.derivTokenReal || botState.realToken || process.env.DERIV_TOKEN_REAL || '';
-    const tokenDemo = botState.derivTokenDemo || botState.demoToken || process.env.DERIV_TOKEN_DEMO || process.env.DERIV_TOKEN || 'PMIt2RhEjEDbcLD';
+    let tokenDemo = botState.derivTokenDemo || botState.demoToken || process.env.DERIV_TOKEN_DEMO;
+    if (!tokenDemo || tokenDemo === 'PMIt2RhEjEDbcLD') {
+        tokenDemo = tokenReal;
+    }
     const activeToken = botState.accountMode === 'real' ? tokenReal : tokenDemo;
 
     if (!activeToken) {
