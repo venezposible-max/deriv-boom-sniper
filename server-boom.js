@@ -2008,7 +2008,7 @@ function checkPublicIP() {
     req.end();
 }
 
-function connectDeriv() {
+async function connectDeriv() {
     if (ws && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING)) return;
     
     // Consultar IP pública de forma asíncrona para diagnóstico
@@ -2018,69 +2018,94 @@ function connectDeriv() {
         clearTimeout(reconnectTimeout);
         reconnectTimeout = null;
     }
-    
-    const options = {};
-    if (process.env.PROXY_URL) {
-        console.log(`🔒 ENRUTAMIENTO SEGURO: Conectando a Deriv a través de Proxy Residencial.`);
-        options.agent = new HttpsProxyAgent(process.env.PROXY_URL);
+
+    const tokenReal = botState.derivTokenReal || botState.realToken || process.env.DERIV_TOKEN_REAL || '';
+    const tokenDemo = botState.derivTokenDemo || botState.demoToken || process.env.DERIV_TOKEN_DEMO || process.env.DERIV_TOKEN || 'PMIt2RhEjEDbcLD';
+    const activeToken = botState.accountMode === 'real' ? tokenReal : tokenDemo;
+
+    if (!activeToken) {
+        console.error('❌ Error: No se ha configurado ningún Token para el bot.');
+        if (!reconnectTimeout) {
+            reconnectTimeout = setTimeout(connectDeriv, 10000);
+        }
+        return;
     }
-    
-    ws = new WebSocket(`wss://ws.derivws.com/websockets/v3?app_id=${APP_ID}`, options);
-    
-    ws.on('open', () => {
-        console.log('🔌 Conexión establecida con WebSocket de Deriv. Autenticando...');
-        
-        // OPTIMIZACIÓN DE LATENCIA HFT: Habilitar TCP Low-Latency Flags en caliente
-        if (ws._socket) {
-            try {
-                ws._socket.setNoDelay(true); // Desactivar algoritmo de Nagle (0 buffer)
-                ws._socket.setKeepAlive(true, 5000); // Mantener caliente la sesión TCP a nivel de socket
-            } catch (e) {
-                // Failsafe en caso de retraso en la asignación del socket
+
+    try {
+        console.log(`🔄 [OTP FLOW] Obteniendo cuentas de Deriv para el modo ${botState.accountMode.toUpperCase()}...`);
+        const accountsRes = await fetch('https://api.derivws.com/trading/v1/options/accounts', {
+            headers: {
+                'Deriv-App-ID': APP_ID,
+                'Authorization': `Bearer ${activeToken}`
             }
+        });
+
+        if (!accountsRes.ok) {
+            throw new Error(`HTTP ${accountsRes.status} al obtener cuentas`);
         }
+
+        const accountsData = await accountsRes.json();
+        const targetAccount = accountsData.data.find(acc => acc.account_type === botState.accountMode);
         
-        // CANAL DE DATOS ULTRA-CALIENTE: Enviar Pings de calentamiento cada 10s y medir latencia de red (RTT)
-        if (heartbeatInterval) clearInterval(heartbeatInterval);
-        heartbeatInterval = setInterval(() => {
-            if (ws && ws.readyState === WebSocket.OPEN) {
-                const pingStart = Date.now();
-                ws.send(JSON.stringify({ ping: 1, req_id: pingStart }));
-            }
-        }, 10000);
-        
-        setTimeout(() => {
-            if (ws && ws.readyState === WebSocket.OPEN) {
-                const tokenReal = botState.derivTokenReal || botState.realToken || process.env.DERIV_TOKEN_REAL || '';
-                const tokenDemo = botState.derivTokenDemo || botState.demoToken || process.env.DERIV_TOKEN_DEMO || process.env.DERIV_TOKEN || 'PMIt2RhEjEDbcLD';
-                const activeToken = botState.accountMode === 'real' ? tokenReal : tokenDemo;
-                
-                console.log(`🔌 [WEBSOCKET] Solicitando autorización para cuenta ${botState.accountMode.toUpperCase()}...`);
-                ws.send(JSON.stringify({ authorize: activeToken }));
-            }
-        }, 3000);
-    });
-    
-    ws.on('message', (raw) => {
-        let msg;
-        try { msg = JSON.parse(raw); } catch (e) { return; }
-        
-        if (msg.msg_type === 'ping') {
-            if (msg.req_id) {
-                const latency = Date.now() - msg.req_id;
-                botState.lastMeasuredLatency = latency;
-            }
-            return;
+        if (!targetAccount) {
+            throw new Error(`No se encontró una cuenta de tipo ${botState.accountMode} en la respuesta de Deriv.`);
         }
-        if (msg.ping) {
-            ws.send(JSON.stringify({ ping: 1 }));
-            return;
+
+        const accountId = targetAccount.account_id;
+        console.log(`🔄 [OTP FLOW] Cuenta de opciones encontrada: ${accountId}. Solicitando OTP...`);
+
+        const otpRes = await fetch(`https://api.derivws.com/trading/v1/options/accounts/${accountId}/otp`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Deriv-App-ID': APP_ID,
+                'Authorization': `Bearer ${activeToken}`
+            }
+        });
+
+        if (!otpRes.ok) {
+            throw new Error(`HTTP ${otpRes.status} al solicitar el OTP`);
         }
+
+        const otpData = await otpRes.json();
+        const wsUrl = otpData.data.url;
+
+        console.log(`🔌 [WEBSOCKET] Conectando al WebSocket pre-autenticado...`);
         
-        if (msg.msg_type === 'authorize' && msg.authorize) {
-            console.log(`✅ Autenticación exitosa en KRAKEN: ${msg.authorize.email} [Moneda: ${msg.authorize.currency || 'USD'}]`);
+        const options = {};
+        if (process.env.PROXY_URL) {
+            console.log(`🔒 ENRUTAMIENTO SEGURO: Conectando a Deriv a través de Proxy Residencial.`);
+            options.agent = new HttpsProxyAgent(process.env.PROXY_URL);
+        }
+
+        ws = new WebSocket(wsUrl, options);
+        
+        ws.on('open', () => {
+            console.log(`🔌 Conexión establecida con WebSocket de Deriv para cuenta ${botState.accountMode.toUpperCase()} (${accountId}).`);
+            
+            // OPTIMIZACIÓN DE LATENCIA HFT: Habilitar TCP Low-Latency Flags en caliente
+            if (ws._socket) {
+                try {
+                    ws._socket.setNoDelay(true); // Desactivar algoritmo de Nagle (0 buffer)
+                    ws._socket.setKeepAlive(true, 5000); // Mantener caliente la sesión TCP a nivel de socket
+                } catch (e) {
+                    // Failsafe en caso de retraso en la asignación del socket
+                }
+            }
+            
+            // CANAL DE DATOS ULTRA-CALIENTE: Enviar Pings de calentamiento cada 10s y medir latencia de red (RTT)
+            if (heartbeatInterval) clearInterval(heartbeatInterval);
+            heartbeatInterval = setInterval(() => {
+                if (ws && ws.readyState === WebSocket.OPEN) {
+                    const pingStart = Date.now();
+                    ws.send(JSON.stringify({ ping: 1, req_id: pingStart }));
+                }
+            }, 10000);
+            
+            // Simular respuesta de autorización exitosa ya que la conexión con OTP está pre-autorizada
+            console.log(`✅ [WEBSOCKET] Conexión OTP autorizada automáticamente.`);
             botState.isConnectedToDeriv = true;
-            botState.currency = msg.authorize.currency || 'USD';
+            botState.currency = targetAccount.currency || 'USD';
             
             ws.send(JSON.stringify({ forget_all: 'ticks' }));
             ws.send(JSON.stringify({ forget_all: 'proposal_open_contract' }));
@@ -2104,7 +2129,7 @@ function connectDeriv() {
             }
             
             // Consultar portafolio para auditar si hay contratos ACCU colgados en Deriv
-            console.log(`📡 [KRAKEN] Auditando posiciones abiertas en Deriv...`);
+            console.log(`🛡️ [KRAKEN] Auditando posiciones abiertas en Deriv...`);
             ws.send(JSON.stringify({ portfolio: 1 }));
             
             // Descargar historial de 300 ticks espaciado (Pacing de 250ms) para evitar tasa de límite (Rate Limit 80 req/min de Deriv)
@@ -2145,70 +2170,94 @@ function connectDeriv() {
                     });
                 }
             }, 15000); // Iniciado tras terminar la carga de historiales (Aumentado para evitar colisión con historiales)
-        }
+        });
         
-        if (msg.error) {
-            // Cancelar verificación de payout si falla la propuesta
-            if (botState.pendingPayoutCheck && (msg.req_id === botState.pendingPayoutCheck.reqIdHigher || msg.req_id === botState.pendingPayoutCheck.reqIdLower)) {
-                if (msg.error.code === 'ContractBuyValidationError') {
-                    console.log(`⏭️ [CODY FILTER] Señal omitida de forma segura: la barrera es muy ancha para este símbolo ("no return"). Buscando otro mercado...`);
-                } else {
-                    console.log(`⏭️ [CODY FILTER] Omitido: ${msg.error.message}. Compra cancelada.`);
+        ws.on('message', (raw) => {
+            let msg;
+            try { msg = JSON.parse(raw); } catch (e) { return; }
+            
+            if (msg.msg_type === 'ping') {
+                if (msg.req_id) {
+                    const latency = Date.now() - msg.req_id;
+                    botState.lastMeasuredLatency = latency;
                 }
-                botState.isBuying = false;
-                botState.pendingPayoutCheck = null;
+                return;
+            }
+            if (msg.ping) {
+                ws.send(JSON.stringify({ ping: 1 }));
                 return;
             }
             
-            // Silenciar errores no críticos de suscripción duplicada y de validación de compra
-            if (msg.error.code === 'AlreadySubscribed') {
-                // Silenciado para evitar rate limit de logs
+            if (msg.msg_type === 'authorize' && msg.authorize) {
+                console.log(`✅ Autenticación exitosa en KRAKEN: ${msg.authorize.email} [Moneda: ${msg.authorize.currency || 'USD'}]`);
+                botState.isConnectedToDeriv = true;
+                botState.currency = msg.authorize.currency || 'USD';
                 return;
             }
-            if (msg.error.code === 'ContractBuyValidationError') {
-                // Ya se manejó de forma amigable arriba, evitar duplicar el log
-                return;
-            }
-            
-            console.error(`⚠️ Deriv API Error [${msg.error.code}]: ${msg.error.message}`);
-            if (msg.error.code === 'WrongResponse' || msg.error.code === 'AuthorizationRequired') {
-                console.log('🔄 Sesión inválida, reiniciando conexión...');
-                botState.isConnectedToDeriv = false;
-                if (ws) ws.close();
-            }
-            if (msg.msg_type === 'buy' || botState.isBuying) {
-                botState.isBuying = false;
-                console.error(`❌ Error en compra: ${msg.error.message}`);
+
+            if (msg.error) {
+                // Cancelar verificación de payout si falla la propuesta
+                if (botState.pendingPayoutCheck && (msg.req_id === botState.pendingPayoutCheck.reqIdHigher || msg.req_id === botState.pendingPayoutCheck.reqIdLower)) {
+                    if (msg.error.code === 'ContractBuyValidationError') {
+                        console.log(`⏭️ [CODY FILTER] Señal omitida de forma segura: la barrera es muy ancha para este símbolo ("no return"). Buscando otro mercado...`);
+                    } else {
+                        console.log(`⏭️ [CODY FILTER] Omitido: ${msg.error.message}. Compra cancelada.`);
+                    }
+                    botState.isBuying = false;
+                    botState.pendingPayoutCheck = null;
+                    return;
+                }
                 
-                // 🔴 FIX: OpenPositionLimitExceeded = ACCU ya existe en Deriv, adoptarlo
-                if (msg.error.code === 'OpenPositionLimitExceeded') {
-                    console.log(`🔍 ACCU ya existe en Deriv. Consultando portfolio para adoptarlo...`);
-                    ws.send(JSON.stringify({ portfolio: 1 }));
-                    // NO aplicar lossPause — el contrato anterior sigue activo y generando profit
-                } else if (msg.error.code === 'RateLimit') {
-                    console.log(`⏳ Pausa de seguridad aplicada debido a límite de la API.`);
+                // Silenciar errores no críticos de suscripción duplicada y de validación de compra
+                if (msg.error.code === 'AlreadySubscribed') {
+                    // Silenciado para evitar rate limit de logs
+                    return;
                 }
-            }
-            if (msg.msg_type === 'sell') {
-                if (msg.error.code === 'BetExpired') {
-                    // 🔴 FIX: NO limpiar isSellingAccumulator — si lo limpiamos,
-                    // el siguiente update del contrato intentará vender DE NUEVO → bucle infinito
-                    const knockedContractId = (msg.echo_req && msg.echo_req.sell) || botState.activeContractId;
-                    if (knockedContractId) {
-                        botState.isSellingAccumulator = knockedContractId; // Bloquear re-intentos
-                    }
-                    console.log(`💥 KNOCKOUT CONFIRMADO [ID: ${knockedContractId}]: Contrato expiró (barrera tocada). Consultando estado final...`);
-                    // Consulta one-shot para obtener el is_sold:true y activar finalizeTrade
-                    if (knockedContractId && ws && ws.readyState === WebSocket.OPEN) {
-                        ws.send(JSON.stringify({ proposal_open_contract: 1, contract_id: knockedContractId }));
-                    }
-                } else {
-                    botState.isSellingAccumulator = null;
-                    console.error(`❌ Error en venta: ${msg.error.message}`);
+                if (msg.error.code === 'ContractBuyValidationError') {
+                    // Ya se manejó de forma amigable arriba, evitar duplicar el log
+                    return;
                 }
+                
+                console.error(`⚠️ Deriv API Error [${msg.error.code}]: ${msg.error.message}`);
+                if (msg.error.code === 'WrongResponse' || msg.error.code === 'AuthorizationRequired') {
+                    console.log('🔄 Sesión inválida, reiniciando conexión...');
+                    botState.isConnectedToDeriv = false;
+                    if (ws) ws.close();
+                }
+                if (msg.msg_type === 'buy' || botState.isBuying) {
+                    botState.isBuying = false;
+                    console.error(`❌ Error en compra: ${msg.error.message}`);
+                    
+                    // 🔴 FIX: OpenPositionLimitExceeded = ACCU ya existe en Deriv, adoptarlo
+                    if (msg.error.code === 'OpenPositionLimitExceeded') {
+                        console.log(`🔍 ACCU ya existe en Deriv. Consultando portfolio para adoptarlo...`);
+                        ws.send(JSON.stringify({ portfolio: 1 }));
+                        // NO aplicar lossPause — el contrato anterior sigue activo y generando profit
+                    } else if (msg.error.code === 'RateLimit') {
+                        console.log(`⏳ Pausa de seguridad aplicada debido a límite de la API.`);
+                    }
+                }
+                if (msg.msg_type === 'sell') {
+                    if (msg.error.code === 'BetExpired') {
+                        // 🔴 FIX: NO limpiar isSellingAccumulator — si lo limpiamos,
+                        // el siguiente update del contrato intentará vender DE NUEVO → bucle infinito
+                        const knockedContractId = (msg.echo_req && msg.echo_req.sell) || botState.activeContractId;
+                        if (knockedContractId) {
+                            botState.isSellingAccumulator = knockedContractId; // Bloquear re-intentos
+                        }
+                        console.log(`💥 KNOCKOUT CONFIRMADO [ID: ${knockedContractId}]: Contrato expiró (barrera tocada). Consultando estado final...`);
+                        // Consulta one-shot para obtener el is_sold:true y activar finalizeTrade
+                        if (knockedContractId && ws && ws.readyState === WebSocket.OPEN) {
+                            ws.send(JSON.stringify({ proposal_open_contract: 1, contract_id: knockedContractId }));
+                        }
+                    } else {
+                        botState.isSellingAccumulator = null;
+                        console.error(`❌ Error en venta: ${msg.error.message}`);
+                    }
+                }
+                return;
             }
-            return;
-        }
+
 
         if (msg.msg_type === 'portfolio' && msg.portfolio) {
             const contracts = msg.portfolio.contracts || [];
@@ -2684,6 +2733,14 @@ function connectDeriv() {
             reconnectTimeout = setTimeout(connectDeriv, wait);
         }
     });
+    } catch (err) {
+        console.error('❌ Error en el flujo de conexión OTP:', err.message || err);
+        botState.isConnectedToDeriv = false;
+        botState.isBuying = false;
+        if (!reconnectTimeout) {
+            reconnectTimeout = setTimeout(connectDeriv, 5000);
+        }
+    }
 }
 
 // ════════════════════════════════════════════════════════════════
