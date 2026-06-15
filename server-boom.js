@@ -105,7 +105,7 @@ console.warn = function(...args) {
 // ════════════════════════════════════════════════════════════════
 //  CONFIGURACIÓN CENTRAL
 // ════════════════════════════════════════════════════════════════
-const APP_ID = process.env.DERIV_APP_ID || '36544';
+const APP_ID = process.env.DERIV_APP_ID || '33yRZp4sQogJPmUPB1LTm';
 const DERIV_TOKEN = process.env.DERIV_TOKEN || 'PMIt2RhEjEDbcLD';
 const STATE_FILE = path.join(__dirname, 'persistent-state-hybrid.json');
 
@@ -250,7 +250,7 @@ let botState = {
     lossPauseTicksProcessed: 0,
     
     // ─── Variables de Cuenta (Virtual vs Real) ───
-    accountMode: 'demo',       // 'demo' | 'real'
+    accountMode: 'real',       // 'demo' | 'real'
     demoToken: '',             // Token virtual configurado
     realToken: '',             // Token real de USDT
     currency: 'USD',            // Divisa actual ('USD' | 'USDT' | etc.)
