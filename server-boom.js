@@ -1009,7 +1009,7 @@ function tryFireTrade() {
     // liquidar la deuda como pérdida aceptada y reiniciar para no quedar congelado permanentemente.
     if ((botState.debtQueue > 0 || botState.martingaleStep > 0) && botState.lastTradeTime > 0) {
         const stuckMinutes = (now - botState.lastTradeTime) / 60000;
-        if (stuckMinutes >= 30) {
+        if (stuckMinutes >= 120) {
             const clearedDebt = botState.debtQueue || 0;
             console.log(`🔓 [AUTO-CLEAR] Deuda de $${clearedDebt.toFixed(2)} congelada por ${stuckMinutes.toFixed(0)} minutos. Liquidando como pérdida aceptada para reiniciar operaciones limpias.`);
             botState.debtQueue = 0;
