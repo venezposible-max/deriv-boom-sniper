@@ -688,107 +688,135 @@ function evaluateMarkovDiffers(sym) {
 
     const sliceStart = Math.max(0, hist.length - adaptiveWindow);
     const trainingHist = hist.slice(sliceStart);
-
-    let matrix = Array(10).fill(0).map(() => Array(10).fill(0));
-    let matrixRaw = Array(10).fill(0).map(() => Array(10).fill(0)); // Matriz de transiciones raw (sin ponderar)
-    let weightedCounts = Array(10).fill(0);
-    let rawCounts = Array(10).fill(0);
-
     const N = trainingHist.length;
 
-    // Construir matriz de transición ponderada y raw
-    for (let i = 1; i < N; i++) {
-        let prev = trainingHist[i - 1];
+    // --- CONSTRUCCIÓN DE MATRICES HÍBRIDAS (ORDEN 2 Y FALLBACK A ORDEN 1) ---
+    // Orden 2 (100 estados: prev2 * 10 + prev1)
+    let matrix2 = Array(100).fill(0).map(() => Array(10).fill(0));
+    let matrixRaw2 = Array(100).fill(0).map(() => Array(10).fill(0));
+    let weightedCounts2 = Array(100).fill(0);
+    let rawCounts2 = Array(100).fill(0);
+
+    // Orden 1 (10 estados: prev1)
+    let matrix1 = Array(10).fill(0).map(() => Array(10).fill(0));
+    let matrixRaw1 = Array(10).fill(0).map(() => Array(10).fill(0));
+    let weightedCounts1 = Array(10).fill(0);
+    let rawCounts1 = Array(10).fill(0);
+
+    for (let i = 2; i < N; i++) {
+        let prev2 = trainingHist[i - 2];
+        let prev1 = trainingHist[i - 1];
         let curr = trainingHist[i];
+        
+        let state2 = prev2 * 10 + prev1;
+        let state1 = prev1;
         
         let age = N - 1 - i;
         let weight = DECAY_WEIGHTS[age] || Math.pow(DECAY_FACTOR, age);
         
-        matrix[prev][curr] += weight;
-        matrixRaw[prev][curr]++;
-        weightedCounts[prev] += weight;
-        rawCounts[prev]++;
+        // Registrar Orden 2
+        matrix2[state2][curr] += weight;
+        matrixRaw2[state2][curr]++;
+        weightedCounts2[state2] += weight;
+        rawCounts2[state2]++;
+
+        // Registrar Orden 1
+        matrix1[state1][curr] += weight;
+        matrixRaw1[state1][curr]++;
+        weightedCounts1[state1] += weight;
+        rawCounts1[state1]++;
     }
 
-    const currentDigit = hist[hist.length - 1];
+    const lastDigit = hist[hist.length - 1];
+    const secondLastDigit = hist[hist.length - 2];
+    const currentState2 = secondLastDigit * 10 + lastDigit;
+    const currentState1 = lastDigit;
 
-    // 🎁 Birthday Shield: Muestra Mínima Significativa (Mínimo 40 ocurrencias en la ventana activa)
-    if (rawCounts[currentDigit] < 40) {
-        return null; // Evitar disparar con estadísticas inestables
+    // Determinar si usamos Segundo Orden o caemos a Primer Orden
+    let useOrder2 = rawCounts2[currentState2] >= 15;
+    
+    // Si no podemos usar Segundo Orden y tampoco tenemos suficiente muestra en Primer Orden, abortamos
+    if (!useOrder2 && rawCounts1[currentState1] < 40) {
+        return null;
     }
 
     // Determinar Umbral Markov Dinámico según la Entropía de Shannon (Medida de Caos)
-    // EQUILIBRADO: Ni muy calvo ni con dos pelucas.
     let activeThreshold = 2.2;
     if (entropyVal < 3.10) {
         activeThreshold = 3.8; // Alta predictibilidad (entropía baja) -> Umbral de 3.8%
     } else if (entropyVal < 3.20) {
         activeThreshold = 3.0; // Estructura media -> Umbral de 3.0%
     } else {
-        activeThreshold = 2.2; // Estructura baja (entropía cercana a 3.26) -> Umbral equilibrado de 2.2%
+        activeThreshold = 2.2; // Estructura baja -> Umbral de 2.2%
     }
 
-    // Guardar el umbral dinámico actual en el estado del mercado para visibilidad
     mState.activeThreshold = activeThreshold;
 
     if (isRecovery) {
-        // Martingala Markov Filtrada Dinámica (Cobertura más estricta reducida un 20%)
         activeThreshold = parseFloat((activeThreshold * 0.8).toFixed(2));
     }
 
     let bestTarget = -1;
-    let lowestZ = 0; // Buscamos el Z-score más negativo (anomalía más fría y estadísticamente significativa)
+    let lowestZ = 0; // Buscamos el Z-score más negativo
     let bestProb = 100;
 
-    // Determinar Z-score dinámico según la Entropía de Shannon (Medida de Caos)
-    let zThreshold = -2.0; // Mínimo estadístico (2 desviaciones estándar)
+    // Determinar Z-score dinámico según la Entropía de Shannon
+    let zThreshold = -2.0; 
     if (entropyVal < 3.10) {
-        zThreshold = -1.8; // Alta estructura -> Admitimos anomalías ligeramente menores
+        zThreshold = -1.8; // Alta estructura
     } else if (entropyVal < 3.20) {
         zThreshold = -2.2; // Estructura media
     } else {
-        zThreshold = -2.5; // Estructura baja (caos alto) -> Exigimos anomalía de gran significación estadística
+        zThreshold = -2.5; // Estructura baja (caos alto)
     }
 
     if (isRecovery) {
-        zThreshold -= 0.3; // Cobertura segura aún más exigente (ej: -2.5 -> -2.8)
+        zThreshold -= 0.3; // Cobertura segura aún más exigente
     }
 
     for (let target = 0; target <= 9; target++) {
-        if (rawCounts[currentDigit] >= 40) {
-            const totalRaw = rawCounts[currentDigit];
-            const observedRaw = matrixRaw[currentDigit][target];
-            
-            // Test de hipótesis: Ho = probabilidad es 10% (distribución uniforme)
-            const expected = totalRaw * 0.1;
-            const sd = Math.sqrt(totalRaw * 0.1 * 0.9);
-            const zScore = (observedRaw - expected) / sd;
+        let totalRaw = 0;
+        let observedRaw = 0;
+        let probability = 100;
 
-            if (zScore <= zThreshold) {
-                // 🛡️ Filtro de Micro-Rachas (Anti-Repetición / Anti-Coiling)
-                const last8Ticks = hist.slice(-8);
-                const occurrences = last8Ticks.filter(d => d === target).length;
-                if (occurrences >= 2) {
-                    continue;
-                }
+        if (useOrder2) {
+            totalRaw = rawCounts2[currentState2];
+            observedRaw = matrixRaw2[currentState2][target];
+            probability = (matrix2[currentState2][target] / weightedCounts2[currentState2]) * 100;
+        } else {
+            totalRaw = rawCounts1[currentState1];
+            observedRaw = matrixRaw1[currentState1][target];
+            probability = (matrix1[currentState1][target] / weightedCounts1[currentState1]) * 100;
+        }
 
-                // 🛡️ Filtro de Barrera Consecutiva (Anti-Acomodamiento)
-                // Evitamos usar exactamente la misma barrera del último trade para diversificar riesgo
-                if (botState.lastBarrier !== undefined && String(target) === String(botState.lastBarrier)) {
-                    continue;
-                }
+        const expected = totalRaw * 0.1;
+        const sd = Math.sqrt(totalRaw * 0.1 * 0.9);
+        const zScore = (observedRaw - expected) / sd;
 
-                if (zScore < lowestZ) {
-                    lowestZ = zScore;
-                    bestTarget = target;
-                    bestProb = (matrix[currentDigit][target] / weightedCounts[currentDigit]) * 100;
-                }
+        if (zScore <= zThreshold) {
+            // 🛡️ Filtro de Micro-Rachas (Anti-Repetición / Anti-Coiling)
+            const last8Ticks = hist.slice(-8);
+            const occurrences = last8Ticks.filter(d => d === target).length;
+            if (occurrences >= 2) {
+                continue;
+            }
+
+            // 🛡️ Filtro de Barrera Consecutiva (Anti-Acomodamiento)
+            if (botState.lastBarrier !== undefined && String(target) === String(botState.lastBarrier)) {
+                continue;
+            }
+
+            if (zScore < lowestZ) {
+                lowestZ = zScore;
+                bestTarget = target;
+                bestProb = probability;
             }
         }
     }
 
     if (bestTarget !== -1) {
-        console.log(`🎯 [MARKOV OMNISCIENTE] Anomalía detectada en ${sym}. Z-score: ${lowestZ.toFixed(2)} | Prob: ${bestProb.toFixed(2)}%. Disparando DIFFERS a ${bestTarget}`);
+        const orderLabel = useOrder2 ? "O2" : "O1";
+        console.log(`🎯 [MARKOV OMNISCIENTE - ${orderLabel}] Anomalía detectada en ${sym}. Z-score: ${lowestZ.toFixed(2)} | Prob: ${bestProb.toFixed(2)}%. Disparando DIFFERS a ${bestTarget}`);
         return {
             engine: 'MARKOV_DIFFERS',
             contractType: 'DIGITDIFF',
