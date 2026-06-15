@@ -2310,6 +2310,7 @@ async function connectDeriv() {
         
         if (msg.msg_type === 'balance' && msg.balance) {
             botState.balance = msg.balance.balance;
+            console.log(`💰 [BALANCE] Balance recibido de Deriv: ${msg.balance.balance} ${msg.balance.currency || 'USD'}`);
         }
         
         if (msg.msg_type === 'proposal' && msg.proposal) {
