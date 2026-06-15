@@ -105,7 +105,7 @@ console.warn = function(...args) {
 // ════════════════════════════════════════════════════════════════
 //  CONFIGURACIÓN CENTRAL
 // ════════════════════════════════════════════════════════════════
-const APP_ID = process.env.DERIV_APP_ID || '33yRZp4sQogJPmUPB1LTm';
+const APP_ID = process.env.DERIV_APP_ID || '36544';
 const DERIV_TOKEN = process.env.DERIV_TOKEN || 'PMIt2RhEjEDbcLD';
 const STATE_FILE = path.join(__dirname, 'persistent-state-hybrid.json');
 
